@@ -1,4 +1,3 @@
-// src/server/app.ts
 import express from 'express';
 import cors, { CorsOptions } from 'cors';
 import authRouter from './routes/auth';
@@ -17,11 +16,9 @@ const corsOptions: CorsOptions = {
   origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  // preflightContinue: false,        // por defecto
-  // optionsSuccessStatus: 204,
 };
 
-app.use(cors(corsOptions));   // 👈 solo esto
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Rutas públicas
