@@ -1,4 +1,3 @@
-// src/server/routes/companies.ts
 import { Router } from 'express';
 import { systemworkPool } from '../config/db';
 

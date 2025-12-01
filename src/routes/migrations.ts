@@ -1,4 +1,3 @@
-// src/server/routes/migrations.ts
 import { Router } from 'express';
 import { migrateCompany } from '../migration/migrateCompany';
 import { createLegacyConnection } from '../config/db';

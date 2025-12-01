@@ -20,7 +20,7 @@ export const erpPool = mysql.createPool({
 });
 
 /**
- * Conexión dinámica para una BD de empresa antigua (BASE_EMP).
+ * Conexión dinámica para BD de empresa antigua (BASE_EMP).
  */
 export async function createLegacyConnection(opts: {
   host?: string;

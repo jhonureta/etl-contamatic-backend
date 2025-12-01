@@ -1,4 +1,3 @@
-// src/server/routes/auth.ts
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';

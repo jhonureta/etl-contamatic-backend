@@ -1,4 +1,3 @@
-// src/server/middleware/auth.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt, { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 
@@ -15,15 +14,11 @@ export function authMiddleware(
 ) {
   const authHeader = req.headers.authorization;
 
-  console.log('>> authHeader:', authHeader);
-  console.log('>> JWT_SECRET (length):', JWT_SECRET.length); // para ver que no esté vacío
-
   if (!authHeader) {
     return res.status(401).json({ message: 'No token provided' });
   }
 
   const [scheme, token] = authHeader.split(' ');
-  console.log('>> scheme:', scheme, 'token:', token?.slice(0, 20), '...');
 
   if (scheme !== 'Bearer' || !token) {
     return res.status(401).json({ message: 'Invalid auth header format' });

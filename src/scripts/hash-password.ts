@@ -1,4 +1,3 @@
-// scripts/hash-password.ts
 import bcrypt from 'bcrypt';
 
 async function main() {
