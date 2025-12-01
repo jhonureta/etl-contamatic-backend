@@ -1,0 +1,36 @@
+# Directorios de configuraciones
+.env
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Archivos generados
+app-production.js
+dist/
+logs/
+src/public/
+src/uploads/
+baileys_auth/
+app-dev.js
+src/app.js
+
+# Directorios de herramientas de testing
+.vscode/
+.idea/
+
+# Archivos de configuración de IDEs
+*.swp
+*.swo
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Otros archivos temporales
+*.log
+*.pid
+*.gz
+src/public
