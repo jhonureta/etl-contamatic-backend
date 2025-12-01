@@ -11,9 +11,6 @@ yarn-error.log
 app-production.js
 dist/
 logs/
-src/public/
-src/uploads/
-baileys_auth/
 app-dev.js
 src/app.js
 
@@ -33,4 +30,3 @@ Thumbs.db
 *.log
 *.pid
 *.gz
-src/public
