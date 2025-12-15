@@ -11,8 +11,7 @@ export async function migrateAccountingPeriod(
     const periodo = rows as any[];
 
     if (!periodo.length) {
-        console.log(" -> No hay periodo contable para migrar.");
-        return {};
+        throw new Error(" -> No hay periodo contable para migrar.");
     }
     const BATCH_SIZE = 1000;
     const mapPeriodo: Record<number, number> = {};
@@ -30,21 +29,18 @@ export async function migrateAccountingPeriod(
                 newCompanyId
             ];
         });
-
-
-
         try {
             const [res]: any = await conn.query(`
                  INSERT INTO accounting_period (ANIO_PERIODO, NUMERO_MES, FECHA_INICIO,FECHA_CIERRE, ESTADO_CIERRE, FK_COD_EMP ) VALUES ?`,
                 [values]
-            ); 
+            );
 
             let newId = res.insertId;
             for (const s of batch) {
                 mapPeriodo[s.COD_PERIODO] = newId;
                 newId++;
             }
-      
+
 
             console.log(` -> Batch migrado: ${batch.length} sucursales`);
         } catch (err) {

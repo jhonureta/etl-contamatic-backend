@@ -55,8 +55,7 @@ export async function migrateUsersForCompany(
     const users = rows as any[];
 
     if (!users.length) {
-        console.log(" -> No hay usuarios para migrar.");
-        return {};
+        throw new Error(" -> No hay usuarios para migrar.");
     }
 
     console.log(` -> Usuarios totales a procesar: ${users.length}.`);

@@ -11,8 +11,7 @@ export async function migrateBranchesForCompany(
   const sucursales = rows as any[];
 
   if (!sucursales.length) {
-    console.log(" -> No hay sucursales para migrar.");
-    return {};
+    throw new Error(" -> No hay sucursales para migrar.");
   }
   const BATCH_SIZE = 1000;
   const branchMap: Record<number, number> = {};

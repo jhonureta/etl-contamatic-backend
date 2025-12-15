@@ -10,16 +10,16 @@ export async function migratePreconfiguredAccounts(
     const [businessClosure] = await legacyConn.query(queryClosure);
 
     if (!businessClosure.length) {
-        console.log("Cuentas de cierre no encontradas");
-        return {};
-    } 
+        throw new Error("Cuentas de cierre no encontradas");
+
+    }
 
     // 2. Obtener plan de cuentas
     const accountPlan = await findParametersAccounting(newCompanyId, conn);
-    
+
     if (!accountPlan.length) {
-        console.log("Plan de cuentas vacio en esta empresa");
-        return {};
+        throw new Error("Plan de cuentas vacio en esta empresa");
+
     }
 
     // 3. Mapear los nombres para evitar bucles anidados
@@ -34,20 +34,20 @@ export async function migratePreconfiguredAccounts(
         const matchingAccount = accountPlan.find(acc => acc.NOMBRE === closureMap[closure.RES_CONTCICONF]);
         if (!matchingAccount) continue;
 
-        const codIdPlan = mapAccounts[closure.CUENT_CONTCICONF]??null;
+        const codIdPlan = mapAccounts[closure.CUENT_CONTCICONF] ?? null;
         const dataInsert = await findParametersInsertAccounting({
             newCompanyId,
             parameterId: matchingAccount.COD_PARAMETRO,
             codIdPlan,
         }, conn);
         if (!dataInsert.affectedRows) {
-            console.log(`Error al migrar cuenta de resultados: ${closure.RES_CONTCICONF}`);
-            return {};
+            throw new Error(`Error al migrar cuenta de resultados: ${closure.RES_CONTCICONF}`);
+
 
         }
         console.log(`Cuenta de resultados ${closure.RES_CONTCICONF} - Cuenta: ${codIdPlan}`);
     }
-
+    /* const startTime = performance.now(); */
     const queryPreconfiguradoBussinnes = `
                                                     SELECT 
                                                         contabilidad_asiento_preconfigurado.DET_CONFIG,
@@ -60,9 +60,13 @@ export async function migratePreconfiguredAccounts(
                                                 `;
     const [businesPreConf] = await legacyConn.query(queryPreconfiguradoBussinnes);
     if (!businesPreConf.length) {
-        console.log(`Preconfigurado no encontrado`);
-        return {};
+        throw new Error(`Preconfigurado no encontrado`);
     }
+   /*  const endTime = performance.now(); // ⏱ Fin
+    const durationMs = endTime - startTime; */
+
+ /*    console.log(`⏱ Tiempo total del proceso: ${durationMs.toFixed(2)} ms`);
+ */
     // Configuración centralizada: cada CODCONT y sus detalles con los parámetros asociados
     const configMap = {
         CTAR: { 'TARJETA': [38] },
@@ -120,9 +124,10 @@ export async function migratePreconfiguredAccounts(
     const processCuenta = async ({ detalle, codigo, parameterIds, newCompanyId }, conn) => {
         const cuentaData = await consultarCuentaCodigoContable(codigo, newCompanyId, conn);
         if (!cuentaData.length) {
-            console.log(`Cuenta contable no encontrada: ${codigo}`);
-            return {};
+            throw new Error(`Cuenta contable no encontrada: ${codigo}`);
+
         }
+        console.log(`Cuenta contable pre procesando: ${codigo}`);
         const codIdPlan = cuentaData[0].ID_PLAN;
         for (const parameterId of parameterIds) {
             const dataInsert = await findParametersInsertAccounting({
@@ -131,8 +136,8 @@ export async function migratePreconfiguredAccounts(
                 codIdPlan,
             }, conn);
             if (!dataInsert.affectedRows) {
-                console.log(`Error al migrar cuenta de resultados: ${detalle}`);
-                return {};
+                throw new Error(`Error al migrar cuenta de resultados: ${detalle}`);
+
             }
             //console.log(`✅ Cuenta de resultados ${detalle} - Cuenta: ${codIdPlan}`);
         }
@@ -180,8 +185,8 @@ async function findParametersAccounting(newCompanyId, conn) {
         return company;
 
     } catch (error) {
-        console.log(` -> Error generado en la exepcion`);
-        return {};
+        throw new Error(` -> Error generado en la exepcion`);
+
     }
 }
 
@@ -199,9 +204,9 @@ async function findParametersInsertAccounting(parameter, conn) {
             const [param] = await conn.query(query, [parameter.parameterId, parameter.newCompanyId, parameter.codIdPlan]);
             return param;
         }
-    } catch (error) {
-        console.log(` -> Error en actualizar informacion de los parametros contables`);
-        return {};
+    } catch (error) { console.log(error);
+        throw new Error(` find-> Error en actualizar informacion de los parametros contables`);
+
     }
 }
 
@@ -214,7 +219,7 @@ async function consultarCuentaCodigoContable(codigoPlan, companyId, conn) {
         return account_plan;
 
     } catch (error) {
-        console.log(` -> Error en actualizar informacion de los parametros contables Process`);
-        return {};
+        throw new Error(` search-> Error en actualizar informacion de los parametros contables Process`);
+
     }
 }

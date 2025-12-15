@@ -40,8 +40,7 @@ export async function migrateChartAccounts(
 
     const accounts = rows as any[];
     if (!accounts.length) {
-        console.log(" -> No hay plan de cuentas para migrar.");
-        return {};
+       throw new Error(" -> No hay plan de cuentas para migrar.");
     }
 
     const BATCH_SIZE = 1000;

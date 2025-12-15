@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev:api": "ts-node index.ts",
+    "dev:api": "ts-node-dev --respawn --transpile-only index.ts",
     "migrate-company": "ts-node src/migration/index.ts",
     "generate-password": "ts-node src/scripts/hash-password.ts"
   },
@@ -28,6 +28,7 @@
     "@types/node": "^24.10.1",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   }
 }

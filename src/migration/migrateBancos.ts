@@ -1,0 +1,100 @@
+export async function migrateBancos(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapAccounts: Record<number, number | null>
+): Promise<Record<number, number>> {
+
+    const bankMap: Record<number, number> = {};
+    const bankNationalMap: Record<number, number> = {};
+
+    try {
+        // 1️⃣ Traer todos los bancos migrados
+        const [bancosMigrados] = await legacyConn.query(`
+            SELECT ID_BANCO as BANCKID_MIG, FECREG_BANCO, FK_ENTIDAD_BANCARIA, NUMCUEN_BANC, DIR_BANC, TEL_BANC, CONTAC_BANC, AGEN_BANC, SALDO_BANCO, EST_BANCO, FK_CTAB_PLAN, SECU_CHEQ
+            FROM bancos
+        `);
+        console.log("Migrando bancos...");
+
+        if (!bancosMigrados.length) return bankMap;
+
+        // 2️⃣ Traer todos los bancos nacionales existentes
+        const [nationalBanks] = await conn.query(`SELECT * FROM national_banks;`);
+        const existingNationalMap: Record<number, any> = {};
+        for (const nb of nationalBanks as any[]) {
+            existingNationalMap[nb.COD_BAN] = nb;
+        }
+        console.log(` -> Batch migrado: ${bancosMigrados.length} bancos`);
+        // 3️⃣ Iterar bancos migrados
+        for (const banco of bancosMigrados as any[]) {
+            const cuentaContableId = mapAccounts[banco.FK_CTAB_PLAN] ?? null;
+            let nationalBankId: number;
+
+            if (!existingNationalMap[banco.FK_ENTIDAD_BANCARIA]) {
+                // Insertar banco nacional si no existe
+                const [insertNational] = await conn.query(
+                    `INSERT INTO national_banks (CODN_BAN,NOM_BAN,EST_BAN) VALUES (?,?,?)`,
+                    [
+                        banco.CODN_BAN,
+                        banco.NOM_BAN,
+                        banco.EST_BAN
+                    ]
+                );
+                nationalBankId = insertNational.insertId;
+                existingNationalMap[banco.FK_ENTIDAD_BANCARIA] = { ID: nationalBankId };
+                bankNationalMap[banco.BANCKID_MIG] = nationalBankId;
+            } else {
+                nationalBankId = existingNationalMap[banco.FK_ENTIDAD_BANCARIA].ID || banco.FK_ENTIDAD_BANCARIA;
+            }
+
+            // Crear registro de banco
+            const { insertId } = await createBankReg(conn, {
+                bankIdReferencia: nationalBankId,
+                numCuentaBank: banco.NUMCUEN_BANC,
+                dirBank: banco.DIR_BANC,
+                telBank: banco.TEL_BANC,
+                agentContactBank: banco.CONTAC_BANC,
+                agenciaBank: banco.AGEN_BANC,
+                bankSal: banco.SALDO_BANCO,
+                statusBank: banco.EST_BANCO,
+                planCountId: cuentaContableId,
+                secCheqBank: banco.SECU_CHEQ,
+                companyId: newCompanyId,
+                bancoIdMig: banco.BANCKID_MIG
+            });
+
+            bankMap[banco.BANCKID_MIG] = insertId;
+        }
+
+    } catch (error) {
+        throw new Error(error);
+    }
+
+    return bankMap;
+}
+
+async function createBankReg(conn: any, bankdata: any) {
+    try {
+        const [user] = await conn.query(
+            `INSERT INTO banks(
+                FK_ENTIDAD_BANCARIA, NUMCUEN_BANC, DIR_BANC, TEL_BANC, CONTAC_BANC, AGEN_BANC, SALDO_BANCO, EST_BANCO, FK_CTAB_PLAN, SECU_CHEQ, FK_COD_EMP
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?);`,
+            [
+                bankdata.bankIdReferencia,
+                bankdata.numCuentaBank,
+                bankdata.dirBank,
+                bankdata.telBank,
+                bankdata.agentContactBank,
+                bankdata.agenciaBank,
+                bankdata.bankSal,
+                bankdata.statusBank,
+                bankdata.planCountId ?? null,
+                bankdata.secCheqBank,
+                bankdata.companyId
+            ]
+        );
+        return user;
+    } catch (error) {
+        throw new Error(error);
+    }
+}

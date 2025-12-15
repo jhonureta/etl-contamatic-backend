@@ -1,12 +1,25 @@
 import { systemworkPool, erpPool, createLegacyConnection } from '../config/db';
 import CryptoService from './encrypt.handler';
-import { migrateAccountingPeriod } from './migrateaccountingperiod';
+import { migrateAccountingPeriod } from './migrateAccountingPeriod';
+import { migrateCustomerObligations } from './migrateCustomerObligations';
+import { migrateBancos } from './migrateBancos';
 import { migrateBranchesForCompany } from './migrateBranch';
-import { migrateChartAccounts } from './migratechartaccounts';
-import { migrateClientsForCompany } from './migrateclients';
+import { migrateBrand } from './migrateBrand';
+import { migrateCajas } from './migrateCajas';
+import { migrateCategories } from './migrateCategories';
+import { migrateChartAccounts } from './migrateChartAccounts';
+import { migrateClientsForCompany } from './migrateClients';
+import { migrateCostCenter } from './migrateCostCenter';
+import { migrateExpensesDetails } from './migrateExpensesDetails';
+import { migrateMeasures } from './migrateMeasures';
 import { migratePreconfiguredAccounts } from './migratePreconfiguredAccounts';
-import { migrateSuppliersForCompany } from './migratesuppliers';
+import { batchInsertProducts } from './migrateProducts';
+import { migrateProjects } from './migrateProjects';
+import { migrateRetentions } from './migrateRetentionDetails';
+import { migrateSales } from './migrateSales';
+import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
+import { migrateWarehouseDetails } from './migrateWarehouseDetails';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -317,6 +330,20 @@ export async function migrateCompany(codEmp: number) {
       newCompanyId
     );
 
+    const mapCenterCost = await migrateCostCenter(
+      legacyConn,
+      conn,
+      newCompanyId
+    );
+
+
+    const mapProject = await migrateProjects(
+      legacyConn,
+      conn,
+      newCompanyId
+    );
+
+
     const mapPeriodo = await migrateAccountingPeriod(
       legacyConn,
       conn,
@@ -336,8 +363,94 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
+    const mapCostExpenses = await migrateExpensesDetails(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapAccounts
+    );
 
-    /* console.log(mapParamameters); */
+    const mapRetentions = await migrateRetentions(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapAccounts
+    );
+
+    const bankMap = await migrateBancos(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapAccounts
+    );
+
+    const boxMap = await migrateCajas(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapAccounts,
+      userMap
+    );
+    const mapCategories = await migrateCategories(
+      legacyConn,
+      conn,
+      newCompanyId,
+    );
+
+    const mapMeasures = await migrateMeasures(
+      legacyConn,
+      conn,
+      newCompanyId
+    );
+
+
+    const mapBrand = await migrateBrand(
+      legacyConn,
+      conn,
+      newCompanyId
+    );
+
+
+    const mapProducts = await batchInsertProducts(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapAccounts,
+      mapCategories,
+      mapMeasures,
+      mapBrand
+    );
+
+    const mapDetWare = await migrateWarehouseDetails(
+      legacyConn,
+      conn,
+      branchMap,
+      mapProducts
+    );
+
+    const mapsSales = await migrateSales(
+      legacyConn,
+      conn,
+      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions)
+
+    const mapObligationsCustomers = await migrateCustomerObligations(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapsSales.mapSales,
+      mapsSales.mapAuditSales,
+      mapClients)
+
+    /*   
+      console.log(mapMeasures); */
+    /*  console.log(mapProducts);
+  */
+    /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
+      const accounts = rows as any[]; console.log(rows);
+      if (!accounts.length) {
+        console.log(" -> No hay plan de cuentas para migrar.");
+        return {};
+      } */
 
     //console.log(mapAccounts);
 
@@ -350,12 +463,29 @@ export async function migrateCompany(codEmp: number) {
  */
     await conn.rollback();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
+    console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
+    console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
     console.log("MAPEO DE USUARIOS MIGRADAS:", Object.keys(userMap).length);
     console.log("MAPEO DE CLIENTES MIGRADAS:", Object.keys(mapClients).length);
     console.log("MAPEO DE PROVEEDORES MIGRADAS:", Object.keys(mapSuppliers).length);
     console.log("MAPEO DE PERIODOS CONTABLES MIGRADAS:", Object.keys(mapPeriodo).length);
     console.log("MAPEO PLAN DE CUENTAS:", Object.keys(mapAccounts).length);
+    console.log("MAPEO COSTOS Y GASTOS:", Object.keys(mapCostExpenses).length);
+    console.log("MAPEO RETENCIONES:", Object.keys(mapRetentions).length);
+    console.log("MAPEO BANCOS MIGRADOS:", Object.keys(bankMap).length);
+    console.log("MAPEO CAJAS MIGRADAS:", Object.keys(boxMap).length);
+    console.log("MAPEO CATEGORIAS MIGRADOS:", Object.keys(mapCategories).length);
+    console.log("MAPEO MEDIDAS MIGRADAS:", Object.keys(mapMeasures).length);
+    console.log("MAPEO MARCAS MIGRADAS:", Object.keys(mapBrand).length);
+    console.log("MAPEO PRODUCTOS MIGRADOS:", Object.keys(mapProducts).length);
+    console.log("DETALLE DE BODEGA MIGRADOS:", Object.keys(mapDetWare).length);
+    console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
+    console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
+    console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
+    console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
 
+    console.log(mapObligationsCustomers.mapObligationsCustomers);
+    console.log(mapObligationsCustomers.mapObligationsAudit);
     return newCompanyId;
   } catch (error) {
     console.error(error);

@@ -68,8 +68,7 @@ export async function migrateClientsForCompany(
     const clientes = rows as any[];
 
     if (!clientes.length) {
-        console.log(" -> No hay clientes para migrar.");
-        return {};
+        throw new Error(" -> No hay clientes para migrar.");
     }
     const BATCH_SIZE = 1000;
     const mapClients: Record<number, number> = {};
