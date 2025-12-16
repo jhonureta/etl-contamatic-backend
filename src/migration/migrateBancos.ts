@@ -9,6 +9,7 @@ export async function migrateBancos(
     const bankNationalMap: Record<number, number> = {};
 
     try {
+        await cardGeneric(conn,newCompanyId);
         // 1️⃣ Traer todos los bancos migrados
         const [bancosMigrados] = await legacyConn.query(`
             SELECT ID_BANCO as BANCKID_MIG, FECREG_BANCO, FK_ENTIDAD_BANCARIA, NUMCUEN_BANC, DIR_BANC, TEL_BANC, CONTAC_BANC, AGEN_BANC, SALDO_BANCO, EST_BANCO, FK_CTAB_PLAN, SECU_CHEQ
@@ -98,3 +99,71 @@ async function createBankReg(conn: any, bankdata: any) {
         throw new Error(error);
     }
 }
+
+async function cardGeneric(conn: any, newCompanyId: number) {
+    try {
+
+        // 🔒 VALIDACIÓN FK
+        if (
+            newCompanyId === null ||
+            newCompanyId === undefined ||
+            !Number.isInteger(Number(newCompanyId)) ||
+            Number(newCompanyId) <= 0
+        ) {
+            throw new Error('FK_COD_EMP inválido');
+        }
+
+        console.log("Migrando bancos...");
+
+        const [bancosMigrados]: any = await conn.query(
+            `SELECT COUNT(*) AS TOTALCARD FROM cards WHERE FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+
+        const total = bancosMigrados[0]?.TOTALCARD ?? 0;
+
+        // 🛑 YA EXISTE
+        if (total > 0) {
+            console.log('Tarjeta genérica ya creada, se omite');
+            return;
+        }
+
+        const fecha = new Date();
+
+        // ✅ INSERT
+        const [result] = await conn.query(
+            `INSERT INTO cards (
+                FECREG_TARJETA,
+                NOMBRE_TARJETA,
+                NUMCUEN_TARJETA,
+                SALDO_TARJETA,
+                EST_TARJETA,
+                TIPO_TARJETA,
+                FK_COD_EMP,
+                FK_CTAT_PLAN
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                fecha,
+                'TARJETA GENERICA',
+                '9999999999',
+                0.00,
+                'ACTIVO',
+                'CREDITO',
+                newCompanyId,
+                null
+            ]
+        );
+
+        return result;
+
+    } catch (error: any) {
+        console.error('Error cardGeneric:', error.message);
+        throw error;
+    }
+}
+
+
+
+
+
+

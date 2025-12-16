@@ -16,7 +16,6 @@ router.post('/login', async (req, res) => {
     );
 
     const users = rows as any[];
-    console.log(users);
     if (!users.length) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }

@@ -180,8 +180,6 @@ export async function migrateClientsForCompany(
                 newId++;
             }
             //CLAVE DE SUCURSAL  COD_SURC  A ID NUEVA DE MIGRACION
-          /*   console.log(mapClients); */
-
             console.log(` -> Batch migrado: ${batch.length} sucursales`);
         } catch (err) {
             throw err;

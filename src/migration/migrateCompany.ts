@@ -1,7 +1,7 @@
 import { systemworkPool, erpPool, createLegacyConnection } from '../config/db';
 import CryptoService from './encrypt.handler';
 import { migrateAccountingPeriod } from './migrateAccountingPeriod';
-import { migrateCustomerObligations } from './migrateCustomerObligations';
+import { migrateCustomerAccounting } from './migrateCustomerObligations';
 import { migrateBancos } from './migrateBancos';
 import { migrateBranchesForCompany } from './migrateBranch';
 import { migrateBrand } from './migrateBrand';
@@ -432,19 +432,20 @@ export async function migrateCompany(codEmp: number) {
       legacyConn,
       conn,
       newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions)
-
-    const mapObligationsCustomers = await migrateCustomerObligations(
+    //const mapObligationsCustomers =
+    await migrateCustomerAccounting(
       legacyConn,
       conn,
       newCompanyId,
       mapsSales.mapSales,
       mapsSales.mapAuditSales,
-      mapClients)
+      mapClients,
+      bankMap,
+      boxMap,
+      userMap
+    )
 
-    /*   
-      console.log(mapMeasures); */
-    /*  console.log(mapProducts);
-  */
+  
     /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
       const accounts = rows as any[]; console.log(rows);
       if (!accounts.length) {
@@ -481,11 +482,12 @@ export async function migrateCompany(codEmp: number) {
     console.log("DETALLE DE BODEGA MIGRADOS:", Object.keys(mapDetWare).length);
     console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
-    console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
+   /*  console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
+ */
 
-    console.log(mapObligationsCustomers.mapObligationsCustomers);
-    console.log(mapObligationsCustomers.mapObligationsAudit);
+
+
     return newCompanyId;
   } catch (error) {
     console.error(error);

@@ -74,7 +74,6 @@ export async function migrateBranchesForCompany(
         newId++;
       }
       //CLAVE DE SUCURSAL  COD_SURC  A ID NUEVA DE MIGRACION
-      console.log(branchMap);
 
       console.log(` -> Batch migrado: ${batch.length} sucursales`);
     } catch (err) {

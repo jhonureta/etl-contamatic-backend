@@ -62,7 +62,7 @@ export async function migrateRetentions(
                 console.warn(`⚠️ Cuentas no encontradas para ${item.nombre_CG}`);
                 continue;
             }
-
+            console.warn(` MIGRANDO RETENCIONES ${item.nombre_CG}`);
             const existing = values[nombreUpper];
 
             if (existing) {
@@ -102,7 +102,7 @@ export async function migrateRetentions(
                     costeExpenseMap[item.id] = row.ID_DET;
                 }
 
-               /*  console.log(`✔ Actualizada retención ${item.nombre_CG}`); */
+                /*  console.log(`✔ Actualizada retención ${item.nombre_CG}`); */
             } else {
                 // Insertar retención completa
                 const { insertId } = await insertNewRetentionCodeMdl(conn, {

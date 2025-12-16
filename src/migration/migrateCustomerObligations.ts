@@ -1,3 +1,77 @@
+export async function migrateCustomerAccounting(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapSales: Record<number, number | null>,
+    mapAuditSales: Record<number, number | null>,
+    mapClients: Record<number, number | null>,
+    bankMap: Record<number, number | null>,
+    boxMap: Record<number, number | null>,
+    userMap: Record<number, number | null>
+
+) {
+
+    console.log("🧩 Iniciando migración contable de clientes");
+
+    /* ──────────────────────────────
+     1️⃣ OBLIGACIONES
+    ────────────────────────────── */
+    const {
+        mapObligationsCustomers,
+        mapObligationsAudit
+    } = await migrateCustomerObligations(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapSales,
+        mapAuditSales,
+        mapClients
+    );
+
+    console.log(
+        `✔ Obligaciones migradas: ${Object.keys(mapObligationsCustomers).length}`
+    );
+
+    console.log(
+        `✔ Auditoria migradas: ${Object.keys(mapObligationsAudit).length}`
+    );
+
+
+    /*  DETALLE DE MOVIMIENTOS EXENTAS DE CREDITO */
+
+    const { mapMovements } = await migrateMovementsObligations(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapSales,
+        mapAuditSales,
+        mapObligationsCustomers,
+        mapObligationsAudit,
+        bankMap,
+        boxMap,
+        userMap
+    );
+
+    /*  DETALLE DE MOVIMIENTOS DE CREDITO POR MULTIPAGOS */
+
+
+    console.log(`✔ Detalle de movimientos migrados: ${Object.keys(mapMovements).length}`);
+
+    const { mapMovementsSales } = await migrateMovementsObligationsCredito(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapSales,
+        mapAuditSales,
+        mapObligationsAudit,
+        bankMap,
+        mapMovements
+    );
+    console.log(`✔ Detalle de movimientos por credito multipagos migrado: ${Object.keys(mapMovementsSales).length}`);
+}
+
+
+
 export async function migrateCustomerObligations(
     legacyConn: any,
     conn: any,
@@ -65,7 +139,7 @@ export async function migrateCustomerObligations(
 
                 let auditId: number | null = null;
 
-   
+
                 if (o.fk_cod_trans_old && mapAuditSales[o.fk_cod_trans_old]) {
                     auditId = mapAuditSales[o.fk_cod_trans_old]!;
                 }
@@ -148,12 +222,362 @@ export async function migrateCustomerObligations(
                 mapObligationsCustomers[o.old_id] = newId++;
             }
         }
-
         console.log("✅ Migración completada correctamente");
         return { mapObligationsCustomers, mapObligationsAudit };
-
     } catch (err) {
         console.error("❌ Error en migración de obligaciones:", err);
         throw err;
     }
 }
+
+export async function migrateMovementsObligations(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapSales: Record<number, number | null>,
+    mapAuditSales: Record<number, number | null>,
+    mapObligationsCustomers: Record<number, number | null>,
+    mapObligationsAudit: Record<number, number | null>,
+    bankMap: Record<number, number | null>,
+    boxMap: Record<number, number | null>,
+    userMap: Record<number, number | null>
+): Promise<{
+    mapMovements: Record<number, number>
+}> {
+
+    console.log("🚀 Migrando movimientos clientes");
+    const mapMovements: Record<number, number> = {};
+    try {//IMPORTE_GD
+
+        const [rows]: any[] = await legacyConn.query(` SELECT
+                                                    m.ID_MOVI,
+                                                    t.COD_TRAC AS COD_TRANS,
+                                                    m.FK_COD_CAJAS_MOVI,
+                                                    m.FK_COD_BANCO_MOVI,
+                                                    IFNULL(m.TIP_MOVI, t.METPAG_TRAC) AS TIP_MOVI,
+                                                    m.periodo_caja,
+                                                    IFNULL(m.FECHA_MOVI, t.fecha) AS FECHA_MOVI,
+                                                    'VENTA' AS ORIGEN_MOVI,
+                                                    IFNULL(m.IMPOR_MOVI, t.TOTPAG_TRAC) AS IMPOR_MOVI,
+                                                    IFNULL(m.TIPO_MOVI, t.METPAG_TRAC) AS TIPO_MOVI,
+                                                    m.REF_MOVI,
+                                                    CASE 
+                                                        WHEN t.TIP_TRAC = 'Fisica' THEN IFNULL(t.NUM_TRACFIC,'')
+                                                        WHEN t.TIP_TRAC = 'Electronica' THEN IFNULL(t.NUM_TRAC,'')
+                                                        ELSE IFNULL(t.NUM_TRACCI,'')
+                                                    END AS CONCEP_MOVIMIG,
+                                                    CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 0 END AS ESTADO_MOVI,
+                                                    IFNULL(m.PER_BENE_MOVI,IFNULL(mt.PER_BENE_MOVI, 'MIG')) AS PER_BENE_MOVI,
+                                                    'INGRESO' AS CAUSA_MOVI,
+                                                    'VENTAS' AS MODULO,
+                                                    IFNULL(m.FECHA_MANUAL, t.FEC_TRAC) AS FECHA_MANUAL,
+                                                    m.CONCILIADO,
+                                                    m.FK_COD_CX,
+                                                    m.SECU_MOVI,
+                                                    m.FK_CONCILIADO,
+                                                    m.FK_ANT_MOVI,
+                                                    IFNULL(m.FK_USER_EMP_MOVI, t.FK_COD_USU) AS FK_USER_EMP_MOVI,
+                                                    IFNULL(m.FK_TRAC_MOVI, t.COD_TRAC) AS FK_TRAC_MOVI, mt.NUM_VOUCHER as NUM_VOUCHER, mt.NUM_LOTE as NUM_LOTE,
+                                                   m.CONCEP_MOVI as OBS_MOVI, t.TOTPAG_TRAC , NULL AS FK_ASIENTO, NULL AS FK_ARQUEO, m.RECIBO_CAJA, m.NUM_UNIDAD
+                                                FROM transacciones t
+                                                LEFT JOIN movimientos m 
+                                                    ON m.FK_TRAC_MOVI = t.COD_TRAC
+                                                LEFT JOIN movimientos_tarjeta mt on mt.FK_TRAC_MOVI = t.COD_TRAC    
+                                                WHERE t.TIP_TRAC IN ('Electronica','Fisica','comprobante-ingreso')  ORDER BY ID_MOVI ASC;`
+        );
+
+        if (!rows.length) {
+            return { mapMovements };
+        }
+
+
+        const [cardGeneric]: any = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+
+        const idCard = cardGeneric[0]?.ID_TARJETA ?? null;
+
+
+        const [movSec]: any = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO= 'VENTAS' AND  FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+
+        let secuenciaMovimiento = movSec[0]?.SECU_MOVI ?? 1;
+
+        const BATCH_SIZE = 500;
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const insertValues: any[] = [];
+
+            for (const o of batch) {
+
+                let auditId: number | null = null;
+
+
+                mapObligationsAudit[o.old_id] = auditId;
+                o.JSON_PAGOS = '[]';
+                const idBanco = bankMap[o.FK_COD_BANCO_MOVI];
+                const idDetCaja = boxMap[o.FK_COD_CAJAS_MOVI]
+                const idTrn = mapSales[o.FK_TRAC_MOVI]
+                const idUser = userMap[o.FK_USER_EMP_MOVI]
+                const idAuditTr = mapAuditSales[o.COD_TRANS];
+                const idPlanCuenta = null;
+                //o.ID_MOVI,
+                insertValues.push([
+                    idBanco,//ok
+                    idTrn,//ok
+                    o.FK_CONCILIADO,//ok
+                    idUser,
+                    o.FECHA_MOVI,
+                    o.FECHA_MANUAL,
+                    o.TIP_MOVI,
+                    o.ORIGEN_MOVI,
+                    o.TIPO_MOVI,
+                    o.REF_MOVI,
+                    o.CONCEP_MOVIMIG,
+                    o.NUM_VOUCHER,
+                    o.NUM_LOTE,
+                    o.CAUSA_MOVI,
+                    o.MODULO,
+                    secuenciaMovimiento,
+                    o.IMPOR_MOVI,
+                    o.ESTADO_MOVI,
+                    o.PER_BENE_MOVI,
+                    o.CONCILIADO,
+                    newCompanyId,
+                    idDetCaja,
+                    o.OBS_MOVI,
+                    o.TOTPAG_TRAC,
+                    o.FK_ASIENTO,
+                    idAuditTr,
+                    o.FK_ARQUEO,
+                    idCard,
+                    o.RECIBO_CAJA,
+                    idPlanCuenta,
+                    o.NUM_UNIDAD,
+                    o.JSON_PAGOS
+                ]);
+
+                secuenciaMovimiento++;
+            }
+
+            const [res]: any = await conn.query(`INSERT INTO movements(
+                                                    FKBANCO,
+                                                    FK_COD_TRAN,
+                                                    FK_CONCILIADO,
+                                                    FK_USER,
+                                                    FECHA_MOVI,
+                                                    FECHA_MANUAL,
+                                                    TIP_MOVI,
+                                                    ORIGEN_MOVI,
+                                                    TIPO_MOVI,
+                                                    REF_MOVI,
+                                                    CONCEP_MOVI,
+                                                    NUM_VOUCHER,
+                                                    NUM_LOTE,
+                                                    CAUSA_MOVI,
+                                                    MODULO,
+                                                    SECU_MOVI,
+                                                    IMPOR_MOVI,
+                                                    ESTADO_MOVI,
+                                                    PER_BENE_MOVI,
+                                                    CONCILIADO,
+                                                    FK_COD_EMP,
+                                                    IDDET_BOX,
+                                                    OBS_MOVI,
+                                                    IMPOR_MOVITOTAL,
+                                                    FK_ASIENTO,
+                                                    FK_AUDITMV,
+                                                    FK_ARQUEO,
+                                                    ID_TARJETA,
+                                                    RECIBO_CAJA,
+                                                    FK_CTAM_PLAN,
+                                                    NUMERO_UNIDAD,
+                                                    JSON_PAGOS
+                                                )
+                                                VALUES ?`, [insertValues]);
+
+            let newId = res.insertId;
+            for (const o of batch) {
+                mapMovements[o.COD_TRANS] = newId++;
+            }
+        }
+        console.log("✅ Migración completada correctamente");
+        return { mapMovements };
+    } catch (err) {
+        console.error("❌ Error en migración de obligaciones:", err);
+        throw err;
+    }
+}
+
+export async function migrateMovementsObligationsCredito(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapSales: Record<number, number | null>,
+    mapAuditSales: Record<number, number | null>,
+    mapObligationsAudit: Record<number, number | null>,
+    userMap: Record<number, number | null>,
+    mapMovements: Record<number, number | null>,
+): Promise<{
+    mapMovementsSales: Record<number, number>
+}> {
+    console.log("🚀 Migrando obligaciones clientes");
+    try {//IMPORTE_GD
+
+        const [rows]: any[] = await legacyConn.query(`SELECT
+                                                    NULL AS ID_MOVI,
+                                                    t.COD_TRAC AS COD_TRANS,
+                                                    NULL AS FK_COD_CAJAS_MOVI,
+                                                    NULL AS FK_COD_BANCO_MOVI,
+                                                     t.METPAG_TRAC AS TIP_MOVI,
+                                                   NULL AS periodo_caja,
+                                                    t.fecha AS FECHA_MOVI,
+                                                    'VENTA' AS ORIGEN_MOVI,
+                                                    m.valor_cxp AS IMPOR_MOVI,
+                                                    t.METPAG_TRAC AS TIPO_MOVI,
+                                                    'CREDITO' AS REF_MOVI,
+                                                    CASE 
+                                                        WHEN t.TIP_TRAC = 'Fisica' THEN IFNULL(t.NUM_TRACFIC,'')
+                                                        WHEN t.TIP_TRAC = 'Electronica' THEN IFNULL(t.NUM_TRAC,'')
+                                                        ELSE IFNULL(t.NUM_TRACCI,'')
+                                                    END AS CONCEP_MOVIMIG,
+                                                    1 AS ESTADO_MOVI,
+                                                    'MIG' AS  PER_BENE_MOVI,
+                                                    'INGRESO' AS CAUSA_MOVI,
+                                                    'VENTAS' AS MODULO,
+                                                     t.FEC_TRAC AS FECHA_MANUAL,
+                                                    NULL AS CONCILIADO,
+                                                     NULL AS FK_COD_CX,
+                                                    NULL AS SECU_MOVI,
+                                                     NULL AS FK_CONCILIADO,
+                                                    NULL AS FK_ANT_MOVI,
+                                                    t.FK_COD_USU AS FK_USER_EMP_MOVI,
+                                                    t.COD_TRAC AS FK_TRAC_MOVI,NULL AS  NUM_VOUCHER,NULL as NUM_LOTE,
+                                                   t.OBS_TRAC as OBS_MOVI, t.TOTPAG_TRAC , NULL AS FK_ASIENTO, NULL AS FK_ARQUEO,NULL AS RECIBO_CAJA, NULL AS NUM_UNIDAD
+                                                FROM transacciones t
+                                                INNER JOIN cuentascp m 
+                                                    ON m.FK_TRAC_CUENTA = t.COD_TRAC
+                                                WHERE t.TIP_TRAC IN ('Electronica','Fisica','comprobante-ingreso') and t.METPAG_TRAC='MULTIPLES' ORDER BY t.COD_TRAC ASC;` );
+
+        if (!rows.length) {
+            return { mapMovementsSales: mapMovements };
+        }
+   
+        const idCard = null;
+
+
+        const [movSec]: any = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO= 'VENTAS' AND  FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+
+        let secuenciaMovimiento = movSec[0]?.SECU_MOVI ?? 1;
+
+        const BATCH_SIZE = 500;
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const insertValues: any[] = [];
+
+            for (const o of batch) {
+
+                let auditId: number | null = null;
+
+
+                mapObligationsAudit[o.old_id] = auditId;
+                o.JSON_PAGOS = '[]';
+                const idBanco = null;
+                const idDetCaja = null
+                const idTrn = mapSales[o.FK_TRAC_MOVI]
+                const idUser = userMap[o.FK_USER_EMP_MOVI]
+                const idAuditTr = mapAuditSales[o.COD_TRANS];
+                const idPlanCuenta = null;
+                //o.ID_MOVI,
+                insertValues.push([
+                    idBanco,//ok
+                    idTrn,//ok
+                    o.FK_CONCILIADO,//ok
+                    idUser,
+                    o.FECHA_MOVI,
+                    o.FECHA_MANUAL,
+                    o.TIP_MOVI,
+                    o.ORIGEN_MOVI,
+                    o.TIPO_MOVI,
+                    o.REF_MOVI,
+                    o.CONCEP_MOVIMIG,
+                    o.NUM_VOUCHER,
+                    o.NUM_LOTE,
+                    o.CAUSA_MOVI,
+                    o.MODULO,
+                    secuenciaMovimiento,
+                    o.IMPOR_MOVI,
+                    o.ESTADO_MOVI,
+                    o.PER_BENE_MOVI,
+                    o.CONCILIADO,
+                    newCompanyId,
+                    idDetCaja,
+                    o.OBS_MOVI,
+                    o.TOTPAG_TRAC,
+                    o.FK_ASIENTO,
+                    idAuditTr,
+                    o.FK_ARQUEO,
+                    idCard,
+                    o.RECIBO_CAJA,
+                    idPlanCuenta,
+                    o.NUM_UNIDAD,
+                    o.JSON_PAGOS
+                ]);
+
+                secuenciaMovimiento++;
+            }
+
+            const [res]: any = await conn.query(`INSERT INTO movements(
+                                                    FKBANCO,
+                                                    FK_COD_TRAN,
+                                                    FK_CONCILIADO,
+                                                    FK_USER,
+                                                    FECHA_MOVI,
+                                                    FECHA_MANUAL,
+                                                    TIP_MOVI,
+                                                    ORIGEN_MOVI,
+                                                    TIPO_MOVI,
+                                                    REF_MOVI,
+                                                    CONCEP_MOVI,
+                                                    NUM_VOUCHER,
+                                                    NUM_LOTE,
+                                                    CAUSA_MOVI,
+                                                    MODULO,
+                                                    SECU_MOVI,
+                                                    IMPOR_MOVI,
+                                                    ESTADO_MOVI,
+                                                    PER_BENE_MOVI,
+                                                    CONCILIADO,
+                                                    FK_COD_EMP,
+                                                    IDDET_BOX,
+                                                    OBS_MOVI,
+                                                    IMPOR_MOVITOTAL,
+                                                    FK_ASIENTO,
+                                                    FK_AUDITMV,
+                                                    FK_ARQUEO,
+                                                    ID_TARJETA,
+                                                    RECIBO_CAJA,
+                                                    FK_CTAM_PLAN,
+                                                    NUMERO_UNIDAD,
+                                                    JSON_PAGOS
+                                                )
+                                                VALUES ?`, [insertValues]);
+
+            let newId = res.insertId;
+            for (const o of batch) {
+                mapMovements[o.COD_TRANS] = newId++;
+            }
+        }
+        console.log("✅ Migración movimiento credito completada correctamente");
+        return { mapMovementsSales: mapMovements };
+    } catch (err) {
+        console.error("❌ Error en migración de obligaciones:", err);
+        throw err;
+    }
+}
+
