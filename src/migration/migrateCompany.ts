@@ -101,7 +101,7 @@ export async function migrateCompany(codEmp: number) {
       e.SELECCION_COSTEO,
       e.EDIT_VENDEDOR,
       e.DESCUENTO_AUTOMATICO,
-      e.TIPEMP_EMP,
+      e.TIPEMP_EMP == 'prueba' ? 'pruebas' : 'produccion',
       '[]',
       e.LEGEND_EMP,
       e.TIT_LEGEND_EMP,
@@ -442,10 +442,14 @@ export async function migrateCompany(codEmp: number) {
       mapClients,
       bankMap,
       boxMap,
-      userMap
+      userMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts
     )
 
-  
+
     /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
       const accounts = rows as any[]; console.log(rows);
       if (!accounts.length) {
@@ -482,9 +486,9 @@ export async function migrateCompany(codEmp: number) {
     console.log("DETALLE DE BODEGA MIGRADOS:", Object.keys(mapDetWare).length);
     console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
-   /*  console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
-    console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
- */
+    /*  console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
+     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
+  */
 
 
 
