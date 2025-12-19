@@ -11,8 +11,8 @@ export async function migrateCustomerAccounting(
     mapPeriodo: Record<number, number | null>,
     mapProject: Record<number, number | null>,
     mapCenterCost: Record<number, number | null>,
-    mapAccounts: Record<number, number | null>
-
+    mapAccounts: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>
 ) {
 
     console.log("🧩 Iniciando migración contable de clientes");
@@ -42,18 +42,17 @@ export async function migrateCustomerAccounting(
 
 
     /*  DETALLE DE MOVIMIENTOS EXENTAS DE CREDITO */
-
     const { mapMovements } = await migrateMovementsObligations(
         legacyConn,
         conn,
         newCompanyId,
         mapSales,
         mapAuditSales,
-        mapObligationsCustomers,
         mapObligationsAudit,
         bankMap,
         boxMap,
-        userMap
+        userMap,
+        mapConciliation
     );
 
     /*  DETALLE DE MOVIMIENTOS DE CREDITO POR MULTIPAGOS */
@@ -69,7 +68,8 @@ export async function migrateCustomerAccounting(
         mapAuditSales,
         mapObligationsAudit,
         bankMap,
-        mapMovements
+        mapMovements,
+        mapConciliation
     );
     console.log(`✔ Detalle de movimientos por credito multipagos migrado: ${Object.keys(mapMovementsSales).length}`);
 
@@ -269,11 +269,11 @@ export async function migrateMovementsObligations(
     newCompanyId: number,
     mapSales: Record<number, number | null>,
     mapAuditSales: Record<number, number | null>,
-    mapObligationsCustomers: Record<number, number | null>,
     mapObligationsAudit: Record<number, number | null>,
     bankMap: Record<number, number | null>,
     boxMap: Record<number, number | null>,
-    userMap: Record<number, number | null>
+    userMap: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
 ): Promise<{
     mapMovements: Record<number, number>
 }> {
@@ -355,12 +355,13 @@ export async function migrateMovementsObligations(
                 const idTrn = mapSales[o.FK_TRAC_MOVI]
                 const idUser = userMap[o.FK_USER_EMP_MOVI]
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
+                const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
                 //o.ID_MOVI,
                 insertValues.push([
                     idBanco,//ok
                     idTrn,//ok
-                    o.FK_CONCILIADO,//ok
+                    idFkConciliation,//ok
                     idUser,
                     o.FECHA_MOVI,
                     o.FECHA_MANUAL,
@@ -453,6 +454,7 @@ export async function migrateMovementsObligationsCredito(
     mapObligationsAudit: Record<number, number | null>,
     userMap: Record<number, number | null>,
     mapMovements: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
 ): Promise<{
     mapMovementsSales: Record<number, number>
 }> {
@@ -480,11 +482,11 @@ export async function migrateMovementsObligationsCredito(
                                                     'MIG' AS  PER_BENE_MOVI,
                                                     'INGRESO' AS CAUSA_MOVI,
                                                     'VENTAS' AS MODULO,
-                                                     t.FEC_TRAC AS FECHA_MANUAL,
+                                                    t.FEC_TRAC AS FECHA_MANUAL,
                                                     NULL AS CONCILIADO,
-                                                     NULL AS FK_COD_CX,
+                                                    NULL AS FK_COD_CX,
                                                     NULL AS SECU_MOVI,
-                                                     NULL AS FK_CONCILIADO,
+                                                    NULL AS FK_CONCILIADO,
                                                     NULL AS FK_ANT_MOVI,
                                                     t.FK_COD_USU AS FK_USER_EMP_MOVI,
                                                     t.COD_TRAC AS FK_TRAC_MOVI,NULL AS  NUM_VOUCHER,NULL as NUM_LOTE,
@@ -525,12 +527,13 @@ export async function migrateMovementsObligationsCredito(
                 const idTrn = mapSales[o.FK_TRAC_MOVI]
                 const idUser = userMap[o.FK_USER_EMP_MOVI]
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
+                const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
                 //o.ID_MOVI,
                 insertValues.push([
                     idBanco,//ok
                     idTrn,//ok
-                    o.FK_CONCILIADO,//ok
+                    idFkConciliation,//ok
                     idUser,
                     o.FECHA_MOVI,
                     o.FECHA_MANUAL,
@@ -763,7 +766,7 @@ export async function migrateSalesAccountingEntriesDetail(
         INNER JOIN contabilidad_asientos a ON a.FK_CODTRAC = t.COD_TRAC
         INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = a.cod_asiento
         WHERE t.TIP_TRAC IN ('Electronica','Fisica','comprobante-ingreso')
-        AND a.descripcion_asiento NOT LIKE '%(RETENCION%'
+          AND a.descripcion_asiento NOT LIKE '%(RETENCION%'
         ORDER BY t.COD_TRAC
     `);
 
@@ -772,15 +775,13 @@ export async function migrateSalesAccountingEntriesDetail(
         return { mapAccountDetail };
     }
 
-    const BATCH_SIZE = 500;
+    const BATCH_SIZE = 1000;
     console.log(`📦 Total registros a migrar: ${rows.length}`);
-
+    let totalDebe = 0;
+    let totalHaber = 0;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
-
         console.log(`➡️ Procesando batch ${i / BATCH_SIZE + 1}`);
-
-      
 
         try {
             const insertValues: any[] = [];
@@ -792,19 +793,21 @@ export async function migrateSalesAccountingEntriesDetail(
                 const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
                 const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
 
-                if (!idPlan || !idCodAsiento) continue; // evita datos inválidos
+                if (!idPlan || !idCodAsiento) continue;
+
+                const debe = Number(o.DEBE_DET) || 0;
+                const haber = Number(o.HABER_DET) || 0;
 
                 insertValues.push([
                     idCodAsiento,
-                    o.DEBE_DET,
-                    o.HABER_DET,
+                    debe,
+                    haber,
                     idPlan,
                     idProyecto,
                     idCentroCosto
                 ]);
 
-                // 🔹 Acumulación en memoria (clave única)
-                const key = `${idPlan}-${o.fecha_asiento}`;
+                const key = `${newCompanyId}-${idPlan}-${o.fecha_asiento}`;
                 if (!totalsMap.has(key)) {
                     totalsMap.set(key, {
                         id_plan: idPlan,
@@ -816,12 +819,19 @@ export async function migrateSalesAccountingEntriesDetail(
                 }
 
                 const acc = totalsMap.get(key);
-                acc.debe += o.DEBE_DET;
-                acc.haber += o.HABER_DET;
+                acc.debe += debe;
+                acc.haber += haber;
                 acc.total++;
+
+                totalHaber += haber;
+                totalDebe += debe;
             }
 
-            // 🔹 Insert masivo
+            if (!insertValues.length) {
+                console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
+                continue;
+            }
+
             const [res]: any = await conn.query(`
                 INSERT INTO accounting_movements_det (
                     FK_COD_ASIENTO,
@@ -834,21 +844,27 @@ export async function migrateSalesAccountingEntriesDetail(
             `, [insertValues]);
 
             let newId = res.insertId;
+
             for (const o of batch) {
+                const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+                const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
+
+                if (!idPlan || !idCodAsiento) continue;
+
                 mapAccountDetail[o.cod_detalle_asiento] = newId++;
             }
-            console.log(totalsMap);
-            // 🔹 Update de totalizados (MUCHO MENOS QUERIES)
+
             for (const t of totalsMap.values()) {
                 await upsertTotaledEntry(conn, t, newCompanyId);
             }
 
-           
             console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
+            console.log(totalHaber);
+            console.log(totalDebe);
+
 
         } catch (err) {
-           
-            console.error("❌ Error en batch, rollback ejecutado:", err);
+            console.error("❌ Error en batch:", err);
             throw err;
         }
     }
@@ -856,7 +872,18 @@ export async function migrateSalesAccountingEntriesDetail(
     console.log("🎉 Migración de detalles completada");
     return { mapAccountDetail };
 }
-async function upsertTotaledEntry(conn, data, companyId) {
+
+async function upsertTotaledEntry(
+    conn: any,
+    data: {
+        id_plan: number;
+        fecha: string;
+        debe: number;
+        haber: number;
+        total: number;
+    },
+    companyId: number
+) {
     await conn.query(`
         INSERT INTO totaledentries (
             ID_FKPLAN, FECHA_ENTRY, TOTAL_DEBE, TOTAL_HABER, TOTAL_NUMASI, FK_COD_EMP
@@ -874,3 +901,4 @@ async function upsertTotaledEntry(conn, data, companyId) {
         companyId
     ]);
 }
+

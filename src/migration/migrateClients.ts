@@ -58,9 +58,11 @@ export async function migrateClientsForCompany(
                                     CASE WHEN identificacionAdicional = '' THEN NULL ELSE identificacionAdicional END AS CUST_CI_EXT,
                                     TIP_CLI AS CUST_TIPCI_EXT,
                                     NULL AS CUST_CODE_CI_EXT,
-                                    CASE 
-                                        WHEN direccionAdicional IS NOT NULL AND direccionAdicional != '' THEN 1 
-                                        ELSE 0 
+                                    CASE
+                                        WHEN direccionAdicional IS NOT NULL
+                                            AND TRIM(direccionAdicional) <> ''
+                                        THEN 1
+                                        ELSE 0
                                     END AS CUST_FACT,
                                     EST_CLI AS CUST_CIVIL_EST
                                 FROM

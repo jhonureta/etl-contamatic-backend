@@ -20,6 +20,7 @@ import { migrateSales } from './migrateSales';
 import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
+import { migrateBankReconciliation } from './migrateBankReconciliation';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -82,7 +83,7 @@ export async function migrateCompany(codEmp: number) {
       e.NOMREPLEG_EMP,
       e.IDENCONT_EMP,
       e.NOMCONT_EMP,
-      e.TIPAMB_EMP.toLowerCase(),
+      e.TIPAMB_EMP == 'prueba' ? 'pruebas'.toLowerCase() : 'produccion'.toLowerCase(),
       e.CODNUMACCES_EMP,
       e.secuencial,
       e.estado_secuencial,
@@ -153,18 +154,43 @@ export async function migrateCompany(codEmp: number) {
 
     console.log(`-> Migrando configuracion de empresa`);
 
-    const datosExtras = JSON.parse(e.DATOS_EXTR_EMP) || [];
-    const requiredExtras = ['RESPONSABLE', 'BODEGA', 'VENDEDOR'];
-    const CONF_DATOS_RESP = datosExtras.some(d => d.toUpperCase() === 'RESPONSABLE') ? 1 : 0;
-    const CONF_DATOS_BOD = datosExtras.some(d => d.toUpperCase() === 'BODEGA') ? 1 : 0;
-    const CONF_DATOS_VEND = datosExtras.some(d => d.toUpperCase() === 'VENDEDOR') ? 1 : 0;
-    const faltantesExtras = requiredExtras.filter(k => !datosExtras.map(d => d.toUpperCase()).includes(k));
-    if (faltantesExtras.length > 0) {
-      throw new Error(
-        `Faltan datos extra obligatorios: ${faltantesExtras.join(', ')}`,
-      );
+    /*   const datosExtras = JSON.parse(e.DATOS_EXTR_EMP) || [];
+      const requiredExtras = ['RESPONSABLE', 'BODEGA', 'VENDEDOR'];
+      const CONF_DATOS_RESP = datosExtras.some(d => d.toUpperCase() === 'RESPONSABLE') ? 1 : 0;
+      const CONF_DATOS_BOD = datosExtras.some(d => d.toUpperCase() === 'BODEGA') ? 1 : 0;
+      const CONF_DATOS_VEND = datosExtras.some(d => d.toUpperCase() === 'VENDEDOR') ? 1 : 0;
+      const faltantesExtras = requiredExtras.filter(k => !datosExtras.map(d => d.toUpperCase()).includes(k));
+      if (faltantesExtras.length > 0) {
+        throw new Error(
+          `Faltan datos extra obligatorios: ${faltantesExtras.join(', ')}`,
+        );
+      }
+   */
+
+    // 1. Intentar parsear de forma segura para que no rompa si e.DATOS_EXTR_EMP es null o mal formado
+    let datosExtras = [];
+    try {
+      datosExtras = e.DATOS_EXTR_EMP ? JSON.parse(e.DATOS_EXTR_EMP) : [];
+      if (!Array.isArray(datosExtras)) datosExtras = []; // Asegurar que sea array
+    } catch (error) {
+      datosExtras = []; // Si el JSON está mal, por defecto dejamos array vacío
     }
 
+    // 2. Normalizamos a mayúsculas una sola vez para mejorar el rendimiento
+    const datosUpper = datosExtras.map(d => String(d).toUpperCase());
+
+    // 3. Asignación de 1 o 0 (si no existe, por defecto será 0)
+    const CONF_DATOS_RESP = datosUpper.includes('RESPONSABLE') ? 1 : 0;
+    const CONF_DATOS_BOD = datosUpper.includes('BODEGA') ? 1 : 0;
+    const CONF_DATOS_VEND = datosUpper.includes('VENDEDOR') ? 1 : 0;
+
+    // 4. Eliminamos el "throw new Error" y simplemente validamos si quieres registrar los faltantes
+    const requiredExtras = ['RESPONSABLE', 'BODEGA', 'VENDEDOR'];
+    const faltantesExtras = requiredExtras.filter(k => !datosUpper.includes(k));
+
+    if (faltantesExtras.length > 0) {
+      console.warn(`Aviso: Faltan datos extra (${faltantesExtras.join(', ')}). Se asignó 0 por defecto.`);
+    }
 
     let formatProforma, numFormat;
     try {
@@ -431,8 +457,19 @@ export async function migrateCompany(codEmp: number) {
     const mapsSales = await migrateSales(
       legacyConn,
       conn,
-      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions)
-    //const mapObligationsCustomers =
+      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions);
+
+    //MIGRACION DE CONCILIACION BANCARIA
+
+    const mapConciliation = await migrateBankReconciliation(
+      legacyConn,
+      conn,
+      newCompanyId,
+      bankMap
+    );
+
+
+    /* MIGRARCION DE CONTABILIDAD MOVIMIENTOS DE VENTAS   */
     await migrateCustomerAccounting(
       legacyConn,
       conn,
@@ -446,7 +483,8 @@ export async function migrateCompany(codEmp: number) {
       mapPeriodo,
       mapProject,
       mapCenterCost,
-      mapAccounts
+      mapAccounts,
+      mapConciliation
     )
 
 
@@ -485,6 +523,7 @@ export async function migrateCompany(codEmp: number) {
     console.log("MAPEO PRODUCTOS MIGRADOS:", Object.keys(mapProducts).length);
     console.log("DETALLE DE BODEGA MIGRADOS:", Object.keys(mapDetWare).length);
     console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
+    console.log("CONCILIACION MIGRADA :", Object.keys(mapConciliation).length);
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
     /*  console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
      console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
