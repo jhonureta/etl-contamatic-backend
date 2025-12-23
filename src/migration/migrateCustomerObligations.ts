@@ -7,8 +7,12 @@ export async function migrateCustomerAccounting(
     mapClients: Record<number, number | null>,
     bankMap: Record<number, number | null>,
     boxMap: Record<number, number | null>,
-    userMap: Record<number, number | null>
-
+    userMap: Record<number, number | null>,
+    mapPeriodo: Record<number, number | null>,
+    mapProject: Record<number, number | null>,
+    mapCenterCost: Record<number, number | null>,
+    mapAccounts: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>
 ) {
 
     console.log("🧩 Iniciando migración contable de clientes");
@@ -38,18 +42,17 @@ export async function migrateCustomerAccounting(
 
 
     /*  DETALLE DE MOVIMIENTOS EXENTAS DE CREDITO */
-
     const { mapMovements } = await migrateMovementsObligations(
         legacyConn,
         conn,
         newCompanyId,
         mapSales,
         mapAuditSales,
-        mapObligationsCustomers,
         mapObligationsAudit,
         bankMap,
         boxMap,
-        userMap
+        userMap,
+        mapConciliation
     );
 
     /*  DETALLE DE MOVIMIENTOS DE CREDITO POR MULTIPAGOS */
@@ -65,9 +68,39 @@ export async function migrateCustomerAccounting(
         mapAuditSales,
         mapObligationsAudit,
         bankMap,
-        mapMovements
+        mapMovements,
+        mapConciliation
     );
     console.log(`✔ Detalle de movimientos por credito multipagos migrado: ${Object.keys(mapMovementsSales).length}`);
+
+    /*MIGRAR ENCABEZADO DE ASIENTO CONTABLE */
+
+    const { mapEntryAccount } = await migrateSalesAccountingEntries(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapSales,
+        mapAuditSales,
+        mapMovements,
+        mapPeriodo,
+    )
+
+    console.log(`✔ Encabezado de asientos contables: ${Object.keys(mapEntryAccount).length}`);
+
+
+    const { mapAccountDetail } = await migrateSalesAccountingEntriesDetail(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapProject,
+        mapCenterCost,
+        mapAccounts,
+        mapEntryAccount
+    )
+    console.log(`✔ Asientos contables detalle: ${Object.keys(mapAccountDetail).length}`);
+
+
+
 }
 
 
@@ -236,11 +269,11 @@ export async function migrateMovementsObligations(
     newCompanyId: number,
     mapSales: Record<number, number | null>,
     mapAuditSales: Record<number, number | null>,
-    mapObligationsCustomers: Record<number, number | null>,
     mapObligationsAudit: Record<number, number | null>,
     bankMap: Record<number, number | null>,
     boxMap: Record<number, number | null>,
-    userMap: Record<number, number | null>
+    userMap: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
 ): Promise<{
     mapMovements: Record<number, number>
 }> {
@@ -322,12 +355,13 @@ export async function migrateMovementsObligations(
                 const idTrn = mapSales[o.FK_TRAC_MOVI]
                 const idUser = userMap[o.FK_USER_EMP_MOVI]
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
+                const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
                 //o.ID_MOVI,
                 insertValues.push([
                     idBanco,//ok
                     idTrn,//ok
-                    o.FK_CONCILIADO,//ok
+                    idFkConciliation,//ok
                     idUser,
                     o.FECHA_MOVI,
                     o.FECHA_MANUAL,
@@ -420,6 +454,7 @@ export async function migrateMovementsObligationsCredito(
     mapObligationsAudit: Record<number, number | null>,
     userMap: Record<number, number | null>,
     mapMovements: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
 ): Promise<{
     mapMovementsSales: Record<number, number>
 }> {
@@ -447,11 +482,11 @@ export async function migrateMovementsObligationsCredito(
                                                     'MIG' AS  PER_BENE_MOVI,
                                                     'INGRESO' AS CAUSA_MOVI,
                                                     'VENTAS' AS MODULO,
-                                                     t.FEC_TRAC AS FECHA_MANUAL,
+                                                    t.FEC_TRAC AS FECHA_MANUAL,
                                                     NULL AS CONCILIADO,
-                                                     NULL AS FK_COD_CX,
+                                                    NULL AS FK_COD_CX,
                                                     NULL AS SECU_MOVI,
-                                                     NULL AS FK_CONCILIADO,
+                                                    NULL AS FK_CONCILIADO,
                                                     NULL AS FK_ANT_MOVI,
                                                     t.FK_COD_USU AS FK_USER_EMP_MOVI,
                                                     t.COD_TRAC AS FK_TRAC_MOVI,NULL AS  NUM_VOUCHER,NULL as NUM_LOTE,
@@ -464,7 +499,7 @@ export async function migrateMovementsObligationsCredito(
         if (!rows.length) {
             return { mapMovementsSales: mapMovements };
         }
-   
+
         const idCard = null;
 
 
@@ -492,12 +527,13 @@ export async function migrateMovementsObligationsCredito(
                 const idTrn = mapSales[o.FK_TRAC_MOVI]
                 const idUser = userMap[o.FK_USER_EMP_MOVI]
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
+                const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
                 //o.ID_MOVI,
                 insertValues.push([
                     idBanco,//ok
                     idTrn,//ok
-                    o.FK_CONCILIADO,//ok
+                    idFkConciliation,//ok
                     idUser,
                     o.FECHA_MOVI,
                     o.FECHA_MANUAL,
@@ -579,5 +615,290 @@ export async function migrateMovementsObligationsCredito(
         console.error("❌ Error en migración de obligaciones:", err);
         throw err;
     }
+}
+
+export async function migrateSalesAccountingEntries(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapSales: Record<number, number | null>,
+    mapAuditSales: Record<number, number | null>,
+    mapMovements: Record<number, number | null>,
+    mapPeriodo: Record<number, number | null>,
+): Promise<{
+    mapEntryAccount: Record<number, number>
+}> {
+    console.log("🚀 Migrando encabezado de asiento contables");
+    try {//IMPORTE_GD
+        const mapEntryAccount: Record<number, number> = {};
+        const [rows]: any[] = await legacyConn.query(`SELECT
+                                                        cod_asiento,
+                                                        fecha_asiento AS FECHA_ASI,
+                                                        descripcion_asiento AS DESCRIP_ASI,
+                                                        numero_asiento AS NUM_ASI,
+                                                        origen_asiento AS ORG_ASI,
+                                                        debe_asiento AS TDEBE_ASI,
+                                                        haber_asiento AS THABER_ASI,
+                                                        origen_asiento AS TIP_ASI,
+                                                        fk_cod_periodo AS FK_PERIODO,
+                                                        fecha_registro_asiento AS FECHA_REG,
+                                                        fecha_update_asiento AS FECHA_ACT,
+                                                        json_asi AS JSON_ASI,
+                                                        res_asiento AS RES_ASI,
+                                                        ben_asiento AS BEN_ASI,
+                                                        NULL AS FK_AUDIT,
+                                                        NULL AS FK_COD_EMP,
+                                                        CAST(REGEXP_REPLACE(RIGHT(numero_asiento, 9), '[^0-9]', '') AS UNSIGNED)  AS SEC_ASI,
+                                                        transacciones.COD_TRAC AS FK_MOVTRAC,
+                                                        NULL AS FK_MOV
+                                                    FROM
+                                                        transacciones
+                                                    LEFT JOIN contabilidad_asientos ON contabilidad_asientos.FK_CODTRAC = transacciones.COD_TRAC
+                                                    WHERE
+                                                        TIP_TRAC IN(
+                                                            'Electronica',
+                                                            'Fisica',
+                                                            'comprobante-ingreso'
+                                                        )  AND contabilidad_asientos.descripcion_asiento NOT LIKE '%(RETENCION%'
+                                                    ORDER BY
+                                                        transacciones.COD_TRAC;` );
+
+        if (!rows.length) {
+            return { mapEntryAccount };
+        }
+
+
+        const BATCH_SIZE = 1000;
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const insertValues: any[] = [];
+
+            for (const o of batch) {
+                const idTrn = mapSales[o.FK_MOVTRAC]
+                const periodoId = mapPeriodo[o.FK_PERIODO]
+                const idAuditTr = mapAuditSales[o.FK_MOVTRAC];
+                const idMovimiento = mapMovements[o.FK_MOVTRAC];
+
+                insertValues.push([
+                    o.FECHA_ASI,
+                    o.DESCRIP_ASI,
+                    o.NUM_ASI,
+                    o.ORG_ASI,
+                    o.TDEBE_ASI,
+                    o.THABER_ASI,
+                    o.TIP_ASI,
+                    periodoId,
+                    o.FECHA_REG,
+                    o.FECHA_ACT,
+                    o.JSON_ASI,
+                    o.RES_ASI,
+                    o.BEN_ASI,
+                    idAuditTr,
+                    newCompanyId,
+                    o.SEC_ASI,
+                    idTrn,
+                    idMovimiento
+                ]);
+
+
+            }
+
+            const [res]: any = await conn.query(`INSERT INTO accounting_movements(
+                    FECHA_ASI,
+                    DESCRIP_ASI,
+                    NUM_ASI,
+                    ORG_ASI,
+                    TDEBE_ASI,
+                    THABER_ASI,
+                    TIP_ASI,
+                    FK_PERIODO,
+                    FECHA_REG,
+                    FECHA_ACT,
+                    JSON_ASI,
+                    RES_ASI,
+                    BEN_ASI,
+                    FK_AUDIT,
+                    FK_COD_EMP,
+                    SEC_ASI,
+                    FK_MOVTRAC,
+                    FK_MOV) VALUES ?`, [insertValues]);
+
+            let newId = res.insertId;
+            for (const o of batch) {
+                mapEntryAccount[o.cod_asiento] = newId++;
+            }
+        }
+        console.log("✅ Migración asiento contable completada correctamente");
+        return { mapEntryAccount };
+    } catch (err) {
+        console.error("❌ Error en migración de asiento contable:", err);
+        throw err;
+    }
+}
+
+
+export async function migrateSalesAccountingEntriesDetail(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapProject: Record<number, number | null>,
+    mapCenterCost: Record<number, number | null>,
+    mapAccounts: Record<number, number | null>,
+    mapEntryAccount: Record<number, number | null>
+): Promise<{ mapAccountDetail: Record<number, number> }> {
+
+    console.log("🚀 Iniciando migración de detalles de asientos contables");
+
+    const mapAccountDetail: Record<number, number> = {};
+
+    const [rows]: any[] = await legacyConn.query(`
+        SELECT 
+            d.cod_detalle_asiento,
+            a.fecha_asiento,
+            a.cod_asiento AS FK_COD_ASIENTO,
+            d.debe_detalle_asiento AS DEBE_DET,
+            d.haber_detalle_asiento AS HABER_DET,
+            d.fk_cod_plan AS FK_CTAC_PLAN,
+            d.fkProyectoCosto AS FK_COD_PROJECT,
+            d.fkCentroCosto AS FK_COD_COST
+        FROM transacciones t
+        INNER JOIN contabilidad_asientos a ON a.FK_CODTRAC = t.COD_TRAC
+        INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = a.cod_asiento
+        WHERE t.TIP_TRAC IN ('Electronica','Fisica','comprobante-ingreso')
+          AND a.descripcion_asiento NOT LIKE '%(RETENCION%'
+        ORDER BY t.COD_TRAC
+    `);
+
+    if (!rows.length) {
+        console.log("⚠️ No hay registros para migrar");
+        return { mapAccountDetail };
+    }
+
+    const BATCH_SIZE = 1000;
+    console.log(`📦 Total registros a migrar: ${rows.length}`);
+    let totalDebe = 0;
+    let totalHaber = 0;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        console.log(`➡️ Procesando batch ${i / BATCH_SIZE + 1}`);
+
+        try {
+            const insertValues: any[] = [];
+            const totalsMap = new Map<string, any>();
+
+            for (const o of batch) {
+                const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+                const idProyecto = mapProject[o.FK_COD_PROJECT] ?? null;
+                const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
+                const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
+
+                if (!idPlan || !idCodAsiento) continue;
+
+                const debe = Number(o.DEBE_DET) || 0;
+                const haber = Number(o.HABER_DET) || 0;
+
+                insertValues.push([
+                    idCodAsiento,
+                    debe,
+                    haber,
+                    idPlan,
+                    idProyecto,
+                    idCentroCosto
+                ]);
+
+                const key = `${newCompanyId}-${idPlan}-${o.fecha_asiento}`;
+                if (!totalsMap.has(key)) {
+                    totalsMap.set(key, {
+                        id_plan: idPlan,
+                        fecha: o.fecha_asiento,
+                        debe: 0,
+                        haber: 0,
+                        total: 0
+                    });
+                }
+
+                const acc = totalsMap.get(key);
+                acc.debe += debe;
+                acc.haber += haber;
+                acc.total++;
+
+                totalHaber += haber;
+                totalDebe += debe;
+            }
+
+            if (!insertValues.length) {
+                console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
+                continue;
+            }
+
+            const [res]: any = await conn.query(`
+                INSERT INTO accounting_movements_det (
+                    FK_COD_ASIENTO,
+                    DEBE_DET,
+                    HABER_DET,
+                    FK_CTAC_PLAN,
+                    FK_COD_PROJECT,
+                    FK_COD_COST
+                ) VALUES ?
+            `, [insertValues]);
+
+            let newId = res.insertId;
+
+            for (const o of batch) {
+                const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+                const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
+
+                if (!idPlan || !idCodAsiento) continue;
+
+                mapAccountDetail[o.cod_detalle_asiento] = newId++;
+            }
+
+            for (const t of totalsMap.values()) {
+                await upsertTotaledEntry(conn, t, newCompanyId);
+            }
+
+            console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
+            console.log(totalHaber);
+            console.log(totalDebe);
+
+
+        } catch (err) {
+            console.error("❌ Error en batch:", err);
+            throw err;
+        }
+    }
+
+    console.log("🎉 Migración de detalles completada");
+    return { mapAccountDetail };
+}
+
+async function upsertTotaledEntry(
+    conn: any,
+    data: {
+        id_plan: number;
+        fecha: string;
+        debe: number;
+        haber: number;
+        total: number;
+    },
+    companyId: number
+) {
+    await conn.query(`
+        INSERT INTO totaledentries (
+            ID_FKPLAN, FECHA_ENTRY, TOTAL_DEBE, TOTAL_HABER, TOTAL_NUMASI, FK_COD_EMP
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            TOTAL_DEBE = TOTAL_DEBE + VALUES(TOTAL_DEBE),
+            TOTAL_HABER = TOTAL_HABER + VALUES(TOTAL_HABER),
+            TOTAL_NUMASI = TOTAL_NUMASI + VALUES(TOTAL_NUMASI)
+    `, [
+        data.id_plan,
+        data.fecha,
+        data.debe,
+        data.haber,
+        data.total,
+        companyId
+    ]);
 }
 
