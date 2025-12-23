@@ -1,11 +1,19 @@
+import { RetentionCodeValue } from "./purchaseHelpers";
+
+type BuildResult = {
+  costeExpenseMap: Record<number, number>;
+  retentionsByCode: Map<string, RetentionCodeValue>;
+};
+
 export async function migrateRetentions(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
     mapAccounts: Record<number, number | null>
-): Promise<Record<number, number>> {
+): Promise<BuildResult> {
 
     const costeExpenseMap: Record<number, number> = {};
+    const retentionsByCode = new Map<string, RetentionCodeValue>();
 
     try {
         // 1. Obtener retenciones existentes
@@ -85,6 +93,13 @@ export async function migrateRetentions(
                         ]
                     );
                     costeExpenseMap[item.id] = insertDetail.insertId;
+                    retentionsByCode.set(
+                        `${item.codigoRetencion}:${item.tipoRetencion}`,
+                        {
+                            id: insertDetail.insertId,
+                            name: item.nombre_CG
+                        }
+                    );
                 } else {
                     const row = detail[0];
                     await conn.query(
@@ -100,6 +115,13 @@ export async function migrateRetentions(
                         ]
                     );
                     costeExpenseMap[item.id] = row.ID_DET;
+                    retentionsByCode.set(
+                        `${item.codigoRetencion}:${item.tipoRetencion}`,
+                        {
+                            id: row.ID_DET,
+                            name: item.nombre_CG
+                        }
+                    )
                 }
 
                 /*  console.log(`✔ Actualizada retención ${item.nombre_CG}`); */
@@ -113,6 +135,13 @@ export async function migrateRetentions(
                     statusTax: item.estado_CG,
                 });
                 costeExpenseMap[item.id] = insertId;
+                retentionsByCode.set(
+                    `${item.codigoRetencion}:${item.tipoRetencion}`,
+                     {
+                        id: insertId,
+                        name: item.nombre_CG
+                    }
+                )
                 console.log(`✔ Insertada nueva retención ${item.nombre_CG}`);
             }
         }
@@ -121,7 +150,7 @@ export async function migrateRetentions(
         throw error;
     }
 
-    return costeExpenseMap;
+    return { costeExpenseMap, retentionsByCode};
 }
 
 // -----------------------------

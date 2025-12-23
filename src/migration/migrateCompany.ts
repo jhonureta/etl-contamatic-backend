@@ -20,6 +20,7 @@ import { migrateSales } from './migrateSales';
 import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
+import { migratePurchases } from './migratePurchases';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -370,7 +371,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const mapRetentions = await migrateRetentions(
+    const { costeExpenseMap: mapRetentions , retentionsByCode } = await migrateRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -444,6 +445,19 @@ export async function migrateCompany(codEmp: number) {
       boxMap,
       userMap
     )
+
+    const migratePurchase = await migratePurchases({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapClients,
+      mapProducts,
+      mapRetentions,
+      retentionsByCode,
+      mapCostExpenses
+    });
 
   
     /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
