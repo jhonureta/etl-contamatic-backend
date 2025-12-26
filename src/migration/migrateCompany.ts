@@ -1,7 +1,6 @@
 import { systemworkPool, erpPool, createLegacyConnection } from '../config/db';
 import CryptoService from './encrypt.handler';
 import { migrateAccountingPeriod } from './migrateAccountingPeriod';
-import { migrateCustomerAccounting } from './migrateCustomerObligations';
 import { migrateBancos } from './migrateBancos';
 import { migrateBranchesForCompany } from './migrateBranch';
 import { migrateBrand } from './migrateBrand';
@@ -21,6 +20,8 @@ import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
 import { migrateBankReconciliation } from './migrateBankReconciliation';
+import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligations';
+import { migrateCustomerAccounting } from './migrateCustomerObligations';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -469,8 +470,8 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-    /* MIGRARCION DE CONTABILIDAD MOVIMIENTOS DE VENTAS   */
-    await migrateCustomerAccounting(
+    /* MIGRARCION MOVIMIENTOS DE VENTAS   */
+    const mapObligationsCustomers = await migrateCustomerAccounting(
       legacyConn,
       conn,
       newCompanyId,
@@ -487,6 +488,21 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     )
 
+    const map = await migrateMovementDetail0bligations(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapsSales.mapSales,
+      bankMap,
+      boxMap,
+      userMap,
+      mapConciliation,
+      mapObligationsCustomers.mapObligationsCustomers,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts
+    )
 
     /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
       const accounts = rows as any[]; console.log(rows);
@@ -525,9 +541,9 @@ export async function migrateCompany(codEmp: number) {
     console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
     console.log("CONCILIACION MIGRADA :", Object.keys(mapConciliation).length);
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
-    /*  console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
-     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
-  */
+    console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
+    console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
+
 
 
 
