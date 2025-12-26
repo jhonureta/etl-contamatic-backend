@@ -1,3 +1,5 @@
+import { fetchAccountingPeriod, upsertTotaledEntry } from "./migrationTools";
+
 export async function migrateCustomerAccounting(
     legacyConn: any,
     conn: any,
@@ -22,14 +24,17 @@ export async function migrateCustomerAccounting(
     ────────────────────────────── */
     const {
         mapObligationsCustomers,
-        mapObligationsAudit
-    } = await migrateCustomerObligations(
+        mapObligationsAudit,
+        oblAsiToAuditId
+    } = await migrateMovementsTransactions(
         legacyConn,
         conn,
         newCompanyId,
         mapSales,
         mapAuditSales,
-        mapClients
+        mapClients,
+        userMap,
+        mapAccounts
     );
 
     console.log(
@@ -41,7 +46,7 @@ export async function migrateCustomerAccounting(
     );
 
 
-    /*  DETALLE DE MOVIMIENTOS EXENTAS DE CREDITO */
+    /*  MOVIMIENTOS QUE DENTRO DE MULTIPAGOS NO TENGAN CREDITO */
     const { mapMovements } = await migrateMovementsObligations(
         legacyConn,
         conn,
@@ -73,7 +78,11 @@ export async function migrateCustomerAccounting(
     );
     console.log(`✔ Detalle de movimientos por credito multipagos migrado: ${Object.keys(mapMovementsSales).length}`);
 
+
+
+
     /*MIGRAR ENCABEZADO DE ASIENTO CONTABLE */
+
 
     const { mapEntryAccount } = await migrateSalesAccountingEntries(
         legacyConn,
@@ -100,38 +109,99 @@ export async function migrateCustomerAccounting(
     console.log(`✔ Asientos contables detalle: ${Object.keys(mapAccountDetail).length}`);
 
 
-
+    return { mapMovements, mapObligationsCustomers, mapObligationsAudit };
 }
 
 
 
-export async function migrateCustomerObligations(
+export async function migrateMovementsTransactions(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
     mapSales: Record<number, number | null>,
     mapAuditSales: Record<number, number | null>,
-    mapClients: Record<number, number | null>
+    mapClients: Record<number, number | null>,
+    userMap: Record<number, number | null>,
+    mapAccounts: Record<number, number | null>,
 ): Promise<{
     mapObligationsCustomers: Record<number, number>,
-    mapObligationsAudit: Record<number, number>
+    mapObligationsAudit: Record<number, number>,
+    oblAsiToAuditId: Record<number, number>
 }> {
 
     console.log("🚀 Migrando obligaciones clientes");
 
+    // Tipados locales
+    type OblRow = {
+        old_id: number;
+        fk_persona_old: number;
+        fk_cod_trans_old: number | null;
+        obl_asi_group: number | null;
+        tipo_obl: string;
+        fech_emision: any;
+        fech_vencimiento: any;
+        tip_doc: string;
+        estado: string;
+        saldo: number;
+        total: number;
+        ref_secuencia: string;
+        tipo_cuenta: string;
+        fk_id_infcon: number | null;
+        tipo_estado_cuenta: string;
+        fk_cod_usu_cp: number | null;
+    };
+
     const mapObligationsCustomers: Record<number, number> = {};
     const mapObligationsAudit: Record<number, number> = {};
+    const oblAsiToAuditId: Record<number, number> = {};
+    const oblAsiToAuditIdUser: Record<number, number | null> = {};
+    const oblAsientoToAuditId: Record<number, number> = {};
 
-    try {
-
+    // Helpers internos
+    async function fetchNextAuditSeq(conn: any, companyId: number): Promise<number> {
         const [[{ nextAudit }]]: any = await conn.query(
             `SELECT IFNULL(MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1, 1) AS nextAudit
              FROM audit
              WHERE FK_COD_EMP = ?`,
-            [newCompanyId]
+            [companyId]
         );
+        return Number(nextAudit ?? 1);
+    }
 
-        let auditSeq: number = nextAudit;
+    async function createAudit(conn: any, codigoAut: number, companyId: number): Promise<number> {
+        const [resAudit]: any = await conn.query(
+            `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP)
+             VALUES (?, 'VENTAS', ?)`,
+            [codigoAut, companyId]
+        );
+        return resAudit.insertId;
+    }
+
+    function buildCuentasOblRow(o: OblRow, auditId: number) {
+        return [
+            mapClients[o.fk_persona_old],
+            o.tipo_obl,
+            o.fech_emision,
+            o.fech_vencimiento,
+            o.tip_doc,
+            o.estado,
+            o.saldo,
+            o.total,
+            o.ref_secuencia,
+            mapSales[o.fk_cod_trans_old] ?? null,
+            o.tipo_cuenta,
+            o.fk_id_infcon,
+            o.tipo_estado_cuenta,
+            auditId,
+            new Date(),
+            newCompanyId
+        ];
+    }
+
+    try {
+        const BATCH_SIZE = 500;
+
+        let auditSeq: number = await fetchNextAuditSeq(conn, newCompanyId);
 
         const [rows]: any[] = await legacyConn.query(`
             SELECT
@@ -149,64 +219,51 @@ export async function migrateCustomerObligations(
                 referencia_cxp AS ref_secuencia,
                 TIPO_CUENTA AS tipo_cuenta,
                 FK_SERVICIO AS fk_id_infcon,
-                TIPO_ESTADO_CUENTA AS tipo_estado_cuenta
+                TIPO_ESTADO_CUENTA AS tipo_estado_cuenta,
+                fk_cod_usu_cp
             FROM cuentascp
             WHERE Tipo_cxp = 'CXC'
             ORDER BY cod_cp
         `);
 
         if (!rows.length) {
-            return { mapObligationsCustomers, mapObligationsAudit };
+            return { mapObligationsCustomers, mapObligationsAudit, oblAsiToAuditId };
         }
 
-        const oblAsiToAuditId: Record<number, number> = {};
         let importadoAuditId: number | null = null;
 
-        const BATCH_SIZE = 500;
-
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-            const batch = rows.slice(i, i + BATCH_SIZE);
+            const batch: OblRow[] = rows.slice(i, i + BATCH_SIZE);
             const insertValues: any[] = [];
 
             for (const o of batch) {
-
                 let auditId: number | null = null;
 
-
+                // 1) Si existe mapeo por transacción
                 if (o.fk_cod_trans_old && mapAuditSales[o.fk_cod_trans_old]) {
                     auditId = mapAuditSales[o.fk_cod_trans_old]!;
                 }
 
-
+                // 2) Si pertenece a un grupo de obl_asi
                 else if (o.obl_asi_group !== null) {
                     if (!oblAsiToAuditId[o.obl_asi_group]) {
                         const codigoAut = auditSeq++;
-
-                        const [resAudit]: any = await conn.query(
-                            `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP)
-                             VALUES (?, 'VENTAS', ?)`,
-                            [codigoAut, newCompanyId]
-                        );
-
-                        oblAsiToAuditId[o.obl_asi_group] = resAudit.insertId;
+                        const newAuditId = await createAudit(conn, codigoAut, newCompanyId);
+                        oblAsiToAuditId[o.obl_asi_group] = newAuditId;
+                        oblAsiToAuditIdUser[newAuditId] = userMap[o.fk_cod_usu_cp];
+                        oblAsientoToAuditId[newAuditId] = o.obl_asi_group;
                     }
-
                     auditId = oblAsiToAuditId[o.obl_asi_group];
                 }
 
+                // 3) Si es importado
                 else if (o.tipo_cuenta === 'Importado') {
                     if (!importadoAuditId) {
                         const codigoAut = auditSeq++;
-
-                        const [resAudit]: any = await conn.query(
-                            `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP)
-                             VALUES (?, 'VENTAS', ?)`,
-                            [codigoAut, newCompanyId]
-                        );
-
-                        importadoAuditId = resAudit.insertId;
+                        importadoAuditId = await createAudit(conn, codigoAut, newCompanyId);
+                        oblAsiToAuditIdUser[importadoAuditId] = userMap[o.fk_cod_usu_cp];
+                        oblAsientoToAuditId[importadoAuditId] = o.obl_asi_group as any;
                     }
-
                     auditId = importadoAuditId;
                 }
 
@@ -221,24 +278,7 @@ export async function migrateCustomerObligations(
                     throw new Error(`Cliente no mapeado: ${o.fk_persona_old}`);
                 }
 
-                insertValues.push([
-                    customerId,
-                    o.tipo_obl,
-                    o.fech_emision,
-                    o.fech_vencimiento,
-                    o.tip_doc,
-                    o.estado,
-                    o.saldo,
-                    o.total,
-                    o.ref_secuencia,
-                    mapSales[o.fk_cod_trans_old] ?? null,
-                    o.tipo_cuenta,
-                    o.fk_id_infcon,
-                    o.tipo_estado_cuenta,
-                    auditId,
-                    new Date(),
-                    newCompanyId
-                ]);
+                insertValues.push(buildCuentasOblRow(o, auditId));
             }
 
             const [res]: any = await conn.query(`
@@ -255,8 +295,373 @@ export async function migrateCustomerObligations(
                 mapObligationsCustomers[o.old_id] = newId++;
             }
         }
+
+        // MIGRAR OBLIGACIONES MIGRADAS (misma lógica que antes)
+        const movimientosMigrados = await migrateMovementsObligationsMigrados(
+            legacyConn,
+            conn,
+            newCompanyId,
+            oblAsiToAuditIdUser,
+            oblAsientoToAuditId,
+            mapAccounts
+        );
+
         console.log("✅ Migración completada correctamente");
-        return { mapObligationsCustomers, mapObligationsAudit };
+        return { mapObligationsCustomers, mapObligationsAudit, oblAsiToAuditId };
+    } catch (err) {
+        console.error("❌ Error en migración de obligaciones:", err);
+        throw err;
+    }
+}
+
+export async function migrateMovementsObligationsMigrados(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    oblAsiToAuditIdUser: Record<number, number | null>,
+    oblAsientoToAuditId: Record<number, number>,
+    mapAccounts: Record<number, number | null>,
+): Promise<{
+    movimientosMigrados: Record<number, number>
+}> {
+    console.log("🚀 Migrando movimientos importados");
+    const movimientosMigrados: Record<number, number> = {};
+    const mapAsientos: Record<number, number> = {};
+    const ArrayMovements: any[] = [];
+
+    type AggRow = {
+        IMPORTE: number;
+        COD_CUENTA: number | null;
+        FK_PERSONA: number | null;
+        TIPO_OBL: string | null;
+        FECH_EMISION: any;
+        FECH_VENCIMIENTO: any;
+        TIP_DOC: string | null;
+        ESTADO: string | null;
+        SALDO: number;
+        FK_COD_TRANS: number | null;
+        FK_PAYROLL: number | null;
+        TIPO_CUENTA: string | null;
+        TIPO_ESTADO_CUENTA: string | null;
+        FK_COD_EMP: number | null;
+        FK_AUDITOB: number;
+        REF_SECUENCIA: string | null;
+        FK_ID_INFCON: number | null;
+        OBLG_FEC_REG: any;
+    };
+
+    const BATCH_SIZE = 500;
+
+    try {
+        const [rows]: any[] = await conn.query(`SELECT
+                                                SUM(TOTAL) AS IMPORTE,
+                                                MAX(COD_CUENTA) AS COD_CUENTA,
+                                                MAX(FK_PERSONA) AS FK_PERSONA,
+                                                MAX(TIPO_OBL) AS TIPO_OBL,
+                                                MAX(FECH_EMISION) AS FECH_EMISION,
+                                                MAX(FECH_VENCIMIENTO) AS FECH_VENCIMIENTO,
+                                                MAX(TIP_DOC) AS TIP_DOC,
+                                                MAX(ESTADO) AS ESTADO,
+                                                SUM(SALDO) AS SALDO,
+                                                MAX(FK_COD_TRANS) AS FK_COD_TRANS,
+                                                MAX(FK_PAYROLL) AS FK_PAYROLL,
+                                                MAX(TIPO_CUENTA) AS TIPO_CUENTA,
+                                                MAX(TIPO_ESTADO_CUENTA) AS TIPO_ESTADO_CUENTA,
+                                                MAX(FK_COD_EMP) AS FK_COD_EMP,
+                                                FK_AUDITOB,
+                                                MAX(REF_SECUENCIA) AS REF_SECUENCIA,
+                                                MAX(FK_ID_INFCON) AS FK_ID_INFCON,
+                                                MAX(OBLG_FEC_REG) AS OBLG_FEC_REG
+                                            FROM cuentas_obl
+                                            WHERE TIPO_OBL = 'CXC'
+                                            AND TIPO_CUENTA = 'Importado'
+                                            AND FK_COD_EMP = ?
+                                            GROUP BY FK_AUDITOB;`,
+            [newCompanyId]
+        );
+
+        if (!rows.length) {
+            return { movimientosMigrados };
+        }
+
+        const [movSec]: any = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO= 'IMP-CXC' AND  FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+
+        let secuenciaMovimiento = movSec[0]?.SECU_MOVI ?? 1;
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch: AggRow[] = rows.slice(i, i + BATCH_SIZE);
+            const insertValues: any[] = [];
+
+            for (const o of batch) {
+                const idUser = oblAsiToAuditIdUser[o.FK_AUDITOB];
+                const idAuditTr = o.FK_AUDITOB;
+
+                ArrayMovements.push({
+                    secuencia: secuenciaMovimiento,
+                    importe: o.IMPORTE,
+                    auditoria: o.FK_AUDITOB,
+                    emision: o.FECH_EMISION,
+                    registro: o.OBLG_FEC_REG,
+                });
+
+                insertValues.push([
+                    null,
+                    null,
+                    null,
+                    idUser,
+                    o.FECH_EMISION,
+                    o.OBLG_FEC_REG,
+                    'IMP-CXC',
+                    'IMP-CXC',
+                    'IMPORTACION',
+                    'IMPORTACION DE OBLIGACIONES',
+                    'Importación',
+                    null,
+                    null,
+                    'INGRESO',
+                    'IMP-CXC',
+                    secuenciaMovimiento,
+                    o.IMPORTE,
+                    1,
+                    'IMPORTACION A SISTEMA',
+                    null,
+                    newCompanyId,
+                    null,
+                    'Importación',
+                    o.IMPORTE,
+                    null,
+                    idAuditTr,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    '[]'
+                ]);
+
+                secuenciaMovimiento++;
+            }
+
+            const [res]: any = await conn.query(`INSERT INTO movements(
+                                                    FKBANCO,
+                                                    FK_COD_TRAN,
+                                                    FK_CONCILIADO,
+                                                    FK_USER,
+                                                    FECHA_MOVI,
+                                                    FECHA_MANUAL,
+                                                    TIP_MOVI,
+                                                    ORIGEN_MOVI,
+                                                    TIPO_MOVI,
+                                                    REF_MOVI,
+                                                    CONCEP_MOVI,
+                                                    NUM_VOUCHER,
+                                                    NUM_LOTE,
+                                                    CAUSA_MOVI,
+                                                    MODULO,
+                                                    SECU_MOVI,
+                                                    IMPOR_MOVI,
+                                                    ESTADO_MOVI,
+                                                    PER_BENE_MOVI,
+                                                    CONCILIADO,
+                                                    FK_COD_EMP,
+                                                    IDDET_BOX,
+                                                    OBS_MOVI,
+                                                    IMPOR_MOVITOTAL,
+                                                    FK_ASIENTO,
+                                                    FK_AUDITMV,
+                                                    FK_ARQUEO,
+                                                    ID_TARJETA,
+                                                    RECIBO_CAJA,
+                                                    FK_CTAM_PLAN,
+                                                    NUMERO_UNIDAD,
+                                                    JSON_PAGOS
+                                                )
+                                                VALUES ?`, [insertValues]);
+
+            let newId = res.insertId;
+            for (const o of batch) {
+                movimientosMigrados[o.FK_AUDITOB] = newId++;
+            }
+        }
+
+        for (let i = 0; i < ArrayMovements.length; i += BATCH_SIZE) {
+            const batch = ArrayMovements.slice(i, i + BATCH_SIZE);
+            const insertValuesEntry: any[] = [];
+
+            for (const o of batch) {
+                const idMovimiento = movimientosMigrados[o.auditoria];
+                const periodo = await fetchAccountingPeriod(conn, { fechaManual: o.emision, companyId: newCompanyId });
+                const periodoId = periodo[0].COD_PERIODO;
+                const secuenciaMovimiento = (o.secuencia).toString().padStart(9, '0');
+                insertValuesEntry.push([
+                    o.emision,
+                    'N' + secuenciaMovimiento + '-Importación',
+                    'ASICXC-' + secuenciaMovimiento,
+                    'CXC',
+                    o.importe,
+                    o.importe,
+                    'IMP-CXC',
+                    periodoId,
+                    o.registro,
+                    o.registro,
+                    '[]',
+                    'US-MIG',
+                    'IMPORTACION A SISTEMA',
+                    o.auditoria,
+                    newCompanyId,
+                    o.secuencia,
+                    null,
+                    idMovimiento
+                ]);
+            }
+
+            const [res]: any = await conn.query(`INSERT INTO accounting_movements(FECHA_ASI,
+                     DESCRIP_ASI,
+                     NUM_ASI,
+                     ORG_ASI,
+                     TDEBE_ASI,
+                     THABER_ASI,
+                     TIP_ASI,
+                     FK_PERIODO,
+                     FECHA_REG,
+                     FECHA_ACT,
+                     JSON_ASI,
+                     RES_ASI,
+                     BEN_ASI,
+                     FK_AUDIT,
+                     FK_COD_EMP,
+                     SEC_ASI,
+                     FK_MOVTRAC,
+                     FK_MOV) VALUES ?`, [insertValuesEntry]);
+
+            let newId = res.insertId;
+            for (const o of batch) {
+                mapAsientos[o.auditoria] = newId++;
+            }
+        }
+
+        const [rowsAsientoDetail]: any[] = await legacyConn.query(`SELECT contabilidad_detalle_asiento.fk_cod_asiento,contabilidad_detalle_asiento.fk_cod_plan, contabilidad_detalle_asiento.debe_detalle_asiento, contabilidad_detalle_asiento.haber_detalle_asiento FROM contabilidad_asientos inner join contabilidad_detalle_asiento on contabilidad_asientos.cod_asiento= contabilidad_detalle_asiento.fk_cod_asiento where tipo_asiento = 'OBLIGACIONES' limit 2`, [newCompanyId]);
+
+        if (!rowsAsientoDetail.length) {
+            /* return { movimientosMigrados }; */
+        }
+
+        if (rowsAsientoDetail.length !== 2) {
+            throw new Error("Asiento inválido: debe tener exactamente 2 detalles");
+        }
+
+        const debeRow = rowsAsientoDetail.find(r => Number(r?.debe_detalle_asiento) > 0);
+        const haberRow = rowsAsientoDetail.find(r => Number(r?.haber_detalle_asiento) > 0);
+
+        if (!debeRow || !haberRow) {
+            throw new Error("Asiento inválido: no se encontró correctamente DEBE y HABER");
+        }
+
+        const cuentaPlanDebe = mapAccounts[debeRow.fk_cod_plan];
+        const cuentaPlanHaber = mapAccounts[haberRow.fk_cod_plan];
+
+        let totalDebe = 0;
+        let totalHaber = 0;
+
+        for (let i = 0; i < ArrayMovements.length; i += BATCH_SIZE) {
+            const batch = ArrayMovements.slice(i, i + BATCH_SIZE);
+
+            try {
+                const insertValues: any[] = [];
+                const totalsMap = new Map<string, any>();
+
+                for (const o of batch) {
+                    const idCodAsiento = mapAsientos[o.auditoria];
+                    if (!idCodAsiento) continue;
+
+                    const debe = Number(o.importe) || 0;
+                    const haber = Number(o.importe) || 0;
+
+                    insertValues.push([
+                        idCodAsiento,
+                        debe,
+                        0,
+                        cuentaPlanDebe,
+                        null,
+                        null
+                    ]);
+
+                    insertValues.push([
+                        idCodAsiento,
+                        0,
+                        haber,
+                        cuentaPlanHaber,
+                        null,
+                        null
+                    ]);
+
+                    const keyDebe = `${newCompanyId}-${cuentaPlanDebe}-${o.emision}`;
+                    if (!totalsMap.has(keyDebe)) {
+                        totalsMap.set(keyDebe, {
+                            id_plan: cuentaPlanDebe,
+                            fecha: o.emision,
+                            debe: 0,
+                            haber: 0,
+                            total: 0,
+                            operacion: "suma"
+                        });
+                    }
+
+                    const accDebe = totalsMap.get(keyDebe);
+                    accDebe.debe += debe;
+                    accDebe.total++;
+
+                    const keyHaber = `${newCompanyId}-${cuentaPlanHaber}-${o.emision}`;
+                    if (!totalsMap.has(keyHaber)) {
+                        totalsMap.set(keyHaber, {
+                            id_plan: cuentaPlanHaber,
+                            fecha: o.emision,
+                            debe: 0,
+                            haber: 0,
+                            total: 0,
+                            operacion: "suma"
+                        });
+                    }
+
+                    const accHaber = totalsMap.get(keyHaber);
+                    accHaber.haber += haber;
+                    accHaber.total++;
+
+                    totalDebe += debe;
+                    totalHaber += haber;
+                }
+
+                if (!insertValues.length) {
+                    console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
+                    continue;
+                }
+
+                await conn.query(`
+            INSERT INTO accounting_movements_det (
+                FK_COD_ASIENTO,
+                DEBE_DET,
+                HABER_DET,
+                FK_CTAC_PLAN,
+                FK_COD_PROJECT,
+                FK_COD_COST
+            ) VALUES ?
+        `, [insertValues]);
+
+                for (const t of totalsMap.values()) {
+                    await upsertTotaledEntry(conn, t, newCompanyId);
+                }
+
+                console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
+
+            } catch (err) {
+                console.error("❌ Error en batch:", err);
+                throw err;
+            }
+        }
+
+        return { movimientosMigrados };
     } catch (err) {
         console.error("❌ Error en migración de obligaciones:", err);
         throw err;
@@ -791,7 +1196,7 @@ export async function migrateSalesAccountingEntriesDetail(
                 const idPlan = mapAccounts[o.FK_CTAC_PLAN];
                 const idProyecto = mapProject[o.FK_COD_PROJECT] ?? null;
                 const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
-                const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
+                const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO] ?? null;
 
                 if (!idPlan || !idCodAsiento) continue;
 
@@ -814,7 +1219,8 @@ export async function migrateSalesAccountingEntriesDetail(
                         fecha: o.fecha_asiento,
                         debe: 0,
                         haber: 0,
-                        total: 0
+                        total: 0,
+                        operacion: "suma"
                     });
                 }
 
@@ -859,9 +1265,6 @@ export async function migrateSalesAccountingEntriesDetail(
             }
 
             console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
-            console.log(totalHaber);
-            console.log(totalDebe);
-
 
         } catch (err) {
             console.error("❌ Error en batch:", err);
@@ -873,32 +1276,4 @@ export async function migrateSalesAccountingEntriesDetail(
     return { mapAccountDetail };
 }
 
-async function upsertTotaledEntry(
-    conn: any,
-    data: {
-        id_plan: number;
-        fecha: string;
-        debe: number;
-        haber: number;
-        total: number;
-    },
-    companyId: number
-) {
-    await conn.query(`
-        INSERT INTO totaledentries (
-            ID_FKPLAN, FECHA_ENTRY, TOTAL_DEBE, TOTAL_HABER, TOTAL_NUMASI, FK_COD_EMP
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            TOTAL_DEBE = TOTAL_DEBE + VALUES(TOTAL_DEBE),
-            TOTAL_HABER = TOTAL_HABER + VALUES(TOTAL_HABER),
-            TOTAL_NUMASI = TOTAL_NUMASI + VALUES(TOTAL_NUMASI)
-    `, [
-        data.id_plan,
-        data.fecha,
-        data.debe,
-        data.haber,
-        data.total,
-        companyId
-    ]);
-}
 

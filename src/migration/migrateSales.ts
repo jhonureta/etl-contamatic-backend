@@ -4,7 +4,7 @@ export async function migrateSales(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
-    branchMap: any, userMap: any, mapClients: any, mapProducts: any, costeExpenseMap: any
+    branchMap: any, userMap: any, mapClients: any, mapProducts: any, mapRetentions: any
 ): Promise<{ mapSales: Record<number, number>; mapAuditSales: Record<number, number> }> {
     console.log("Migrando ventas...");
 
@@ -223,7 +223,7 @@ FROM
                 .filter((ret: any) => ret && ret.renta) // Filtrar nulos/undefined y renta vacío
                 .map((ret: any) => ({
                     codigoRenta: ret.renta || null,
-                    idRetRenta: costeExpenseMap[ret.idRetencionRenta],
+                    idRetRenta: mapRetentions[ret.idRetencionRenta],
                     nombreRenta: ret.nombreRetencionFuente || null,
                     porcentajeRenta: formatDecimal(ret.porcentaje),
                     subtotalBase0: formatDecimal(ret.subtotalBase0),
@@ -246,7 +246,7 @@ FROM
 
                     return {
                         codigoIva: ret.rentaIva || null,
-                        idRetIva: costeExpenseMap[ret.idRetencionIva],
+                        idRetIva: mapRetentions[ret.idRetencionIva],
                         nombreIva: ret.nombreRetencionIva || null,
                         porcentajeIva: formatDecimal(ret.porcentajeIva),
                         subtotalDiferenteIva: formatDecimal(ret.subtotalDiferenteIva),
