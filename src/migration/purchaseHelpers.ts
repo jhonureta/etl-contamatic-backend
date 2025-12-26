@@ -28,7 +28,7 @@ const codigoIvaPorcentaje: Record<string, number> = {
 }
 
 const toNumber = (v: unknown, fallback = 0): number => {
-  const n = Number(v);
+  const n = Number.parseFloat(String(v));
   return Number.isFinite(n) ? n : fallback;
 };
 
@@ -172,14 +172,12 @@ function isDetailOldRetention(data: any): boolean {
 }
 
 function transformRetentionOldToNewVersion(inputDetail: any[], retentionsByCode: Map<string, RetentionCodeValue>): any[] {
-  const relevant = inputDetail.filter(
-    ({
-      renta,
-      rentaIva
-    }) => Number(renta) > 0 || Number(rentaIva) > 0
-  );
 
-  const listadoRetenciones = relevant.map(item => {
+  const listadoRetenciones = inputDetail.filter(
+    ({
+      renta
+    }) => Number(renta) > 0
+  ).map(item => {
     return {
       codigoRenta: item.renta || '',
       idRetRenta: retentionsByCode.get(`${item.renta}:RENTA`).id || '',
@@ -191,11 +189,15 @@ function transformRetentionOldToNewVersion(inputDetail: any[], retentionsByCode:
     }
   });
 
-  const listadoRetencionesIva = relevant.map(item => {
+  const listadoRetencionesIva = inputDetail.filter(
+    ({
+      rentaIva
+    }) => Number(rentaIva) > 0
+  ).map(item => {
     return {
       codigoIva: item.rentaIva || '',
-      idRetIva: retentionsByCode.get(`${item.renta}:IVA`).id || '',
-      nombreIva: retentionsByCode.get(`${item.renta}:IVA`).name || '',
+      idRetIva: retentionsByCode.get(`${item.rentaIva}:IVA`)?.id || '',
+      nombreIva: retentionsByCode.get(`${item.rentaIva}:IVA`)?.name || '',
       porcentajeIva: item.porcentajeIva || '',
       subtotalDiferenteIva: item.noGrabaIva || '0.00',
       valorRetenido: item.valorRetenidoIva || '0.00',
@@ -223,7 +225,7 @@ function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): a
     }) => renta)
     .map(retention =>
     ({
-      codigoRenta: retention.renta || '',
+      codigoRenta: retention.renta,
       idRetRenta: mapRetentions[retention.idRetencionRenta],
       nombreRenta: retention.nombreRetencionFuente || '',
       porcentajeRenta: retention.porcentaje || '',
@@ -239,7 +241,7 @@ function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): a
     }) => rentaIva)
     .map(retention =>
     ({
-      codigoIva: retention.rentaIva || '',
+      codigoIva: retention.rentaIva,
       idRetIva: mapRetentions[retention.idRetencionIva],
       nombreIva: retention.nombreRetencionIva || '',
       porcentajeIva: retention.porcentajeIva || '',
@@ -276,4 +278,5 @@ export function restructureRetentionDetail({
     mapRetentions
   );
 }
+
 

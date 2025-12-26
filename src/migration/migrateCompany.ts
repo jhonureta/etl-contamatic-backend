@@ -20,7 +20,7 @@ import { migrateSales } from './migrateSales';
 import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
-import { migratePurchases } from './migratePurchases';
+import { migratePurchaseMovements, migratePurchases } from './migratePurchases';
 import { migrateBankReconciliation } from './migrateBankReconciliation';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
@@ -488,18 +488,30 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     )
 
-    const migratePurchase = await migratePurchases({
+    //== Ingreso y mapeo de movimientos de Compra ===/
+    const { purchaseAuditIdMap, purchasesIdMap} = await migratePurchases({
       legacyConn,
       conn,
       newCompanyId,
       branchMap,
       userMap,
-      mapClients,
+      mapSuppliers,
       mapProducts,
       mapRetentions,
       retentionsByCode,
       mapCostExpenses
     });
+
+    await migratePurchaseMovements({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      purchaseAuditIdMap,
+      purchasesIdMap
+    })
 
   
     /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
@@ -518,7 +530,7 @@ export async function migrateCompany(codEmp: number) {
       return {};
     }
  */
-    await conn.rollback();
+    await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
@@ -539,6 +551,8 @@ export async function migrateCompany(codEmp: number) {
     console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
     console.log("CONCILIACION MIGRADA :", Object.keys(mapConciliation).length);
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
+    console.log("COMPRAS MIGRADAS:", Object.keys(purchasesIdMap).length);
+    console.log("AUDITORIA DE COMPRAS MIGRADAS:", Object.keys(purchaseAuditIdMap).length);
     /*  console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
      console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
   */
