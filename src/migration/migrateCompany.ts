@@ -23,6 +23,7 @@ import { migrateBankReconciliation } from './migrateBankReconciliation';
 import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligations';
 import { migrateCustomerAccounting } from './migrateCustomerObligations';
 import { migrateProformaInvoices } from './migrateProformaInvoices';
+import { migrateShippingGuide } from './migrateShippingGuide';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -505,11 +506,22 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     )
 
+    // MIGRAR PROFORMAS
     await migrateProformaInvoices({
       legacyConn,
       conn,
       newCompanyId,
       userMap,
+      mapClients,
+      mapProducts,
+      branchMap
+    })
+
+    // MIGRAR GUÍAS DE REMISIÓN 
+    await migrateShippingGuide({
+      legacyConn,
+      conn,
+      newCompanyId,
       mapClients,
       mapProducts,
       branchMap
