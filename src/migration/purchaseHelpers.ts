@@ -1,3 +1,7 @@
+import { Connection, FieldPacket, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+
+type ResultSet = [RowDataPacket[] | RowDataPacket[][] | ResultSetHeader, FieldPacket[]];
+
 export interface RetentionCodeValue {
   id: number;
   name: string;
@@ -18,6 +22,17 @@ type RestructureProductParams = {
   mapCostExpenses: Record<number, number | null>;
 };
 
+type InsertAuditParams = {
+  conn: Connection;
+  codigoAudit: number;
+  module: string;
+  companyId: number
+}
+type FindNextAdutiCodeParams = {
+  conn: Connection;
+  companyId: number
+}
+
 const codigoIvaPorcentaje: Record<string, number> = {
   '12': 2,
   '0': 0,
@@ -27,14 +42,14 @@ const codigoIvaPorcentaje: Record<string, number> = {
   '13': 10
 }
 
-const toNumber = (v: unknown, fallback = 0): number => {
-  const n = Number.parseFloat(String(v));
+export const toNumber = (v: unknown, fallback = 0): number => {
+  const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
 
-const toInteger = (v: unknown, fallback = 0): number => {
-  const n = Number.parseInt(String(v), 10);
-  return Number.isFinite(n) ? n : fallback;
+export const toInteger = (v: unknown, fallback = 0): number => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : fallback;
 };
 
 export function toJSONArray(value: any): any[] {
@@ -88,12 +103,12 @@ function transformProductsMerchandise(
     const oldCode = product.codigoXml ? product.codigoXml : product.codigoArticulo;
     const codigo = isOld ? oldCode : product.codigo;
     const productName = isOld ? product.descripcion : product.nombre;
-    const stock = isOld ? 0 : toNumber(product.stock, 0);
+    const stock = isOld ? 0 : toNumber(product.stock);
     const impuestoCode = isOld ?
       (codigoIvaPorcentaje?.[product.impuesto] ?? "2") :
       toInteger(product.codigoimpuesto, 0);
-    const impuestoName = isOld ? toNumber(product.impuesto, 0) : toNumber(product.nombreImpuesto, 0);
-    const cost = isOld ? toNumber(product.precioProducto, 0) : toNumber(product.costoProducto, 0);
+    const impuestoName = isOld ? toNumber(product.impuesto) : toNumber(product.nombreImpuesto);
+    const cost = isOld ? toNumber(product.precioProducto) : toNumber(product.costoProducto);
     const manualPrice = isOld ? 1 : toInteger(mapProducts[product.preciomanual]);
     return {
       idProducto: toInteger(mapProducts[product.idProducto]),
@@ -103,15 +118,15 @@ function transformProductsMerchandise(
       nombre: String(productName ?? ''),
       stock,
       observacion: String(product.descripcion ?? ""),
-      cantidad: toNumber(product.cantidad, 0),
-      impuesto: toNumber(product.impuesto, 0),
+      cantidad: toNumber(product.cantidad),
+      impuesto: toNumber(product.impuesto),
       codigoImpuesto: impuestoCode,
       nombreImpuesto: impuestoName,
-      precioProducto: toNumber(product.precioProducto, 0),
+      precioProducto: toNumber(product.precioProducto),
       costoProducto: cost,
-      porcentajeDescuento: toNumber(product.porcentajeDescuento, 0),
-      valorDescuento: toNumber(product.valorDescuento, 0),
-      total: toNumber(product.total, 0),
+      porcentajeDescuento: toNumber(product.porcentajeDescuento),
+      valorDescuento: toNumber(product.valorDescuento),
+      total: toNumber(product.total),
       preciomanual: manualPrice,
       codigoAuxiliar: '',
       tipo: ''
@@ -131,7 +146,7 @@ function transformProductsExpensesServices(
     const impuestoCode = isOld
       ? (codigoIvaPorcentaje?.[product.impuesto] ?? "2")
       : toInteger(product.codigoimpuesto, 0);
-    const impuestoName = isOld ? toNumber(product.impuesto, 0) : toNumber(product.nombreImpuesto, 0);
+    const impuestoName = isOld ? toNumber(product.impuesto) : toNumber(product.nombreImpuesto);
     return {
       idProducto: "",
       idBodega: "",
@@ -140,15 +155,15 @@ function transformProductsExpensesServices(
       nombre: product.opcionSelect || "",
       stock: 0,
       observacion: product.descripcion || "",
-      cantidad: toNumber(product.cantidad, 0),
-      impuesto: toNumber(product.impuesto, 0),
+      cantidad: toNumber(product.cantidad),
+      impuesto: toNumber(product.impuesto),
       codigoImpuesto: impuestoCode,
       nombreImpuesto: impuestoName,
-      precioProducto: toNumber(product.precioProducto, 0),
-      costoProducto: toNumber(product.precioProducto, 0),
-      porcentajeDescuento: toNumber(product.porcentajeDescuento, 0),
-      valorDescuento: toNumber(product.valorDescuento, 0),
-      total: toNumber(product.total, 0),
+      precioProducto: toNumber(product.precioProducto),
+      costoProducto: toNumber(product.precioProducto),
+      porcentajeDescuento: toNumber(product.porcentajeDescuento),
+      valorDescuento: toNumber(product.valorDescuento),
+      total: toNumber(product.total),
       preciomanual: 1,
       codigoAuxiliar: "",
       tipo: type,
@@ -249,8 +264,8 @@ function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): a
       valorRetenido: retention.valorRetenidoIva || '0.00',
       impuestos: retention.arraryImpuestos ?
         retention.arraryImpuestos.filter(impuesto => impuesto.impuestoActivoIva === 1).map(impuesto => ({
-          codigo: parseInt(impuesto.codigo, 10),
-          tarifa: parseInt(impuesto.tarifa, 10),
+          codigo: toNumber(impuesto.codigo),
+          tarifa: toNumber(impuesto.tarifa),
           total: impuesto.totalImpuestoIva || '0.00'
         })) : []
     })
@@ -279,4 +294,47 @@ export function restructureRetentionDetail({
   );
 }
 
+export async function insertAudit({
+  conn,
+  codigoAudit,
+  module,
+  companyId
+}: InsertAuditParams) {
+  try {
+    const resultCreateAudit: ResultSet = await conn.query(`
+    INSERT INTO audit(
+      CODIGO_AUT,
+      MOD_AUDIT,
+      FK_COD_EMP
+    )
+    VALUES(?, ?, ?)`,
+      [codigoAudit, module, companyId]
+    );
+    return (resultCreateAudit[0] as ResultSetHeader).insertId;
+  } catch (err) {
+    throw err;
+  }
+}
 
+export async function findNextAuditCode({
+  conn,
+  companyId
+}: FindNextAdutiCodeParams) {
+  try {
+    const auditQuery = `
+    SELECT
+        IFNULL(
+            MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1,
+            1
+        ) AS auditId
+    FROM
+        audit
+    WHERE
+        FK_COD_EMP = 1;`;
+    const auditQueryResult: ResultSet = await conn.query(auditQuery, [companyId]);
+    const [auditData]: any[] = auditQueryResult as Array<any>;
+    return auditData[0].auditId;
+  } catch (err) {
+    throw err;
+  }
+}
