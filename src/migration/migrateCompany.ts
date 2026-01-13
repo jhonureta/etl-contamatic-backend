@@ -19,6 +19,7 @@ import { migrateSales } from './migrateSales';
 import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
+import { migratePurchaseAndLiquidationsMovements, migratePurchasesAndLiquidations } from './migratePurchasesLiquidations';
 import { migrateBankReconciliation } from './migrateBankReconciliation';
 import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligations';
 import { migrateCustomerAccounting } from './migrateCustomerObligations';
@@ -399,7 +400,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const mapRetentions = await migrateRetentions(
+    const { costeExpenseMap: mapRetentions , retentionsByCode } = await migrateRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -511,7 +512,38 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts
     )
+    //==  Migracion de Compras y liquidaciones ===/
+    const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap} = await migratePurchasesAndLiquidations({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      mapProducts,
+      mapRetentions,
+      retentionsByCode,
+      mapCostExpenses
+    });
 
+    await migratePurchaseAndLiquidationsMovements({
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      userMap,
+      mapSuppliers,
+      purchaseLiquidationIdMap,
+      purchaseLiquidationAuditIdMap,
+      mapAccounts,
+      bankMap,
+      boxMap,
+      mapConciliation
+    })
+
+  
     const mapRetentionsMov = await migrateSalesRetentions(
       legacyConn,
       conn,
@@ -558,7 +590,7 @@ export async function migrateCompany(codEmp: number) {
       return {};
     }
  */
-    await conn.rollback();
+    await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
@@ -579,6 +611,8 @@ export async function migrateCompany(codEmp: number) {
     console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
     console.log("CONCILIACION MIGRADA :", Object.keys(mapConciliation).length);
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
+    console.log("COMPRAS  Y LIQUIDACIONES MIGRADAS:", Object.keys(purchaseLiquidationIdMap).length);
+    console.log("AUDITORIA DE COMPRAS Y LIQUIDACIONES MIGRADAS:", Object.keys(purchaseLiquidationAuditIdMap).length);
     console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
     console.log("ANTICIPOS CLIENTES:", Object.keys(mapAdvancesCustomers).length);

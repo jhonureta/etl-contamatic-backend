@@ -67,8 +67,8 @@ export async function migrateUsersForCompany(
     const aliases = users.map(u => u.ALI_USUEMP);
 
     const [existing] = await conn.query(
-        `SELECT COD_USUEMP, ALI_USUEMP FROM users WHERE ALI_USUEMP IN (?) AND FK_COD_EMP = ?`,
-        [aliases, newCompanyId]
+        `SELECT COD_USUEMP, ALI_USUEMP FROM users WHERE ALI_USUEMP IN (?)`,
+        [aliases]
     );
 
     const existingMap = new Map<string, number>();
