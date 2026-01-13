@@ -561,35 +561,7 @@ export async function migrateCompany(codEmp: number) {
       mapRetentions
     ); 
 
-    /*  legacyConn: any,
-    conn: any,
-    newCompanyId: number,
-    userMap: any,
-    bankMap: Record<number, number | null>,
-    boxMap: Record<number, number | null>,
-    mapConciliation: Record<number, number | null>,
-    mapSales: Record<number, number | null>,
-    mapObligationsCustomers: Record<number, number | null>,
-    mapPeriodo: Record<number, number | null>,
-    mapProject: Record<number, number | null>,
-    mapCenterCost: Record<number, number | null>,
-    mapAccounts: Record<number, number | null>, */
-
-    /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
-      const accounts = rows as any[]; console.log(rows);
-      if (!accounts.length) {
-        console.log(" -> No hay plan de cuentas para migrar.");
-        return {};
-      } */
-
-
-    /* const [rows] = await conn.query(`SELECT *FROM account_plan WHERE FK_COD_EMP=${newCompanyId}`);
-    const accounts = rows as any[]; console.log(rows);
-    if (!accounts.length) {
-      console.log(" -> No hay plan de cuentas para migrar.");
-      return {};
-    }
- */
+  
     await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
@@ -616,8 +588,6 @@ export async function migrateCompany(codEmp: number) {
     console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
     console.log("ANTICIPOS CLIENTES:", Object.keys(mapAdvancesCustomers).length);
-
-
 
 
     return newCompanyId;
