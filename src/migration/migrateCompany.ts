@@ -391,7 +391,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const mapCostExpenses = await migrateExpensesDetails(
+    const { costeExpenseMap: mapCostExpenses, costExpenseIdMapping} = await migrateExpensesDetails(
       legacyConn,
       conn,
       newCompanyId,
@@ -515,7 +515,7 @@ export async function migrateCompany(codEmp: number) {
       mapProducts,
       mapRetentions,
       retentionsByCode,
-      mapCostExpenses
+      mapCostExpenses: costExpenseIdMapping
     });
 
     await migratePurchaseAndLiquidationsMovements({
