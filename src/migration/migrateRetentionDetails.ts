@@ -96,7 +96,7 @@ export async function migrateRetentions(
                     retentionsByCode.set(
                         `${item.codigoRetencion}:${item.tipoRetencion}`,
                         {
-                            id: insertDetail.insertId,
+                            id: existing.COSTEXPENSEID,
                             name: item.nombre_CG
                         }
                     );
@@ -118,7 +118,7 @@ export async function migrateRetentions(
                     retentionsByCode.set(
                         `${item.codigoRetencion}:${item.tipoRetencion}`,
                         {
-                            id: row.ID_DET,
+                            id: existing.COSTEXPENSEID,
                             name: item.nombre_CG
                         }
                     )
@@ -127,18 +127,18 @@ export async function migrateRetentions(
                 /*  console.log(`✔ Actualizada retención ${item.nombre_CG}`); */
             } else {
                 // Insertar retención completa
-                const { insertId } = await insertNewRetentionCodeMdl(conn, {
+                const { detail, tax } = await insertNewRetentionCodeMdl(conn, {
                     companyId: newCompanyId,
                     ...item,
                     planCountActivoId: codIdPlanCosto,
                     planCountPasivoId: codIdPlanGasto,
                     statusTax: item.estado_CG,
                 });
-                costeExpenseMap[item.id] = insertId;
+                costeExpenseMap[item.id] = detail.insertId;
                 retentionsByCode.set(
                     `${item.codigoRetencion}:${item.tipoRetencion}`,
                      {
-                        id: insertId,
+                        id: tax.insertId,
                         name: item.nombre_CG
                     }
                 )
@@ -190,7 +190,7 @@ async function insertNewRetentionCodeMdl(conn: any, taxData: any) {
             ]
         );
 
-        return detail;
+        return { detail, tax };
     } catch (error) {
         console.error('❌ Error insertando retención:', error);
         throw error;
