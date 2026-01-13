@@ -22,6 +22,8 @@ import { migrateWarehouseDetails } from './migrateWarehouseDetails';
 import { migrateBankReconciliation } from './migrateBankReconciliation';
 import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligations';
 import { migrateCustomerAccounting } from './migrateCustomerObligations';
+import { migrateAdvancesCustomers } from './migrateAdvancesCustomers';
+import { migrateSalesRetentions } from './migrateSalesRetentions';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -469,6 +471,12 @@ export async function migrateCompany(codEmp: number) {
       bankMap
     );
 
+    const mapAdvancesCustomers = await migrateAdvancesCustomers(
+      legacyConn,
+      conn,
+      mapClients
+    );
+
 
     /* MIGRARCION MOVIMIENTOS DE VENTAS   */
     const mapObligationsCustomers = await migrateCustomerAccounting(
@@ -504,6 +512,37 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     )
 
+    const mapRetentionsMov = await migrateSalesRetentions(
+      legacyConn,
+      conn,
+      newCompanyId,
+      userMap,
+      bankMap,
+      boxMap,
+      mapConciliation,
+      mapsSales.mapSales,
+      mapObligationsCustomers.mapObligationsCustomers,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      mapRetentions
+    ); 
+
+    /*  legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    userMap: any,
+    bankMap: Record<number, number | null>,
+    boxMap: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
+    mapSales: Record<number, number | null>,
+    mapObligationsCustomers: Record<number, number | null>,
+    mapPeriodo: Record<number, number | null>,
+    mapProject: Record<number, number | null>,
+    mapCenterCost: Record<number, number | null>,
+    mapAccounts: Record<number, number | null>, */
+
     /*   const [rows] = await conn.query(`SELECT *FROM products WHERE FK_COD_EMP=${newCompanyId}`);
       const accounts = rows as any[]; console.log(rows);
       if (!accounts.length) {
@@ -511,7 +550,6 @@ export async function migrateCompany(codEmp: number) {
         return {};
       } */
 
-    //console.log(mapAccounts);
 
     /* const [rows] = await conn.query(`SELECT *FROM account_plan WHERE FK_COD_EMP=${newCompanyId}`);
     const accounts = rows as any[]; console.log(rows);
@@ -543,6 +581,7 @@ export async function migrateCompany(codEmp: number) {
     console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
     console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
+    console.log("ANTICIPOS CLIENTES:", Object.keys(mapAdvancesCustomers).length);
 
 
 
