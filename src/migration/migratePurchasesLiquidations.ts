@@ -252,7 +252,7 @@ export async function migratePurchasesAndLiquidations({
 
 		const firstAuditId = (resultCreateAudit[0] as ResultSetHeader).insertId;
 		const purchaseValues = batchPurchase.map((p: any, index: number) => {
-			console.log(`transformando y normalizando ${p.NUM_TRANS}`);
+			console.log(`transformando y normalizando secuencial: ${p.NUM_TRANS}`);
 
 			const codTrans = p.COD_TRANS;
 			const purchaseType = p.TIP_DET_DOC;
@@ -648,7 +648,7 @@ async function migrateDataMovements({
 				movementSequence++;
 			}
 
-			const [resultCreateMovement] = await conn.query(`
+			const resultCreateMovement = await conn.query(`
 				INSERT INTO movements(
 						FKBANCO,
 						FK_COD_TRAN,
@@ -1215,7 +1215,7 @@ async function migrateImportedObligations({
 			for (const objTotal of totalsMap.values()) {
 				await upsertTotaledEntry(conn, objTotal, newCompanyId);
 			}
-			console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
+			console.log(`✅ Batch obligaciones importadas ${i / BATCH_SIZE + 1} procesado`);
 		}
 		return { migratedMovementsIdMap };
 	} catch (error) {
@@ -1460,7 +1460,7 @@ async function migrateAccountingEntriesDetail({
 				await upsertTotaledEntry(conn, t, newCompanyId);
 			}
 
-			console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`)
+			console.log(`✅ Batch detalle contable asiento ${i / BATCH_SIZE + 1} procesado`)
 		}
 		return { accountingEntryDetailIdMap };
 	} catch (error) {
