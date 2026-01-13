@@ -133,7 +133,6 @@ export async function migrateSuppliersForCompany(
                 newId++;
             }
             //CLAVE DE SUCURSAL  COD_SURC  A ID NUEVA DE MIGRACION
-            /*   console.log(mapClients); */
 
             console.log(` -> Batch migrado: ${batch.length} proveedores`);
         } catch (err) {

@@ -1194,6 +1194,7 @@ export async function migrateSalesAccountingEntriesDetail(
 
             for (const o of batch) {
                 const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+                console.log(`➡️ Procesando detalle de asiento  ${idPlan}`);
                 const idProyecto = mapProject[o.FK_COD_PROJECT] ?? null;
                 const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
                 const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO] ?? null;
