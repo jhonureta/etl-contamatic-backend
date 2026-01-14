@@ -265,7 +265,7 @@ DESC;`);
         }
     }
 
-
+    const recalcular = true;
     await detRetSale(
         conn,
         ventas,
@@ -273,7 +273,8 @@ DESC;`);
         mapRetentions,
         mapRetMovements,
         mapSales,
-        newCompanyId
+        newCompanyId,
+        recalcular
     )
 
 
@@ -520,6 +521,8 @@ DESC;`);
                 let idPlanCuenta = null;
                 const currentAuditId = mapRetAuditSales[o.COD_TRAC];
 
+
+
                 return [
                     bankMap[o.FKBANCO] ?? null,
                     mapSales[o.COD_TRAC] ?? null,
@@ -583,7 +586,7 @@ DESC;`);
             throw err;
         }
     }
-
+    const recalcular = true;
     await detRetSale(
         conn,
         ventas,
@@ -591,8 +594,11 @@ DESC;`);
         mapRetentions,
         mapRetMovements,
         mapSales,
-        newCompanyId
+        newCompanyId,
+        recalcular
     )
+
+
 
 
     return { mapRetMovements, mapRetAuditSales };
@@ -950,8 +956,52 @@ export async function detRetSale(
     mapRetentions,
     mapRetMovements,
     mapSales,
-    newCompanyId
+    newCompanyId,
+    recalcular
 ) {
+    const obtenerSaldos = (estructuraAntigua: any): { saldoRenta: number; saldoIva: number } => {
+        try {
+            let datos = estructuraAntigua;
+
+            if (typeof estructuraAntigua === 'string') {
+                try {
+                    datos = JSON.parse(estructuraAntigua);
+                } catch (parseError) {
+                    console.error('Error al parsear JSON de retencion:', parseError);
+                    return { saldoRenta: 0, saldoIva: 0 };
+                }
+            }
+            const datosOriginales = Array.isArray(datos) ? datos[0] : datos;
+            if (!datosOriginales || typeof datosOriginales !== 'object') {
+                console.warn('Estructura de retención vacía o inválida');
+                return { saldoRenta: 0, saldoIva: 0 };
+            }
+
+            const saldoRenta = (datosOriginales.listadoRetenciones || [])
+                .filter((ret: any) => ret && ret.renta)
+                .reduce((acc: number, ret: any) => {
+                    const val = Number(ret.valorRetenido) || 0;
+                    return acc + val;
+                }, 0);
+
+            const saldoIva = (datosOriginales.listadoRetencionesIva || [])
+                .filter((ret: any) => ret && ret.rentaIva)
+                .reduce((acc: number, ret: any) => {
+                    const val = Number(ret.valorRetenidoIva) || 0;
+                    return acc + val;
+                }, 0);
+
+            return {
+                saldoRenta: Number(saldoRenta.toFixed(2)),
+                saldoIva: Number(saldoIva.toFixed(2)),
+            };
+
+        } catch (error) {
+            console.error('Error en obtenerSaldos:', error);
+            return { saldoRenta: 0, saldoIva: 0 };
+        }
+    };
+
     const formatDecimal = (value: any, decimals: number = 2): string => {
         const num = typeof value === 'number' ? value : parseFloat(value || 0);
         return isNaN(num) ? '0.00' : num.toFixed(decimals);
@@ -1031,6 +1081,9 @@ export async function detRetSale(
             return [];
         }
     };
+
+
+
     const BATCH_SIZE = 1000;
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
@@ -1040,6 +1093,14 @@ export async function detRetSale(
                 // Lógica de Negocio
                 const currentAuditId = mapRetAuditSales[o.COD_TRAC];
                 const retencionVentaNueva = adaptarEstructuraMultiple(o.DOCUMENT_REL_DETAIL);
+
+
+                if (recalcular == true) {
+                    const { saldoRenta, saldoIva } = obtenerSaldos(o.DOCUMENT_REL_DETAIL);
+                    const totalRetenido = Number((saldoRenta + saldoIva).toFixed(2));
+                    console.log("Total retenido:" + totalRetenido);
+                    o.IMPOR_MOVI = Number(totalRetenido);
+                }
                 const totalNeto = Number(o.TOT_PAG_TRAC) - Number(o.IMPOR_MOVI);
                 const idMov = mapRetMovements[o.COD_TRAC]
                 return [
@@ -1056,8 +1117,8 @@ export async function detRetSale(
                     currentAuditId,
                     idMov,
                     newCompanyId,
-                    o.NUM_REL_DOC,
-                    o.CLAVE_REL_TRANS
+                    o.NUM_REL_DOC.trim(),
+                    o.CLAVE_REL_TRANS.trim()
                 ];
             });
 
