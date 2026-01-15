@@ -30,7 +30,7 @@ export async function migrateCreditNote(
     conn: any,
     newCompanyId: number,
     branchMap: any, userMap: any, mapClients: any, mapProducts: any, mapRetentions: any
-): Promise<{ mapSales: Record<number, number>; mapAuditSales: Record<number, number> }> {
+): Promise<{ mapCreditNote: Record<number, number>; mapAuditCreditNote: Record<number, number> }> {
     console.log("Migrando notas de credito...");
 
     const [rows] = await legacyConn.query(`SELECT
@@ -130,7 +130,7 @@ DESC;`);
     SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
     SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
     SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
-FROM
+    FROM
     sucursales;`;
     const [dataSucursal] = await legacyConn.query(secuenciaSucursal, [newCompanyId]);
 
@@ -151,13 +151,8 @@ FROM
 
 
     const BATCH_SIZE = 1000;
-    const mapSales: Record<number, number> = {};
-    const mapAuditSales: Record<number, number> = {};
-
-
-
-
-
+    const mapCreditNote: Record<number, number> = {};
+    const mapAuditCreditNote: Record<number, number> = {};
 
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
@@ -181,7 +176,7 @@ FROM
             for (let j = 0; j < batch.length; j++) {
                 const codTrans = batch[j].COD_TRANS;
                 const auditId = firstAuditInsertId + j;
-                mapAuditSales[codTrans] = auditId;
+                mapAuditCreditNote[codTrans] = auditId;
             }
 
 
@@ -190,14 +185,12 @@ FROM
             // Preparar valores para INSERT en batch
             const values = batch.map((t, index) => {
                 console.log(`transformando y normalizando ${t.NUM_TRANS}`);
-   
+
                 const productosNormalizados = (t.DOCUMENT_DETAIL ?? []).map(normalizarProducto);
 
                 console.log(productosNormalizados);
 
-
-
-                const auditId = mapAuditSales[t.COD_TRANS];
+                const auditId = mapAuditCreditNote[t.COD_TRANS];
                 const vendedor = userMap[t.FK_USER_VEND];
                 const creador = userMap[t.FK_USER];
                 const cliente = mapClients[t.FK_PERSON];
@@ -376,7 +369,7 @@ FROM
             // Mapear ventas
             let newId = res.insertId;
             for (const s of batch) {
-                mapSales[s.COD_TRANS] = newId++;
+                mapCreditNote[s.COD_TRANS] = newId++;
             }
             console.log(` -> Batch migrado: ${batch.length} ventas`);
         } catch (err) {
@@ -385,5 +378,5 @@ FROM
         }
     }
 
-    return { mapSales, mapAuditSales };
+    return { mapCreditNote, mapAuditCreditNote };
 }

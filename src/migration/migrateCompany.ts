@@ -25,6 +25,7 @@ import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligat
 import { migrateCustomerAccounting } from './migrateCustomerObligations';
 import { migrateAdvancesCustomers } from './migrateAdvancesCustomers';
 import { migrateSalesRetentions } from './migrateSalesRetentions';
+import { migrateCreditNote } from './migrateSalesCreditNote';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -393,14 +394,14 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const { costeExpenseMap: mapCostExpenses, costExpenseIdMapping} = await migrateExpensesDetails(
+    const { costeExpenseMap: mapCostExpenses, costExpenseIdMapping } = await migrateExpensesDetails(
       legacyConn,
       conn,
       newCompanyId,
       mapAccounts
     );
 
-    const { costeExpenseMap: mapRetentions , retentionsByCode } = await migrateRetentions(
+    const { costeExpenseMap: mapRetentions, retentionsByCode } = await migrateRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -513,7 +514,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     )
     //==  Migracion de Compras y liquidaciones ===/
-    const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap} = await migratePurchasesAndLiquidations({
+    const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap } = await migratePurchasesAndLiquidations({
       legacyConn,
       conn,
       newCompanyId,
@@ -543,7 +544,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
-  
+
     const mapRetentionsMov = await migrateSalesRetentions(
       legacyConn,
       conn,
@@ -559,10 +560,21 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapRetentions
-    ); 
+    );
 
-  
-    await conn.commit();
+    const mapCreditNoteMigrate = await migrateCreditNote(
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapClients,
+      mapProducts,
+      mapRetentions
+    )
+
+
+    await conn.rollback();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
