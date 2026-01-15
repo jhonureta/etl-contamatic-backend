@@ -1117,8 +1117,8 @@ export async function detRetSale(
                     currentAuditId,
                     idMov,
                     newCompanyId,
-                    o.NUM_REL_DOC.trim(),
-                    o.CLAVE_REL_TRANS.trim()
+                    o.NUM_REL_DOC,
+                    o.CLAVE_REL_TRANS
                 ];
             });
 

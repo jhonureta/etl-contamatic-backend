@@ -1,3 +1,8 @@
+export interface oldProductCodeMap {
+    id: number;
+    precioProducto: number;
+}
+
 export async function batchInsertProducts(
     legacyConn: any,
     conn: any,
@@ -6,7 +11,9 @@ export async function batchInsertProducts(
     mapCategories: Record<number, number | null>,
     mapMeasures: Record<number, number | null>,
     mapBrand
-): Promise<Record<number, number>> {
+): Promise<{ mapProducts: Record<number, number>; oldProductCodeMap: Map<string, oldProductCodeMap> }> {
+
+
     console.log("Migrando productos...");
 
     const [rows] = await legacyConn.query(`SELECT
@@ -58,6 +65,8 @@ export async function batchInsertProducts(
     }
     const BATCH_SIZE = 1000;
     const mapProducts: Record<number, number> = {};
+    const oldProductCodeMap = new Map<string, oldProductCodeMap>();
+
     for (let i = 0; i < productos.length; i += BATCH_SIZE) {
         const batch = productos.slice(i, i + BATCH_SIZE);
 
@@ -165,6 +174,15 @@ export async function batchInsertProducts(
             let newId = res.insertId;
             for (const s of batch) {
                 mapProducts[s.PROD_ID] = newId;
+
+                oldProductCodeMap.set(
+                    `${s.PROD_COD}`,
+                    {
+                        id: newId,
+                        precioProducto: s.PROD_PRICE_PUB
+                    }
+                )
+
                 newId++;
             }
             console.log(` -> Batch migrado: ${batch.length} productos`);
@@ -173,5 +191,5 @@ export async function batchInsertProducts(
         }
     }
 
-    return mapProducts;
+    return { mapProducts, oldProductCodeMap };
 }

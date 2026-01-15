@@ -401,7 +401,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const { mapRetentions , oldRetentionCodeMap, newRetentionIdMap } = await migrateRetentions(
+    const { mapRetentions, oldRetentionCodeMap, newRetentionIdMap } = await migrateRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -442,7 +442,7 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-    const mapProducts = await batchInsertProducts(
+    const { mapProducts, oldProductCodeMap } = await batchInsertProducts(
       legacyConn,
       conn,
       newCompanyId,
@@ -459,10 +459,10 @@ export async function migrateCompany(codEmp: number) {
       mapProducts
     );
 
-    const mapsSales = await migrateSales(
+    const {mapSales, mapAuditSales} = await migrateSales(
       legacyConn,
       conn,
-      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions);
+      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions,oldRetentionCodeMap, newRetentionIdMap);
 
     //MIGRACION DE CONCILIACION BANCARIA
 
@@ -485,8 +485,8 @@ export async function migrateCompany(codEmp: number) {
       legacyConn,
       conn,
       newCompanyId,
-      mapsSales.mapSales,
-      mapsSales.mapAuditSales,
+      mapSales,
+      mapAuditSales,
       mapClients,
       bankMap,
       boxMap,
@@ -502,7 +502,7 @@ export async function migrateCompany(codEmp: number) {
       legacyConn,
       conn,
       newCompanyId,
-      mapsSales.mapSales,
+      mapSales,
       bankMap,
       boxMap,
       userMap,
@@ -532,7 +532,7 @@ export async function migrateCompany(codEmp: number) {
       conn,
       mapClients
     );
-    
+
     await migratePurchaseAndLiquidationsMovements({
       legacyConn,
       conn,
@@ -550,7 +550,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
-    await migratePurchaseObligationDetail({
+    /* await migratePurchaseObligationDetail({
       legacyConn,
       conn,
       newCompanyId,
@@ -565,9 +565,9 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapConciliation
-    })
+    }) */
 
-  
+
     const mapRetentionsMov = await migrateSalesRetentions(
       legacyConn,
       conn,
@@ -576,7 +576,7 @@ export async function migrateCompany(codEmp: number) {
       bankMap,
       boxMap,
       mapConciliation,
-      mapsSales.mapSales,
+      mapSales,
       mapObligationsCustomers.mapObligationsCustomers,
       mapPeriodo,
       mapProject,
@@ -593,11 +593,13 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapClients,
       mapProducts,
-      mapRetentions
+      mapRetentions,
+      oldProductCodeMap,
+      mapAuditSales
     )
 
 
-    await conn.rollback();
+    await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
@@ -615,9 +617,9 @@ export async function migrateCompany(codEmp: number) {
     console.log("MAPEO MARCAS MIGRADAS:", Object.keys(mapBrand).length);
     console.log("MAPEO PRODUCTOS MIGRADOS:", Object.keys(mapProducts).length);
     console.log("DETALLE DE BODEGA MIGRADOS:", Object.keys(mapDetWare).length);
-    console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
+    console.log("VENTAS MIGRADAS:", Object.keys(mapSales).length);
     console.log("CONCILIACION MIGRADA :", Object.keys(mapConciliation).length);
-    console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
+    console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapAuditSales).length);
     console.log("COMPRAS  Y LIQUIDACIONES MIGRADAS:", Object.keys(purchaseLiquidationIdMap).length);
     console.log("AUDITORIA DE COMPRAS Y LIQUIDACIONES MIGRADAS:", Object.keys(purchaseLiquidationAuditIdMap).length);
     console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);

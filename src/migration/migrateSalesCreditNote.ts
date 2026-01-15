@@ -29,13 +29,21 @@ export async function migrateCreditNote(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
-    branchMap: any, userMap: any, mapClients: any, mapProducts: any, mapRetentions: any
+    branchMap: any,
+    userMap: any,
+    mapClients: any,
+    mapProducts: any,
+    mapRetentions: any,
+    oldProductCodeMap: any,
+    mapAuditSales: any
 ): Promise<{ mapCreditNote: Record<number, number>; mapAuditCreditNote: Record<number, number> }> {
     console.log("Migrando notas de credito...");
 
     const [rows] = await legacyConn.query(`SELECT
 tn.TIP_TRAC as fact,
     tf.COD_TRAC AS COD_TRANS,
+    tf.NUM_TRACNOT,
+    tf.NUM_TRACNOT AS NUM_TRANS,
     SUBSTRING(tf.NUM_TRACNOT, 1, 7) AS PUNTO_EMISION_DOC,
     SUBSTRING(tf.NUM_TRACNOT, 9, 9) AS SECUENCIA_DOC,
     SUBSTRING(tf.NUMFACNOT_TRAC, 9, 9) AS SECUENCIA_REL_DOC,
@@ -46,7 +54,7 @@ END AS TIP_DET_DOC,
 YEAR(tf.FEC_TRAC) AS FEC_PERIODO_TRAC,
 MONTH(tf.FEC_TRAC) AS FEC_MES_TRAC,
 tf.FEC_TRAC AS FEC_TRAC,
-tf.fechaFacturaRet AS FEC_REL_TRAC,
+tn.FEC_TRAC AS FEC_REL_TRAC,
 tf.FEC_MERC_TRAC AS FEC_MERC_TRAC,
 CASE WHEN tf.METPAG_TRAC = 'MULTIPLES' THEN tf.METPAG_TRAC ELSE tf.METPAG_TRAC
 END AS MET_PAG_TRAC,
@@ -76,7 +84,7 @@ tf.TOTPAG_TRAC AS TOT_PAG_TRAC,
 tf.PROPINA_TRAC,
 tf.OTRA_PER,
 '04' AS COD_COMPROBANTE,
-NULL AS COD_COMPROBANTE_REL,
+'01' AS COD_COMPROBANTE_REL,
 NULL AS COD_DOCSUS_TRIB,
 NULL AS FK_COD_EMP,
 tf.firmado AS FRIMADO,
@@ -108,7 +116,8 @@ tf.DET_REMBOLSO AS DET_EXP_REEMBOLSO,
 tf.METPAG_JSON_TRAC AS JSON_METODO,
 tf.INFO_ADIC AS ITEMS_PROF,
 tf.OBS_AUXILIAR AS OBS_AUXILIAR,
-tf.OBS_ORD AS OBS_ORDEN
+tf.OBS_ORD AS OBS_ORDEN,
+tf.COD_TRAC_FACT
 FROM
     transacciones tf
 INNER JOIN transacciones tn ON
@@ -121,7 +130,7 @@ DESC;`);
     const ventas = rows as any[];
 
     if (!ventas.length) {
-        throw new Error(" -> No hay ventas para migrar.");
+        throw new Error(" -> No hay notas de credito para migrar.");
     }
 
     //Ultima secuencia de auditoria
@@ -184,25 +193,34 @@ DESC;`);
 
             // Preparar valores para INSERT en batch
             const values = batch.map((t, index) => {
-                console.log(`transformando y normalizando ${t.NUM_TRANS}`);
+                console.log(`transformando y normalizando ${t.NUM_TRACNOT}`);
+                let productos = t.DOCUMENT_DETAIL ?? [];
+                if (typeof t.DOCUMENT_DETAIL === 'string') {
+                    try {
+                        productos = JSON.parse(t.DOCUMENT_DETAIL);
+                    } catch (e) {
+                        console.error("Error al parsear JSON:", e);
+                        return [];
+                    }
+                }
+                let idSucursal = null;
 
-                const productosNormalizados = (t.DOCUMENT_DETAIL ?? []).map(normalizarProducto);
-
-                console.log(productosNormalizados);
+                if (t.TIP_DOC_REL == 'fisica') {
+                    idSucursal = branchMap[listFisica[t.PUNTO_EMISION_DOC]];
+                }
+                if (t.TIP_DOC_REL == 'factura') {
+                    idSucursal = branchMap[listElectronica[t.PUNTO_EMISION_DOC]];
+                }
+                const productosNormalizados = productos.map(p => normalizarProducto(p, mapProducts, branchMap, oldProductCodeMap, idSucursal));
 
                 const auditId = mapAuditCreditNote[t.COD_TRANS];
                 const vendedor = userMap[t.FK_USER_VEND];
                 const creador = userMap[t.FK_USER];
                 const cliente = mapClients[t.FK_PERSON];
 
-                let idSucursal = null;
+                t.FK_AUDIT_REL = mapAuditSales[t.COD_TRAC_FACT] ?? null;
 
-                if (t.TIP_TRAC == 'fisica') {
-                    idSucursal = branchMap[listFisica[t.PUNTO_EMISION_DOC]];
-                }
-                if (t.TIP_TRAC == 'factura') {
-                    idSucursal = branchMap[listElectronica[t.PUNTO_EMISION_DOC]];
-                }
+
 
                 function safeJson(input: any) {
                     try {
@@ -222,8 +240,8 @@ DESC;`);
                     t.PUNTO_EMISION_DOC,
                     t.SECUENCIA_DOC,
                     t.SECUENCIA_REL_DOC,
-                    t.CLAVE_TRANS.trim(),
-                    t.CLAVE_REL_TRANS.trim(),
+                    t.CLAVE_TRANS,
+                    t.CLAVE_REL_TRANS,
                     t.TIP_DET_DOC,
                     t.FEC_PERIODO_TRAC,
                     t.FEC_MES_TRAC,
@@ -526,10 +544,7 @@ DESC;`);
             // --- PASO A: INSERTAR AUDITORÍA EN BATCH ---
             // Solo creamos auditoría si hay datos válidos
             const auditValues = batch.map(o => [auditSeq++, o.forma, newCompanyId]);
-            const [resAudit]: any = await conn.query(
-                `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
-                [auditValues]
-            );
+            const [resAudit]: any = await conn.query(`INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,[auditValues]);
             const firstAuditId = resAudit.insertId;
 
             // --- PASO B: PREPARAR MOVIMIENTOS ---
@@ -545,18 +560,18 @@ DESC;`);
                 let tipoMovi = o.TIPO_MOVI;
                 let idPlanCuenta = null;
 
-                if (o.forma === 'CCTACONT') {
+               /*  if (o.forma === 'CCTACONT') {
                     const codigoPlan = o.REF_MOVI?.split('--')[0].trim();
                     idPlanCuenta = accountMap.get(codigoPlan) || null;
                     tipMovi = tipoMovi = 'CCTACONT';
                 } else if (o.forma === 'RET-VENTA') {
                     tipMovi = tipoMovi = origen = 'RET-VENTA';
-                    modulo = 'RETENCION-VENTA';
-                } else if (o.forma === 'NOTA DE CREDITO') {
+                    modulo = 'RETENCION-VENTA'; */
+              /*   } else if (o.forma === 'NOTA DE CREDITO') { */
                     tipMovi = tipoMovi = 'CREDITO';
                     modulo = 'NCVENTA';
                     origen = 'NOTA CREDITO VENTA';
-                }
+                /* } */
 
                 return [
                     bankMap[o.FK_COD_BANCO_MOVI] ?? null,
@@ -647,8 +662,8 @@ DESC;`);
               mapEntryAccount.mapEntryAccount
           ) */
 
-        console.log("Detalle de asientos contables migrados:", Object.keys(mapDetailAsiento).length);
-
+        /*    console.log("Detalle de asientos contables migrados:", Object.keys(mapDetailAsiento).length);
+    */
         return { mapMovements, mapAuditMovements };
 
     } catch (err) {
