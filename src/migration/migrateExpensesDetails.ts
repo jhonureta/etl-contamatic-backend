@@ -3,9 +3,10 @@ export async function migrateExpensesDetails(
     conn: any,
     newCompanyId: number,
     mapAccounts: Record<number, number | null>
-): Promise<Record<number, number>> {
+): Promise<{ costeExpenseMap: Record<number, number>; costExpenseIdMapping: Record<number, number> }> {
 
     const costeExpenseMap: Record<number, number> = {};
+    const costExpenseIdMapping: Record<number, number> = {};
 
     try {
         console.log("Migrando costos y gastos...");
@@ -107,6 +108,7 @@ export async function migrateExpensesDetails(
                     `, insertParams);
 
                     costeExpenseMap[id] = res.insertId;
+                    costExpenseIdMapping[id] = existing.COSTEXPENSEID;
 
                 } else {
                     // Actualizar detalle
@@ -126,11 +128,12 @@ export async function migrateExpensesDetails(
                     `, updateParams);
 
                     costeExpenseMap[id] = dbDetail.COSTEXPENSEDETAILID;
+                    costExpenseIdMapping[id] = existing.COSTEXPENSEID;
                 }
 
             } else {
                 // 5. Insertar un nuevo costo porque no existe
-                const { insertId } = await insertNewCostMdl(conn, {
+                const { taxDetail, tax } = await insertNewCostMdl(conn, {
                     nombreCostoGasto: nombre_CG,
                     statusTax: estado_CG,
                     planCountActivoId: codCosto,
@@ -139,7 +142,8 @@ export async function migrateExpensesDetails(
                     codMig: id
                 });
 
-                costeExpenseMap[id] = insertId;
+                costeExpenseMap[id] = taxDetail.insertId;
+                costExpenseIdMapping[id] = tax.insertId;
             }
         }
 
@@ -147,7 +151,7 @@ export async function migrateExpensesDetails(
         throw new Error(`Error en migrateExpensesDetails:${error}`);
     }
 
-    return costeExpenseMap;
+    return { costeExpenseMap , costExpenseIdMapping };
 }
 
 
@@ -187,7 +191,7 @@ async function insertNewCostMdl(conn: any, costsData: any) {
 
         }
 
-        return taxDetail;
+        return { tax, taxDetail};
 
     } catch (error) {
         console.log("Error insertNewCostMdl:", error);

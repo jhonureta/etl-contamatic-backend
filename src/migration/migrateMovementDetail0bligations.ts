@@ -232,7 +232,7 @@ export async function migrateMovementDetail0bligations(
             mapMovements,
             mapPeriodo,
             mapAuditMovements,
-        ); console.log(mapEntryAccount);
+        );
 
         console.log("Encabezado de asiento contable migrados:", Object.keys(mapEntryAccount).length);
 
@@ -292,8 +292,7 @@ export async function migratePaymentDetails(
                                                             cod_detalle
                                                         DESC;`);
 
-        console.log(mapObligationsCustomers);
-        // console.log(mapMovements);
+
         if (!rows.length) return { mapDetailObligationsAplicate };
 
         const BATCH_SIZE = 500;
@@ -485,8 +484,7 @@ export async function migrateDetailedAccountingEntriesCustomerObligations(
     console.log(`📦 Total registros a migrar: ${rows.length}`);
     let totalDebe = 0;
     let totalHaber = 0;
-    console.log(mapAccounts);
-    console.log(mapEntryAccount);
+
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
         console.log(`➡️ Procesando batch ${i / BATCH_SIZE + 1}`);
@@ -500,9 +498,6 @@ export async function migrateDetailedAccountingEntriesCustomerObligations(
                 const idProyecto = mapProject[o.FK_COD_PROJECT] ?? null;
                 const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
                 const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO] ?? null;
-
-
-                console.log(idPlan, idCodAsiento);
 
                 if (!idPlan || !idCodAsiento) continue;
 
@@ -559,6 +554,7 @@ export async function migrateDetailedAccountingEntriesCustomerObligations(
 
             for (const o of batch) {
                 const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+                console.log(`➡️ Procesando detalle de asiento  ${idPlan}`);
                 const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
 
                 if (!idPlan || !idCodAsiento) continue;
