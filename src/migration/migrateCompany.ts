@@ -343,14 +343,14 @@ export async function migrateCompany(codEmp: number) {
       branchMap,
     }
 
-    const userMap = await migrateUsersForCompany(
+    const { userMap, userNameIdMap } = await migrateUsersForCompany(
       legacyConn,
       conn,
       newCompanyId,
       dataBaseIds
     );
 
-    const mapClients = await migrateClientsForCompany(
+    const { mapClients, clientNameIdMap } = await migrateClientsForCompany(
       legacyConn,
       conn,
       newCompanyId
@@ -515,7 +515,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     )
 
-    // MIGRAR PROFORMAS
+    //== Migrar proformas ===/
     await migrateProformaInvoices({
       legacyConn,
       conn,
@@ -526,15 +526,18 @@ export async function migrateCompany(codEmp: number) {
       branchMap
     })
 
-    // MIGRAR GUÍAS DE REMISIÓN 
+    //= Migrar guias de remision ===/
     await migrateShippingGuide({
       legacyConn,
       conn,
       newCompanyId,
       mapClients,
       mapProducts,
-      branchMap
+      branchMap,
+      userNameIdMap,
+      clientNameIdMap
     })
+
     //==  Migracion de Compras y liquidaciones ===/
     const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap} = await migratePurchasesAndLiquidations({
       legacyConn,

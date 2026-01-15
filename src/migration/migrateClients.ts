@@ -4,7 +4,7 @@ export async function migrateClientsForCompany(
     legacyConn: any,
     conn: any,
     newCompanyId: number
-): Promise<Record<number, number>> {
+): Promise<{ mapClients: Record<number, number>, clientNameIdMap: Record<string, number> }> {
     console.log("Migrando clientes...");
 
     const [rows] = await legacyConn.query(`SELECT
@@ -74,6 +74,7 @@ export async function migrateClientsForCompany(
     }
     const BATCH_SIZE = 1000;
     const mapClients: Record<number, number> = {};
+    const clientNameIdMap: Record<string, number> = {};
     for (let i = 0; i < clientes.length; i += BATCH_SIZE) {
         const batch = clientes.slice(i, i + BATCH_SIZE);
 
@@ -179,6 +180,7 @@ export async function migrateClientsForCompany(
             let newId = res.insertId;
             for (const s of batch) {
                 mapClients[s.CUST_ID] = newId;
+                clientNameIdMap[s.CUST_NOM?.toUpperCase()] = newId;
                 newId++;
             }
             //CLAVE DE SUCURSAL  COD_SURC  A ID NUEVA DE MIGRACION
@@ -188,5 +190,5 @@ export async function migrateClientsForCompany(
         }
     }
 
-    return mapClients;
+    return { mapClients, clientNameIdMap };
 }

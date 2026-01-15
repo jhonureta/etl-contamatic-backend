@@ -1,3 +1,5 @@
+import { findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
+
 export async function migrateProformaInvoices({
   legacyConn,
   conn,
@@ -8,7 +10,8 @@ export async function migrateProformaInvoices({
   branchMap,
 }) {
   try {
-    const [resultProformasQuery] = await legacyConn.query(`
+    console.log("Migrando proformas...");
+    const [proformas]: any[] = await legacyConn.query(`
     SELECT 
         COD_TRAC AS COD_TRANS,
         NULL AS PUNTO_EMISION_DOC,
@@ -91,28 +94,33 @@ export async function migrateProformaInvoices({
         ;
     `);
 
-    const proformas = resultProformasQuery as any[];
-
     if (proformas.length === 0) {
-      throw new Error("No proforma invoices found to migrate.");
+      throw new Error("No hay proformas para migrar.");
     }
+
+    const branchSequenseQuery: string = `
+	SELECT
+			COD_SURC,
+			SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
+			SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
+			SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
+	FROM
+			sucursales;`;
+
+    const [sequentialBranches] = await legacyConn.query(branchSequenseQuery, [
+      newCompanyId,
+    ]);
+
+    let idFirstBranch: number | null = null;
+    if (sequentialBranches && sequentialBranches.length > 0) {
+      idFirstBranch = Number(sequentialBranches[0].COD_SURC);
+    }
+
+    let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     const BATCH_SIZE = 1000;
     const proformaIdMap: Record<number, number> = {};
     const proformaAuditIdMap: Record<number, number> = {};
-
-    const auditQuery = `
-      SELECT
-          IFNULL(
-              MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1,
-              1
-          ) AS nextAudit
-      FROM
-          audit
-      WHERE
-          FK_COD_EMP = ?;`;
-    const [auditResult] = await conn.query(auditQuery, [newCompanyId]);
-    let nextAudit = auditResult[0]["nextAudit"];
 
     for (let i = 0; i < proformas.length; i += BATCH_SIZE) {
       const batch = proformas.slice(i, i + BATCH_SIZE);
@@ -128,23 +136,23 @@ export async function migrateProformaInvoices({
         [auditValues]
       );
 
-      let firstInsertedAuditId = resultCreateAudit.insertId;
-      batch.forEach((proforma, index) => {
-        proformaAuditIdMap[proforma.COD_TRANS] = firstInsertedAuditId + index;
-      });
+      const firstInsertedAuditId = resultCreateAudit.insertId;
 
-      const proformaValues = batch.map((proforma) => {
+      const proformaValues = batch.map((proforma, index: number) => {
         console.log(`transformando y normalizando ${proforma.NUM_TRANS}`);
         const productDetails = toJSONArray(proforma.DOCUMENT_DETAIL);
-        const auditId = proformaAuditIdMap[proforma.COD_TRANS];
         const sellerId = userMap[proforma.FK_USER_VEND];
         const userId = userMap[proforma.FK_USER];
         const clientId = mapClients[proforma.FK_PERSON];
+        //mapeo de auditoria por transaccion
+        const auditId = firstInsertedAuditId + index;
+        proformaAuditIdMap[proforma.COD_TRANS] = auditId;
 
         const { detailTransformed, branchId } = transformProductDetail(
           productDetails,
           mapProducts,
-          branchMap
+          branchMap,
+          idFirstBranch
         );
 
         return [
@@ -220,7 +228,8 @@ export async function migrateProformaInvoices({
         ];
       });
 
-      const [resulCreateProformas]: any = await conn.query(`
+      const [resulCreateProformas]: any = await conn.query(
+        `
         INSERT INTO transactions (PUNTO_EMISION_DOC,
             SECUENCIA_DOC,
             SECUENCIA_REL_DOC,
@@ -291,10 +300,12 @@ export async function migrateProformaInvoices({
             OBS_AUXILIAR,
             OBS_ORDEN
         ) VALUES ?
-      `,[proformaValues]);
+      `,
+        [proformaValues]
+      );
       let nextId = resulCreateProformas.insertId;
-      batch.forEach((proforma, index) => {
-        proformaIdMap[proforma.COD_TRANS] = nextId + index; 
+      batch.forEach(({COD_TRANS}) => {
+        proformaIdMap[COD_TRANS] = nextId++;
       });
     }
 
@@ -304,40 +315,19 @@ export async function migrateProformaInvoices({
   }
 }
 
-function toNumber(value: unknown): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function toJSONArray(value) {
-  if (!value) return [];
-
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value.trim());
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_e) {
-      return [];
-    }
-  }
-  if (Array.isArray(value)) {
-    return value;
-  }
-  return [];
-}
-
 function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
-  branchMap: Record<number, number>
+  branchMap: Record<number, number>,
+  idFirstBranch: number | null
 ) {
   let branchId = null;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
     if (index === 0 && item.idBodega) {
-      branchId = branchMap[item.idBodega] || null; // Cambiar null por id de primera bodega
+      branchId = branchMap[item.idBodega] || idFirstBranch; // Cambiar null por id de primera bodega
     }
     const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = branchMap[item.idBodega] || null;
+    const idBodega = branchMap[item.idBodega] || idFirstBranch;
     return {
       idProducto,
       idBodega,

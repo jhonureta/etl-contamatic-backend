@@ -1,13 +1,17 @@
+import { findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
+
 export async function migrateShippingGuide({
   legacyConn,
   conn,
   newCompanyId,
   mapClients,
   mapProducts,
-  branchMap
+  branchMap,
+  userNameIdMap,
+  clientNameIdMap
 }) {
   try {
-    const [resultShippingGuideQuery]: any = await legacyConn.query(`
+    const [shippingGuide]: any[] = await legacyConn.query(`
       SELECT
           g.COD_GUIAR AS COD_TRANS,
           SUBSTRING_INDEX(g.NUM_GUIA, '-', 2) AS PUNTO_EMISION_DOC,
@@ -23,9 +27,11 @@ export async function migrateShippingGuide({
           NULL AS FEC_MERC_TRAC,
           NULL AS MET_PAG_TRAC,
           NULL AS OBS_TRAC,
-          g.usuario AS FK_USER,
-          g.usuario AS FK_USER_VEND,
-          g.cliente AS FK_PERSON,
+          g.usuario AS NAME_USER,
+          NULL AS FK_USER,
+          NULL AS FK_USER_VEND,
+          g.cliente AS NAME_CLIENT,
+          NULL AS FK_PERSON,
           CASE WHEN g.estado = 'creado' THEN 'pendiente' WHEN g.estado = 'activo' THEN 'activo' ELSE 'anulado'
       END AS ESTADO,
       NULL AS ESTADO_REL,
@@ -92,26 +98,35 @@ export async function migrateShippingGuide({
       DESC
           ;
     `);
-    const shippingGuide = resultShippingGuideQuery as any[];
     if (shippingGuide.length === 0) {
-      throw new Error("No shipping guide found to migrate.");
+      throw new Error(" -> No hay guías de envío para migrar.");
     }
+    const branchSequenseQuery: string = `
+    SELECT
+        COD_SURC,
+        SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
+        SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
+        SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
+    FROM
+        sucursales;`;
+  
+    const [sequentialBranches]: any[] = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
+  
+    let idFirstBranch: number | null = null;
+    if (sequentialBranches && sequentialBranches.length > 0) {
+      idFirstBranch = Number(sequentialBranches[0].COD_SURC);
+    }
+  
+    const electronicSequences = new Map<string, number>();
+    sequentialBranches.forEach((branch: any, index: number) => {
+      electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
+    });
+
     const BATCH_SIZE = 1000;
     const shippingGuideIdMap: Record<number, number> = {};
     const shippingGuideAuditIdMap: Record<number, number> = {};
 
-    const auditQuery = `
-      SELECT
-          IFNULL(
-              MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1,
-              1
-          ) AS nextAudit
-      FROM
-          audit
-      WHERE
-          FK_COD_EMP = ?;`;
-    const [auditResult] = await conn.query(auditQuery, [newCompanyId]);
-    let nextAudit = auditResult[0]["nextAudit"];
+    let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     for (let i = 0; i < shippingGuide.length; i += BATCH_SIZE) {
       const batch = shippingGuide.slice(i, i + BATCH_SIZE);
@@ -125,17 +140,30 @@ export async function migrateShippingGuide({
         [auditValues]
       );
       let firstInsertedAuditId = resultCreateAudit.insertId;
-      batch.forEach((shippingGuide, index) => {
-        shippingGuideAuditIdMap[shippingGuide.COD_TRANS] = firstInsertedAuditId + index;
-      });
 
-      const shippingGuideValues = batch.map((shippingGuide) => {
-        // TODO: Mapear usuario, usuario vendedor, cliente y bodega 
-        const auditId = shippingGuideAuditIdMap[shippingGuide.COD_TRANS];
+      const shippingGuideValues = batch.map((shippingGuide, index: number) => {
+        console.log(`transformando y normalizando guias ${shippingGuide.NUM_TRANS}`);
+        
         const sellerId = null;
-        const userId = null;
-        const clientId = null;
-        const branchId = null;
+        const userId = userNameIdMap[shippingGuide.NAME_USER?.toUpperCase()];
+        const clientId = clientNameIdMap[shippingGuide.NAME_CLIENT?.toUpperCase()];
+        const productDetails = toJSONArray(shippingGuide.DOCUMENT_DETAIL);
+
+        const auditId = firstInsertedAuditId + index;
+        shippingGuideAuditIdMap[shippingGuide.COD_TRANS] = auditId;
+
+        let branchId: number = idFirstBranch;
+        if (electronicSequences.has(shippingGuide.PUNTO_EMISION_DOC)) {
+          branchId = electronicSequences.get(shippingGuide.PUNTO_EMISION_DOC);
+        }
+
+        const detailTransformed = transformProductDetail(
+          productDetails,
+          mapProducts,
+          branchMap,
+          idFirstBranch
+        );
+
         return [
           shippingGuide.PUNTO_EMISION_DOC,
           shippingGuide.SECUENCIA_DOC,
@@ -188,7 +216,7 @@ export async function migrateShippingGuide({
           auditId,
           shippingGuide.TIP_TRAC,
           shippingGuide.FECHA_REG,
-          JSON.stringify([]),
+          JSON.stringify(detailTransformed),
           shippingGuide.PUNTO_EMISION_REC,
           shippingGuide.FECHA_ANULACION,
           shippingGuide.TIP_DOC,
@@ -292,4 +320,46 @@ export async function migrateShippingGuide({
     console.error('Error al migrar guías de envío:', error);
     throw error;
   }
+}
+
+function transformProductDetail(
+  inputDetail: any,
+  mapProducts: Record<number, number>,
+  branchMap: Record<number, number>,
+  idFirstBranch: number | null
+) {
+  const detailTransformed = inputDetail.map((item: any) => {
+    const idProducto = mapProducts[item.idProducto] || null;
+    const idBodega = branchMap[item.idBodega] || idFirstBranch;
+    return {
+      idProducto,
+      idBodega,
+      esCombo: false,
+      codigo: item.codigo || "",
+      nombre: item.nombre || "",
+      stock: item.stock || 0,
+      costo: toNumber(item.precioProducto),
+      marca: "SIN MARCA",
+      cantidad: toNumber(item.cantidad),
+      impuesto: toNumber(item.impuesto),
+      codigoImpuesto: toNumber(item.codigoimpuesto),
+      nombreImpuesto: item.nombreImpuesto,
+      precioProducto: toNumber(item.precioProducto),
+      precioSinIva: toNumber(item.precioSinIva),
+      precioPlusIva: toNumber(item.precioPlusIva),
+      porcentajeDescuento: toNumber(item.porcentajeDescuento),
+      valorDescuento: toNumber(item.valorDescuento),
+      total: toNumber(item.tota),
+      tota: toNumber(item.tota),
+      preciomanual: toNumber(item.preciomanual),
+      codigoAuxiliar: item.codigoAuxiliar || "",
+      precios: (item.valores || []).map((p: any, index: number) => ({
+        name: p.nombre || "",
+        price: toNumber(p.valor),
+        discount: toNumber(p.descuento),
+        select: index === 0 ? true : false,
+      })),
+    };
+  });
+  return detailTransformed as any[];
 }

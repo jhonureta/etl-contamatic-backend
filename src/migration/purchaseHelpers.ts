@@ -330,7 +330,7 @@ export async function findNextAuditCode({
     FROM
         audit
     WHERE
-        FK_COD_EMP = 1;`;
+        FK_COD_EMP = ?;`;
     const auditQueryResult: ResultSet = await conn.query(auditQuery, [companyId]);
     const [auditData]: any[] = auditQueryResult as Array<any>;
     return auditData[0].auditId;
