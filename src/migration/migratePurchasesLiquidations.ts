@@ -10,8 +10,8 @@ type MigratePurchasesParams = {
 	userMap: Record<number, number | null>;
 	mapSuppliers: Record<number, number>;
 	mapProducts: Record<number, number>;
-	mapRetentions: Record<number, number>;
-	retentionsByCode: Map<string, RetentionCodeValue>;
+	oldRetentionCodeMap: Map<string, RetentionCodeValue>;
+	newRetentionIdMap: Record<number, number>;
 	mapCostExpenses: Record<number, number | null>;
 };
 
@@ -89,8 +89,8 @@ export async function migratePurchasesAndLiquidations({
 	userMap,
 	mapSuppliers,
 	mapProducts,
-	mapRetentions,
-	retentionsByCode,
+	oldRetentionCodeMap,
+	newRetentionIdMap,
 	mapCostExpenses
 }: MigratePurchasesParams): Promise<{ purchaseLiquidationIdMap: Record<number, number>; purchaseLiquidationAuditIdMap: Record<number, number> }> {
 
@@ -277,8 +277,8 @@ export async function migratePurchasesAndLiquidations({
 			const previusDetailRet = toJSONArray(p.DOCUMENT_REL_DETAIL);
 			const structureRetention = restructureRetentionDetail({
 				inputDetail: previusDetailRet,
-				mapRetentions,
-				retentionsByCode
+				oldRetentionCodeMap,
+				newRetentionIdMap,
 			});
 
 			let branchId: number = idFirstBranch;
@@ -586,7 +586,7 @@ async function migrateDataMovements({
 			return { movementIdMap };
 		}
 
-		const cardQuery: any = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`, [newCompanyId]);
+		const cardQuery: ResultSet = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`, [newCompanyId]);
 		const [cardData]: any[] = cardQuery as Array<any>;
 		const cardId = cardData[0].ID_TARJETA ?? null;
 
@@ -1147,8 +1147,8 @@ async function migrateImportedObligations({
 				const haber = toNumber(o.importe);
 				setDetailValues.push([
 					idSeat,
-					debe,
 					0,
+					haber,
 					accountDebePlan,
 					null,
 					null
@@ -1463,6 +1463,59 @@ async function migrateAccountingEntriesDetail({
 			console.log(`✅ Batch detalle contable asiento ${i / BATCH_SIZE + 1} procesado`)
 		}
 		return { accountingEntryDetailIdMap };
+	} catch (error) {
+		throw error;
+	}
+}
+
+export async function migratePurchaseObligationDetail({
+	legacyConn,
+	conn,
+	newCompanyId,
+	purchaseLiquidationIdMap,
+	purchaseLiquidationAuditIdMap,
+	mapSuppliers,
+	bankMap,
+	boxMap,
+	userMap,
+	mapPeriodo,
+	mapProject,
+	mapCenterCost,
+	mapAccounts,
+	mapConciliation
+
+}: MigrateMovementsParams) {
+	try {
+
+		let nexAuditId = await findNextAuditCode({ conn, companyId: newCompanyId });
+
+		const movementSequenceQuery: ResultSet = await conn.query(`
+			SELECT
+					IFNULL(MAX(SECU_MOVI) + 1,
+					1) AS nextSeq
+			FROM
+					movements
+			WHERE
+					MODULO = 'CXP' AND FK_COD_EMP = ?
+		`, [newCompanyId]);
+		const [movementData] = movementSequenceQuery as Array<any>;
+		let movementSeq = movementData[0]?.nextSeq ?? 1;
+
+		const cardQuery: ResultSet = await conn.query(`SELECT ID_TARJETA AS idCard FROM cards WHERE FK_COD_EMP = ? LIMIT 1`, [newCompanyId]);
+		const [cardData]: any[] = cardQuery as Array<any>;
+		const cardId = cardData[0].idCard ?? null;
+
+		const accountPlanQuery: ResultSet = await conn.query(
+			`SELECT ID_PLAN, CODIGO_PLAN FROM account_plan WHERE FK_COD_EMP = ?`,
+			[newCompanyId]
+		);
+		const [chartOfAccounts]: any[] = accountPlanQuery as Array<any>;
+
+		const accountMap = new Map(chartOfAccounts.map((a: any) => [a.CODIGO_PLAN, a.ID_PLAN]));
+
+
+		return true;
+
 	} catch (error) {
 		throw error;
 	}

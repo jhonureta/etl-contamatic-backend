@@ -35,7 +35,7 @@ export async function migrateMovementDetail0bligations(
             [newCompanyId]
         );
         const [[{ idCard }]]: any = await conn.query(
-            `SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ? LIMIT 1`,
+            `SELECT ID_TARJETA AS idCard FROM cards WHERE FK_COD_EMP = ? LIMIT 1`,
             [newCompanyId]
         );
 
