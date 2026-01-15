@@ -9,8 +9,8 @@ export interface RetentionCodeValue {
 
 type RestructureRetentionParams = {
   inputDetail: any[];
-  mapRetentions: any;
-  retentionsByCode: Map<string, RetentionCodeValue>;
+  oldRetentionCodeMap: Map<string, RetentionCodeValue>;
+  newRetentionIdMap: Record<number, number>;
 };
 
 type RestructureProductParams = {
@@ -186,7 +186,7 @@ function isDetailOldRetention(data: any): boolean {
   return data && data.length > 0 && data[0].hasOwnProperty('subcero') && data[0].hasOwnProperty('sub12');
 }
 
-function transformRetentionOldToNewVersion(inputDetail: any[], retentionsByCode: Map<string, RetentionCodeValue>): any[] {
+function transformRetentionOldToNewVersion(inputDetail: any[], oldRetentionCodeMap: Map<string, RetentionCodeValue>): any[] {
 
   const listadoRetenciones = inputDetail.filter(
     ({
@@ -195,8 +195,8 @@ function transformRetentionOldToNewVersion(inputDetail: any[], retentionsByCode:
   ).map(item => {
     return {
       codigoRenta: item.renta || '',
-      idRetRenta: retentionsByCode.get(`${item.renta}:RENTA`).id || '',
-      nombreRenta: retentionsByCode.get(`${item.renta}:RENTA`).name || '',
+      idRetRenta: oldRetentionCodeMap.get(`${item.renta}:RENTA`)?.id || '',
+      nombreRenta: oldRetentionCodeMap.get(`${item.renta}:RENTA`)?.name || '',
       porcentajeRenta: item.porcentaje || '',
       subtotalBase0: item.subcero || '0.00',
       subtotalDiferente: item.sub12 || '0.00',
@@ -211,8 +211,8 @@ function transformRetentionOldToNewVersion(inputDetail: any[], retentionsByCode:
   ).map(item => {
     return {
       codigoIva: item.rentaIva || '',
-      idRetIva: retentionsByCode.get(`${item.rentaIva}:IVA`)?.id || '',
-      nombreIva: retentionsByCode.get(`${item.rentaIva}:IVA`)?.name || '',
+      idRetIva: oldRetentionCodeMap.get(`${item.rentaIva}:IVA`)?.id || '',
+      nombreIva: oldRetentionCodeMap.get(`${item.rentaIva}:IVA`)?.name || '',
       porcentajeIva: item.porcentajeIva || '',
       subtotalDiferenteIva: item.noGrabaIva || '0.00',
       valorRetenido: item.valorRetenidoIva || '0.00',
@@ -229,7 +229,7 @@ function transformRetentionOldToNewVersion(inputDetail: any[], retentionsByCode:
   }]
 }
 
-function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): any[] {
+function transformRetentionNewVersion(inputDetail: any[], newRetentionIdMap: Record<number, number>): any[] {
   const {
     listadoRetenciones = [], listadoRetencionesIva = []
   } = inputDetail[0] || {};
@@ -238,10 +238,10 @@ function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): a
     .filter(({
       renta
     }) => renta)
-    .map(retention =>
+    .map((retention: any) =>
     ({
       codigoRenta: retention.renta,
-      idRetRenta: mapRetentions[retention.idRetencionRenta],
+      idRetRenta: newRetentionIdMap[retention.idRetencionRenta] ?? '',
       nombreRenta: retention.nombreRetencionFuente || '',
       porcentajeRenta: retention.porcentaje || '',
       subtotalBase0: retention.subtotalBase0 || '0.00',
@@ -254,16 +254,16 @@ function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): a
     .filter(({
       rentaIva
     }) => rentaIva)
-    .map(retention =>
+    .map((retention: any) =>
     ({
       codigoIva: retention.rentaIva,
-      idRetIva: mapRetentions[retention.idRetencionIva],
+      idRetIva: newRetentionIdMap[retention.idRetencionIva] || '',
       nombreIva: retention.nombreRetencionIva || '',
       porcentajeIva: retention.porcentajeIva || '',
       subtotalDiferenteIva: retention.subtotalDiferenteIva || '0.00',
       valorRetenido: retention.valorRetenidoIva || '0.00',
       impuestos: retention.arraryImpuestos ?
-        retention.arraryImpuestos.filter(impuesto => impuesto.impuestoActivoIva === 1).map(impuesto => ({
+        retention.arraryImpuestos.filter((impuesto: any) => impuesto.impuestoActivoIva === 1).map(impuesto => ({
           codigo: toNumber(impuesto.codigo),
           tarifa: toNumber(impuesto.tarifa),
           total: impuesto.totalImpuestoIva || '0.00'
@@ -279,18 +279,18 @@ function transformRetentionNewVersion(inputDetail: any[], mapRetentions: any): a
 
 export function restructureRetentionDetail({
   inputDetail,
-  mapRetentions,
-  retentionsByCode,
+  oldRetentionCodeMap,
+  newRetentionIdMap,
 }: RestructureRetentionParams): any[] {
   if (isDetailOldRetention(inputDetail)) {
     return transformRetentionOldToNewVersion(
       inputDetail,
-      retentionsByCode
+      oldRetentionCodeMap
     );
   }
   return transformRetentionNewVersion(
     inputDetail,
-    mapRetentions
+    newRetentionIdMap
   );
 }
 

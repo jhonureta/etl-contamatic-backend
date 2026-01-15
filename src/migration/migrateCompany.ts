@@ -19,11 +19,11 @@ import { migrateSales } from './migrateSales';
 import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
-import { migratePurchaseAndLiquidationsMovements, migratePurchasesAndLiquidations } from './migratePurchasesLiquidations';
+import { migratePurchaseAndLiquidationsMovements, migratePurchaseObligationDetail, migratePurchasesAndLiquidations } from './migratePurchasesLiquidations';
 import { migrateBankReconciliation } from './migrateBankReconciliation';
 import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligations';
 import { migrateCustomerAccounting } from './migrateCustomerObligations';
-import { migrateAdvancesCustomers } from './migrateAdvancesCustomers';
+import { migrateAdvancesCustomers, migrateSupplierAdvances } from './migrateAdvances';
 import { migrateSalesRetentions } from './migrateSalesRetentions';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
@@ -400,7 +400,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const { costeExpenseMap: mapRetentions , retentionsByCode } = await migrateRetentions(
+    const { mapRetentions , oldRetentionCodeMap, newRetentionIdMap } = await migrateRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -521,11 +521,17 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapSuppliers,
       mapProducts,
-      mapRetentions,
-      retentionsByCode,
+      oldRetentionCodeMap,
+      newRetentionIdMap,
       mapCostExpenses: costExpenseIdMapping
     });
 
+    const { supplierAdvanceIdMap } = await migrateSupplierAdvances(
+      legacyConn,
+      conn,
+      mapClients
+    );
+    
     await migratePurchaseAndLiquidationsMovements({
       legacyConn,
       conn,
@@ -540,6 +546,23 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       bankMap,
       boxMap,
+      mapConciliation
+    })
+
+    await migratePurchaseObligationDetail({
+      legacyConn,
+      conn,
+      newCompanyId,
+      purchaseLiquidationIdMap,
+      purchaseLiquidationAuditIdMap,
+      mapSuppliers,
+      bankMap,
+      boxMap,
+      userMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
       mapConciliation
     })
 
