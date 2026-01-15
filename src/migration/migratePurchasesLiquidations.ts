@@ -1487,6 +1487,9 @@ export async function migratePurchaseObligationDetail({
 }: MigrateMovementsParams) {
 	try {
 
+		const movementIdMap: Record<number, number> = {};
+		const movementAuditIdMap: Record<number, number> = {};
+
 		let nexAuditId = await findNextAuditCode({ conn, companyId: newCompanyId });
 
 		const movementSequenceQuery: ResultSet = await conn.query(`
@@ -1513,8 +1516,202 @@ export async function migratePurchaseObligationDetail({
 
 		const accountMap = new Map(chartOfAccounts.map((a: any) => [a.CODIGO_PLAN, a.ID_PLAN]));
 
+		const [obligationDetails]: any[] = await legacyConn.query(`
+			SELECT
+					detalles_cuentas.fk_cod_cuenta,
+					detalles_cuentas.FK_COD_GD,
+					detalles_cuentas.fk_cod_cli_c,
+					detalles_cuentas.Tipo_cp,
+					detalles_cuentas.fecha,
+					detalles_cuentas.importe,
+					detalles_cuentas.saldo,
+					IFNULL(
+							movimientos.IMPOR_MOVI,
+							detalles_cuentas.importe
+					) AS IMPOR_MOVI,
+					grupo_detalles_t.IMPORTE_GD AS IMPOR_MOVITOTAL,
+					detalles_cuentas.saldo,
+					CASE detalles_cuentas.forma_pago_cp WHEN 1 THEN 'EFECTIVO' WHEN 2 THEN 'CHEQUE' WHEN 3 THEN 'TRANSFERENCIA' WHEN 5 THEN 'TARJETA' WHEN 7 THEN 'ANTICIPO' WHEN 8 THEN 'CCTACONT' WHEN 16 THEN 'RET-VENTA' WHEN 17 THEN 'NOTA DE CREDITO' ELSE CAST(
+							detalles_cuentas.forma_pago_cp AS CHAR
+					)
+			END AS forma,
+			IFNULL(movimientos.PER_BENE_MOVI, 'MIG') AS PER_BENE_MOVI,
+			detalles_cuentas.fk_cod_cajas,
+			detalles_cuentas.fk_cod_banco,
+			detalles_cuentas.fk_cod_Vemp,
+			detalles_cuentas.NUM_VOUCHER,
+			detalles_cuentas.NUM_LOTE,
+			movimientos.ORIGEN_MOVI,
+			IFNULL(
+					movimientos.FECHA_MOVI,
+					detalles_cuentas.FECH_REG
+			) AS FECHA_MOVI,
+			IFNULL(
+					movimientos.REF_MOVI,
+					detalles_cuentas.documento_cp
+			) AS REF_MOVI,
+			IFNULL(
+					movimientos.FECHA_MANUAL,
+					detalles_cuentas.fecha
+			) AS FECHA_MANUAL,
+			movimientos.FK_CONCILIADO,
+			movimientos.CONCILIADO,
+			movimientos.ID_MOVI,
+			CASE WHEN movimientos.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 0
+			END AS ESTADO_MOVI,
+			IFNULL(movimientos.CAUSA_MOVI, 'EGRESO') AS CAUSA_MOVI,
+			movimientos.TIP_MOVI,
+			movimientos.TIPO_MOVI,
+			NULL AS FK_ASIENTO,
+			NULL AS FK_ARQUEO,
+			NULL AS RECIBO_CAJA,
+			NULL AS NUM_UNIDAD,
+			NULL AS JSON_PAGOS,
+			'CXP' AS MODULO,
+			grupo_detalles_t.FECH_REG,
+			IFNULL(
+					movimientos.CONCEP_MOVI,
+					detalles_cuentas.observacion_cp
+			) AS OBS_MOVI,
+			IFNULL(
+					movimientos.CONCEP_MOVI,
+					detalles_cuentas.observacion_cp
+			) AS CONCEP_MOVI,
+			grupo_detalles_t.SECU_CXC AS SECU_MOVI,
+			movimientos.FK_COD_CAJAS_MOVI,
+			movimientos.FK_COD_BANCO_MOVI
+			FROM
+					cuentascp
+			INNER JOIN detalles_cuentas ON cuentascp.cod_cp = detalles_cuentas.fk_cod_cuenta
+			INNER JOIN grupo_detalles_t ON detalles_cuentas.FK_COD_GD = grupo_detalles_t.ID_GD
+			LEFT JOIN movimientos ON movimientos.FK_COD_CX = grupo_detalles_t.ID_GD
+			WHERE
+					cuentascp.Tipo_cxp = 'CXP' AND forma_pago_cp NOT IN('17', '16')
+			GROUP BY
+					detalles_cuentas.FK_COD_GD
+			ORDER BY
+					cod_detalle
+			DESC;`
+		);
 
-		return true;
+		if (obligationDetails.length === 0) {
+			return { movementIdMap, movementAuditIdMap };
+		}
+		const BATCH_SIZE = 500;
+
+		for (let i = 0; i < obligationDetails.length; i += BATCH_SIZE) {
+			const obligationBatch = obligationDetails.slice(i, i + BATCH_SIZE);
+
+			const auditValues = obligationBatch.map(o => [nexAuditId++, o.forma, newCompanyId]);
+
+			const resultCreateAudit: ResultSet = await conn.query(
+				`INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
+				[auditValues]
+			);
+			const firstAuditId = (resultCreateAudit[0] as ResultSetHeader).insertId;
+
+			const movementValues = obligationBatch.map((obl: any, index: number) => {
+				const auditId = firstAuditId + index;
+				movementIdMap[obl.FK_COD_GD] = auditId;
+
+				let modulo = 'CXP';
+				let origen = 'CXP';
+				let causa = 'EGRESO';
+				let tipMovi = obl.TIP_MOVI;
+				let tipoMovi = obl.TIPO_MOVI;
+				let idPlanCuenta = null;
+
+				if (obl.forma === 'CCTACONT') {
+					const codigoPlan = obl.REF_MOVI?.split('--')[0].trim();
+					idPlanCuenta = accountMap.get(codigoPlan) || null;
+					tipMovi = tipoMovi = 'CCTACONT';
+				} else if (obl.forma === 'RET-VENTA') {
+					tipMovi = tipoMovi = origen = 'RET-VENTA';
+					modulo = 'RETENCION-VENTA';
+				} else if (obl.forma === 'NOTA DE CREDITO') {
+					tipMovi = tipoMovi = 'CREDITO';
+					modulo = 'NCVENTA';
+					origen = 'NOTA CREDITO VENTA';
+				}
+
+				return [
+					bankMap[obl.FK_COD_BANCO_MOVI] ?? null,
+					purchaseLiquidationIdMap[obl.FK_TRAC_MOVI] ?? null,
+					mapConciliation[obl.FK_CONCILIADO] ?? null,
+					userMap[obl.fk_cod_Vemp] ?? null,
+					obl.FECHA_MOVI,
+					obl.FECHA_MANUAL,
+					tipMovi,
+					origen,
+					tipoMovi,
+					obl.REF_MOVI,
+					obl.CONCEP_MOVI,
+					obl.NUM_VOUCHER,
+					obl.NUM_LOTE,
+					causa,
+					modulo,
+					movementSeq++,
+					obl.IMPOR_MOVI,
+					obl.ESTADO_MOVI,
+					obl.PER_BENE_MOVI,
+					obl.CONCILIATED ?? 0,
+					newCompanyId,
+					boxMap[obl.FK_COD_CAJAS_MOVI] ?? null,
+					obl.OBS_MOVI,
+					obl.IMPOR_MOVITOTAL,
+					null, // FK_ASIENTO
+					auditId,
+					null, // FK_ARQUEO
+					(obl.forma === 'TARJETA') ? cardId : null,
+					null, // RECIBO_CAJA
+					idPlanCuenta,
+					null, // NUM_UNIDAD
+					'[]'  // JSON_PAGOS
+				];
+			})
+			const resultCreateMovement = await conn.query(`
+				INSERT INTO movements(
+						FKBANCO,
+						FK_COD_TRAN,
+						FK_CONCILIADO,
+						FK_USER,
+						FECHA_MOVI,
+						FECHA_MANUAL,
+						TIP_MOVI,
+						ORIGEN_MOVI,
+						TIPO_MOVI,
+						REF_MOVI,
+						CONCEP_MOVI,
+						NUM_VOUCHER,
+						NUM_LOTE,
+						CAUSA_MOVI,
+						MODULO,
+						SECU_MOVI,
+						IMPOR_MOVI,
+						ESTADO_MOVI,
+						PER_BENE_MOVI,
+						CONCILIADO,
+						FK_COD_EMP,
+						IDDET_BOX,
+						OBS_MOVI,
+						IMPOR_MOVITOTAL,
+						FK_ASIENTO,
+						FK_AUDITMV,
+						FK_ARQUEO,
+						ID_TARJETA,
+						RECIBO_CAJA,
+						FK_CTAM_PLAN,
+						NUMERO_UNIDAD,
+						JSON_PAGOS
+				)
+				VALUES ?
+			`,[movementValues]);
+			let nextMovementId = (resultCreateMovement[0] as ResultSetHeader).insertId;
+			obligationBatch.forEach(({ COD_TRANS }) => {
+				movementIdMap[COD_TRANS] = nextMovementId++;
+			});
+		}
+		console.log("✅ Migración de detalle de obligaciones correctamente");
 
 	} catch (error) {
 		throw error;
