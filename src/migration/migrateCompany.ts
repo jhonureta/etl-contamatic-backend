@@ -598,12 +598,14 @@ export async function migrateCompany(codEmp: number) {
       bankMap,
       boxMap,
       mapConciliation,
-      mapObligationsCustomers,
+      mapObligationsCustomers.mapObligationsCustomers,
       mapPeriodo,
       mapProject,
       mapCenterCost,
       mapAccounts,
-    )
+    );
+
+    
 
 
     await conn.commit();

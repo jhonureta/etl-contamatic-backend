@@ -3,6 +3,8 @@ export interface oldProductCodeMap {
     precioProducto: number;
 }
 
+
+
 export async function batchInsertProducts(
     legacyConn: any,
     conn: any,

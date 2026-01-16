@@ -178,7 +178,7 @@ export async function migrateMovementDetail0bligations(
                     o.IMPOR_MOVI,
                     o.ESTADO_MOVI,
                     o.PER_BENE_MOVI,
-                    o.CONCILIATED ?? 0,
+                    o.CONCILIATED ?? null,
                     newCompanyId,
                     boxMap[o.FK_COD_CAJAS_MOVI] ?? null,
                     o.OBS_MOVI,

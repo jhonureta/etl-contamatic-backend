@@ -1,6 +1,11 @@
 import { upsertTotaledEntry } from "./migrationTools";
 import { normalizarProducto } from "./normalizador";
 
+export interface oldDetailAcountCodeMap {
+    id: number;
+    valor: number;
+}
+
 export type ProductoNuevo = {
     idProducto: number | null;
     idBodega: number | null;
@@ -170,6 +175,7 @@ DESC;`);
     const BATCH_SIZE = 1000;
     const mapCreditNote: Record<number, number> = {};
     const mapAuditCreditNote: Record<number, number> = {};
+    const mapSalesNoteBound: Record<number, number> = {};
 
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
@@ -227,6 +233,7 @@ DESC;`);
                 const cliente = mapClients[t.FK_PERSON];
 
                 t.FK_AUDIT_REL = mapAuditSales[t.COD_TRAC_FACT] ?? null;
+
 
 
 
@@ -396,8 +403,9 @@ DESC;`);
             let newId = res.insertId;
             for (const s of batch) {
                 mapCreditNote[s.COD_TRANS] = newId++;
+                /*   mapSalesNoteBound[s.COD_TRAC_FACT] = newId++; */
             }
-            console.log(` -> Batch migrado: ${batch.length} ventas`);
+            console.log(` -> Batch migrado: ${batch.length} notas de credito`);
         } catch (err) {
 
             throw err;
@@ -421,6 +429,21 @@ DESC;`);
         mapAuditCreditNote
     )
 
+    /*   legacyConn: any,
+     conn: any,
+     newCompanyId: number,
+     userMap: any,
+     bankMap: Record<number, number | null>,
+     boxMap: Record<number, number | null>,
+     mapConciliation: Record<number, number | null>,
+     mapObligationsCustomers: Record<number, number | null>,
+     mapPeriodo: Record<number, number | null>,
+     mapProject: Record<number, number | null>,
+     mapCenterCost: Record<number, number | null>,
+     mapAccounts: Record<number, number | null>,
+     mapCreditNote: Record<number, number | null>,
+     mapAuditCreditNote: Record<number, number | null> */
+
     return { mapCreditNote, mapAuditCreditNote };
 }
 
@@ -440,13 +463,8 @@ export async function migrateMovementeAdvancesNote(
     mapAccounts: Record<number, number | null>,
     mapCreditNote: Record<number, number | null>,
     mapAuditCreditNote: Record<number, number | null>
-    /* mapEntryAccount: Record<number, number | null> */
-): Promise<{ mapNoteMovements: Record<number, number>; mapNoteAuditSales: Record<number, number> }> {
-    console.log("Migrando retenciones en ventas...");
-
-
-
-    const mapRetMovements: Record<number, number> = {};
+): Promise<{ mapNoteMovements: Record<number, number> }> {
+    console.log("Migrando notas de credito en ventas...");
 
     const [rows] = await legacyConn.query(`SELECT
     COD_TRAC,
@@ -546,7 +564,7 @@ SECU_DET_ANT,
 FDP_DET_ANT,
 OBS_DET_ANT,
 IMPOR_DET_ANT,
-m.ID_MOVI,detalle_anticipos.ID_DET_ANT
+m.ID_MOVI,detalle_anticipos.ID_DET_ANT, transacciones.COD_TRAC_FACT
 FROM
     transacciones
 LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
@@ -562,22 +580,29 @@ DESC;`);
 
     const ventas = rows as any[];
     if (!ventas.length) {
-        throw new Error(" -> No hay retenciones para migrar.");
+        throw new Error(" -> No hay notas de credito para migrar.");
     }
     const BATCH_SIZE = 1000;
-    const mapNoteMovements: Record<number, number> = {};
-    const mapNoteAuditSales: Record<number, number> = {};
+    let mapNoteMovements: Record<number, number> = {};
+    const oldDetailAcountCodeMap = [];
+
+    const [[{ nextSecu }]]: any = await conn.query(
+        `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'NCVENTA' AND FK_COD_EMP = ?`,
+        [newCompanyId]
+    );
+    let secuenciaMovimiento = nextSecu;
+
+    /* const mapNoteAuditSales: Record<number, number> = {}; */
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
         try {
-
             // Preparar valores para INSERT en batch
             const values = batch.map((o, index) => {
                 console.log(`transformando y normalizando movimientos nota de credito ${o.NUM_TRACNOT}`);
                 // Lógica de Negocio
                 let idPlanCuenta = null;
-                const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
-
+                const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
+                o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
                 return [
                     bankMap[o.FKBANCO] ?? null,
                     mapCreditNote[o.COD_TRAC] ?? null,
@@ -594,11 +619,11 @@ DESC;`);
                     o.NUM_LOTE,
                     o.CAUSA_MOVI,
                     o.MODULO,
-                    o.SECU_MOVI,
+                    secuenciaMovimiento++,
                     o.IMPOR_MOVI,
                     o.ESTADO_MOVI,
                     o.PER_BENE_MOVI,
-                    o.CONCILIATED ?? 0,
+                    o.CONCILIATED ?? null,
                     newCompanyId,
                     boxMap[o.IDCAJA] ?? null,
                     o.OBS_MOVI,
@@ -612,6 +637,8 @@ DESC;`);
                     null, // NUM_UNIDAD
                     '[]'  // JSON_PAGOS
                 ];
+
+
 
             });
             // Insertar clientes en batch
@@ -632,6 +659,13 @@ DESC;`);
             let currentMovId = resMov.insertId;
             batch.forEach(o => {
                 mapNoteMovements[o.COD_TRAC] = currentMovId++;
+                oldDetailAcountCodeMap.push({
+                    idFactura: o.COD_TRAC_FACT,
+                    importe: o.IMPOR_MOVI,
+                    fecha: o.FECHA_MANUAL,
+                    idTrn: o.COD_TRAC,
+                    audit: mapNoteMovements[o.COD_TRAC]
+                });
             });
             console.log(` -> Batch migrado: ${batch.length} notas de credito por anticipos.`);
 
@@ -659,7 +693,8 @@ DESC;`);
         legacyConn,
         conn,
         mapObligationsCustomers,
-        mapNoteMovementsFull
+        mapNoteMovementsFull,
+        oldDetailAcountCodeMap
     );
 
     const mapEntryAccount = await migrateAccountingEntriesCustomerObligations(
@@ -682,7 +717,7 @@ DESC;`);
     )
 
 
-    return { mapNoteMovements, mapNoteAuditSales };
+    return { mapNoteMovements };
 }
 
 export async function migrateRetentionsCredit(
@@ -694,15 +729,17 @@ export async function migrateRetentionsCredit(
     boxMap: Record<number, number | null>,
     mapConciliation: Record<number, number | null>,
     mapCreditNote: Record<number, number | null>,
-    mapNoteMovements: Record<number, number | null>,
     mapAuditCreditNote: Record<number, number | null>,
-
+    mapNoteMovements: Record<number, number | null>,
 
 ): Promise<{ mapNoteMovementsFull: Record<number, number> }> {
-    console.log("Migrando retenciones en ventas por credito...");
+
+
+    console.log("Migrando notas por credito...");
     /*  const mapRetMovements: Record<number, number> = {}; */
     const [rows] = await legacyConn.query(`SELECT
     COD_TRAC,
+    NUM_TRACNOT,
     COD_TRAC AS FK_COD_TRAN,
     m.FK_COD_BANCO_MOVI AS FKBANCO,
     m.FK_CONCILIADO AS FK_CONCILIADO,
@@ -717,38 +754,54 @@ export async function migrateRetentionsCredit(
     IFNULL(
         FECHA_MANUAL,
         transacciones.FEC_TRAC
-    ) FECHA_MANUAL,
-    CASE WHEN COALESCE(ID_DET_ANT, '') <> '' THEN 'ANTICIPO' WHEN m.TIP_MOVI IS NULL THEN 'RET-VENTA' ELSE m.TIP_MOVI
-END AS TIP_MOVI,
-'RET-VENTA' AS ORIGEN_MOVI,
-CASE WHEN COALESCE(ID_DET_ANT, '') <> '' THEN 'ANTICIPO' WHEN m.TIP_MOVI IS NULL THEN 'RET-VENTA' WHEN m.TIP_MOVI = 'BANCOS' THEN 'DEVBANCO' WHEN m.TIP_MOVI = 'CAJAS' THEN 'DEVCAJA' ELSE m.TIP_MOVI
-END AS TIPO_MOVI,
-CONCAT(
-    'RETENCION DE VENTA N°: ',
-    IFNULL(NULLIF(secuencialFacturaRet, ''), 'S/N')
-) AS REF_MOVI
-,
-IFNULL(CONCEP_MOVI, secuencialFacturaRet) AS CONCEP_MOVI,
+    ) AS FECHA_MANUAL,
+   'ANTICIPO' AS  TIP_MOVI,
+IFNULL(
+    m.ORIGEN_MOVI,
+    'NOTA CREDITO VENTA'
+) AS ORIGEN_MOVI,
+'ANTICIPO' AS TIPO_MOVI,
+IFNULL(CONCEP_MOVI, OBS_DET_ANT) AS REF_MOVI,
+IFNULL(
+    transacciones.NUM_TRACNOT,
+    OBS_DET_ANT
+) AS CONCEP_MOVI,
 NULL AS NUM_VOUCHER,
 NULL AS NUM_LOTE,
 IFNULL(CAUSA_MOVI, 'INGRESO') AS CAUSA_MOVI,
-'RETENCION-VENTA' as MODULO,NULL AS SECU_MOVI, 
-transacciones.TOTPAG_TRAC AS IMPOR_MOVI,
- 1 as ESTADO_MOVI, 
-   IFNULL(m.PER_BENE_MOVI, 'MIG') AS PER_BENE_MOVI,
+'NCVENTA' AS MODULO,
+detalle_anticipos.SECU_DET_ANT AS SECU_MOVI,
+IFNULL(
+    m.IMPOR_MOVI,
+    TOTPAG_TRAC
+) AS IMPOR_MOVI,
+CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 1
+END AS ESTADO_MOVI,
+IFNULL(
+    m.PER_BENE_MOVI,
+    clientes.NOM_CLI
+) AS PER_BENE_MOVI,
 NULL AS FK_COD_EMP,
- m.FK_CONCILIADO, m.CONCILIADO,
+m.FK_CONCILIADO,
+m.CONCILIADO,
 FK_COD_CAJAS_MOVI AS IDCAJA,
-cabecera_compra AS DOCUMENT_REL_DETAIL,
-CONCAT(
-    'RETENCION DE VENTA N°: ',
-    IFNULL(NULLIF(secuencialFacturaRet, ''), 'S/N')
+IFNULL(
+    transacciones.OBS_TRAC,
+    m.CONCEP_MOVI
 ) AS OBS_MOVI,
-
-transacciones.TOTPAG_TRAC AS IMPOR_MOVITOTAL,
+IFNULL(
+    m.IMPOR_MOVI,
+    TOTPAG_TRAC
+) AS IMPOR_MOVITOTAL,
 NULL AS FK_ASIENTO,
-NULL AS FK_AUDITMV,NULL AS FK_ARQUEO,NULL AS ID_TARJETA, NULL AS RECIBO_CAJA,NULL AS FK_CTAM_PLAN,NULL AS NUMERO_UNIDAD,NULL AS JSON_PAGOS,
-SUBSTRING(secuencialFacturaRet, 9, 9) AS SECUENCIA_REL_DOC,
+NULL AS FK_AUDITMV,
+NULL AS FK_ARQUEO,
+NULL AS ID_TARJETA,
+NULL AS RECIBO_CAJA,
+NULL AS FK_CTAM_PLAN,
+NULL AS NUMERO_UNIDAD,
+NULL AS JSON_PAGOS,
+SUBSTRING(NUM_TRACNOT, 9, 9) AS SECUENCIA_REL_DOC,
 transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
 YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
 MONTH(FEC_TRAC) AS FEC_MES_TRAC,
@@ -756,48 +809,41 @@ FEC_TRAC AS FEC_TRAC,
 fechaFacturaRet AS FEC_REL_TRAC,
 FEC_MERC_TRAC AS FEC_MERC_TRAC,
 METPAG_TRAC,
+cabecera_compra AS DOCUMENT_REL_DETAIL,
 OBS_TRAC,
 FK_USU_CAJA AS FK_USER_VEND,
 FK_COD_CLI AS FK_PERSON,
 estado_compra AS ESTADO_REL,
 SUB_TRAC AS SUB_TRAC,
-IVA_TRAC,
+IVA_TRAC AS IVA_TRAC,
 SUB0_TRAC,
 SUB12_TRAC,
 TOTRET_TRAC AS TOT_RET_TRAC,
 TOTPAG_TRAC AS TOT_PAG_TRAC,
 NULL AS FECHA_AUTORIZACION_REL,
-CASE WHEN secuencialFacturaRet <> '' THEN 'retencion-venta' ELSE NULL
-END AS TIP_DOC_REL,
+NULL AS TIP_DOC_REL,
 NULL AS FK_AUDITTR,
 fecha AS FECHA_REG,
 NULL AS PUNTO_EMISION_REC,
 fechaAnulacion AS FECHA_ANULACION,
 NULL AS FK_AUDIT_REL,
-secuencialFacturaRet AS NUM_REL_DOC,
+NUM_TRACNOT AS NUM_REL_DOC,
 detalle_anticipos.ID_DET_ANT,
 SECU_DET_ANT,
 FDP_DET_ANT,
 OBS_DET_ANT,
 IMPOR_DET_ANT,
-m.ID_MOVI,
-CONCAT(
-    'RETENCION DE VENTA N°: ',
-    IFNULL(NULLIF(secuencialFacturaRet, ''), 'S/N')
-) AS CONCEP_MOVI, NUM_TRACNOT
-
+m.ID_MOVI,detalle_anticipos.ID_DET_ANT
 FROM
     transacciones
 LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
-LEFT JOIN movimientos AS m
-ON
-    m.FK_TRAC_MOVI = transacciones.COD_TRAC AND m.CONCEP_MOVI LIKE '%RETENCION%'
+LEFT JOIN clientes on clientes.COD_CLI = transacciones.FK_COD_CLI
+LEFT JOIN movimientos m ON  m.FK_TRAC_MOVI = transacciones.COD_TRAC
 WHERE
-    transacciones.TIP_TRAC IN(
-        'Electronica',
-        'Fisica',
-        'comprobante-ingreso'
-    ) AND secuencialFacturaRet <> '' AND (detalle_anticipos.ID_DET_ANT IS  NULL or detalle_anticipos.ID_DET_ANT = '') and  (m.ID_MOVI IS  NULL or m.ID_MOVI = '')
+    transacciones.TIP_TRAC IN('nota') AND
+      ( (detalle_anticipos.ID_DET_ANT IS NOT NULL AND detalle_anticipos.ID_DET_ANT <> '')
+             OR (m.ID_MOVI IS NOT NULL AND m.ID_MOVI  <> '')
+          )
 ORDER BY
     COD_TRAC
 DESC;`);
@@ -809,13 +855,14 @@ DESC;`);
     if (!ventas.length) {
         throw new Error(" -> No hay retenciones para migrar.");
     }
-    const mapNoteMovementsFull: Record<number, number> = {};
+    /* const mapNoteMovementsFull= mapNoteMovements; */
+    const mapNoteMovementsFull: Record<number, number> = { ...mapNoteMovements };
 
     const BATCH_SIZE = 1000;
 
 
     const [[{ nextSecu }]]: any = await conn.query(
-        `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'RETENCION-VENTA' AND FK_COD_EMP = ?`,
+        `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'NCVENTA' AND FK_COD_EMP = ?`,
         [newCompanyId]
     );
     let secuenciaMovimiento = nextSecu;
@@ -830,8 +877,7 @@ DESC;`);
                 // Lógica de Negocio
                 let idPlanCuenta = null;
                 const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
-
-
+                o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
 
                 return [
                     bankMap[o.FKBANCO] ?? null,
@@ -853,7 +899,7 @@ DESC;`);
                     o.IMPOR_MOVI,
                     o.ESTADO_MOVI,
                     o.PER_BENE_MOVI,
-                    o.CONCILIATED ?? 0,
+                    o.CONCILIATED ?? null,
                     newCompanyId,
                     boxMap[o.IDCAJA] ?? null,
                     o.OBS_MOVI,
@@ -904,10 +950,16 @@ export async function migratePaymentDetails(
     conn: any,
     mapObligationsCustomers: Record<number, number | null>,
     mapNoteMovementsFull: Record<number, number | null>,
+    oldDetailAcountCodeMap: any
 ): Promise<{
-
     mapDetailObligationsAplicate: Record<number, number>
 }> {
+
+    /*  legacyConn,
+            conn,
+            mapObligationsCustomers,
+            mapNoteMovementsFull */
+
     console.log("🚀 Migrando movimientos  por retenciones");
 
 
@@ -941,13 +993,31 @@ export async function migratePaymentDetails(
 
         if (!rows.length) return { mapDetailObligationsAplicate };
 
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 500; console.log(mapNoteMovementsFull);
 
+
+        //oldDetailAcountCodeMap
+        console.log(oldDetailAcountCodeMap);
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
             const batch = rows.slice(i, i + BATCH_SIZE);
             const movementValues = batch.map((o, index) => {
                 const idCuenta = mapObligationsCustomers[o.fk_cod_cuenta];
-                const idMovimiento = mapNoteMovementsFull[o.COD_TRAC];
+
+
+                let idFactNote = null;
+                for (let i = 0; i < oldDetailAcountCodeMap.length; i++) {
+
+                    const importeOld = Number(oldDetailAcountCodeMap[i].importe).toFixed(2);
+                    const importeNew = Number(o.importe).toFixed(2);
+                    console.log(Number(oldDetailAcountCodeMap[i].idFactura), Number(o.COD_TRAC), importeOld, importeNew);
+                    if (Number(oldDetailAcountCodeMap[i].idFactura) === Number(o.COD_TRAC) && importeOld === importeNew) {
+
+                        idFactNote = oldDetailAcountCodeMap[i].idTrn;
+                        break;
+                    }
+
+                }
+                const idMovimiento = idFactNote != null ? mapNoteMovementsFull[idFactNote] : null;
 
                 return [
                     idCuenta,
@@ -958,7 +1028,7 @@ export async function migratePaymentDetails(
                     o.nuevo_saldo
                 ];
             });
-
+            console.log(movementValues);
             const [resMov]: any = await conn.query(
                 `INSERT INTO account_detail (
                     FK_COD_CUENTA, FK_ID_MOVI, FECHA_REG, IMPORTE, SALDO, NEW_SALDO
@@ -991,6 +1061,14 @@ export async function migrateAccountingEntriesCustomerObligations(
 ): Promise<{
     mapEntryAccount: Record<number, number>
 }> {
+
+    /* legacyConn,
+      conn,
+      newCompanyId,
+      mapNoteMovementsFull,
+      mapPeriodo,
+      mapAuditCreditNote */
+
     console.log("🚀 Migrando encabezado de asiento contables retenciones..........");
     try {//IMPORTE_GD
         const mapEntryAccount: Record<number, number> = {};
