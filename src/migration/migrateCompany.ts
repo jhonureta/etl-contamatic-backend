@@ -459,10 +459,10 @@ export async function migrateCompany(codEmp: number) {
       mapProducts
     );
 
-    const {mapSales, mapAuditSales} = await migrateSales(
+    const { mapSales, mapAuditSales } = await migrateSales(
       legacyConn,
       conn,
-      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions,oldRetentionCodeMap, newRetentionIdMap);
+      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions, oldRetentionCodeMap, newRetentionIdMap);
 
     //MIGRACION DE CONCILIACION BANCARIA
 
@@ -593,9 +593,16 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapClients,
       mapProducts,
-      mapRetentions,
       oldProductCodeMap,
-      mapAuditSales
+      mapAuditSales,
+      bankMap,
+      boxMap,
+      mapConciliation,
+      mapObligationsCustomers,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
     )
 
 
