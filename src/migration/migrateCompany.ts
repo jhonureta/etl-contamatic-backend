@@ -533,7 +533,7 @@ export async function migrateCompany(codEmp: number) {
       mapClients
     );
 
-    await migratePurchaseAndLiquidationsMovements({
+    const { purchaseLiquidationObligationIdMap } = await migratePurchaseAndLiquidationsMovements({
       legacyConn,
       conn,
       newCompanyId,
@@ -550,13 +550,12 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
-    /* await migratePurchaseObligationDetail({
+    await migratePurchaseObligationDetail({
       legacyConn,
       conn,
       newCompanyId,
       purchaseLiquidationIdMap,
-      purchaseLiquidationAuditIdMap,
-      mapSuppliers,
+      purchaseLiquidationObligationIdMap,
       bankMap,
       boxMap,
       userMap,
@@ -564,8 +563,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-      mapConciliation
-    }) */
+      mapConciliation,
+    }) 
 
 
     const mapRetentionsMov = await migrateSalesRetentions(
