@@ -85,20 +85,6 @@ type MigratePurchaseObligationDetailParams = Omit<MigrateMovementsParams, 'purch
 	purchaseLiquidationObligationIdMap: Record<number, number>;
 }
 
-// legacyConn,
-// 	conn,
-// 	newCompanyId,
-// 	purchaseLiquidationIdMap,
-// 	purchaseLiquidationObligationIdMap,
-// 	bankMap,
-// 	boxMap,
-// 	userMap,
-// 	mapPeriodo,
-// 	mapProject,
-// 	mapCenterCost,
-// 	mapAccounts,
-// 	mapConciliation,
-
 type MigrateDetailsOfObligationsParams = {
 	legacyConn: Connection;
 	conn: Connection;
