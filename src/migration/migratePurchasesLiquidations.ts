@@ -668,7 +668,7 @@ async function migrateDataMovements({
 					m.FK_ASIENTO,
 					transAuditId,
 					m.FK_ARQUEO,
-					cardId,
+					m.TIPO_MOVI === 'TARJETA' ? cardId : null,
 					m.RECIBO_CAJA,
 					idPlanAccount,
 					m.NUM_UNIDAD,
