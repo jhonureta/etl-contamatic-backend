@@ -8,7 +8,8 @@ export async function migrateShippingGuide({
   mapProducts,
   branchMap,
   userNameIdMap,
-  clientNameIdMap
+  clientNameIdMap,
+  vehicleIdMap
 }) {
   try {
     const [shippingGuide]: any[] = await legacyConn.query(`
@@ -97,9 +98,13 @@ export async function migrateShippingGuide({
       g.P_PARTIDA,
       g.P_LLEGADA,
       g.H_SALIDA,
-      g.H_LLEGADA
+      g.H_LLEGADA,
+      v.COD_VEH,
+      v.PLACA
       FROM
           guia_remision g
+      JOIN vehiculo v ON
+          g.vehiculo = v.COD_VEH
       LEFT JOIN transacciones tr ON
           g.FK_COD_TRANSACCION = tr.COD_TRAC
       ORDER BY
@@ -118,14 +123,14 @@ export async function migrateShippingGuide({
         SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
     FROM
         sucursales;`;
-  
+
     const [sequentialBranches]: any[] = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
-  
+
     let idFirstBranch: number | null = null;
     if (sequentialBranches && sequentialBranches.length > 0) {
       idFirstBranch = Number(sequentialBranches[0].COD_SURC);
     }
-  
+
     const electronicSequences = new Map<string, number>();
     sequentialBranches.forEach((branch: any, index: number) => {
       electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
@@ -146,7 +151,7 @@ export async function migrateShippingGuide({
     }
     if (defaultCustomer) {
       defaultCustomerId = defaultCustomer.COD_CLI;
-    } 
+    }
 
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
@@ -165,7 +170,7 @@ export async function migrateShippingGuide({
 
       const shippingGuideValues = batch.map((shippingGuide, index: number) => {
         console.log(`transformando y normalizando guias ${shippingGuide.NUM_TRANS}`);
-      
+
         const userId = userNameIdMap[shippingGuide.NAME_USER?.toUpperCase()] || defaultUserId;
         const clientId = clientNameIdMap[shippingGuide.NAME_CLIENT?.toUpperCase()] || defaultCustomerId;
         const productDetails = toJSONArray(shippingGuide.DOCUMENT_DETAIL);
@@ -186,7 +191,7 @@ export async function migrateShippingGuide({
           idFirstBranch
         );
 
-        const  detailedShippingGuide = generateDetailShippingGuide(
+        const detailedShippingGuide = generateDetailShippingGuide(
           shippingGuide.NUM_TRANS,
           shippingGuide.NUM_FACTURA,
           shippingGuide.NUM_AUTORIZACION,
@@ -202,7 +207,7 @@ export async function migrateShippingGuide({
           '1234567891', // cedula de destinatario
           '1234567891', // cedula de transportista
           shippingGuide.NAME_USER, // nombre del transportista
-          'PDB5547', // placa del vehiculo
+          shippingGuide.PLACA, // placa del vehiculo
           clientId, // destinatario
           carrierId, // transportista
           branchId, // sucursal
@@ -354,7 +359,7 @@ export async function migrateShippingGuide({
             OBS_AUXILIAR,
             OBS_ORDEN
         ) VALUES ?
-      `,[shippingGuideValues]);
+      `, [shippingGuideValues]);
       let newId = resCreateShippingGuide.insertId;
       for (const s of batch) {
         shippingGuideIdMap[s.COD_TRANS] = newId++;
@@ -362,7 +367,7 @@ export async function migrateShippingGuide({
       console.log(` -> Batch migrado: ${batch.length} guías de envío`);
     }
     return { shippingGuideIdMap, shippingGuideAuditIdMap };
-  }catch (error) {
+  } catch (error) {
     console.error('Error al migrar guías de envío:', error);
     throw error;
   }
