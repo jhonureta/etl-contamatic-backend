@@ -338,3 +338,49 @@ export async function findNextAuditCode({
     throw err;
   }
 }
+
+export async function findFirstDefaultUser({
+  legacyConn
+}){
+  try {
+    const userQuery = `
+      SELECT
+          COD_USUEMP,
+          IDE_USUEMP,
+          NOM_USUEMP,
+          TEL_USUEMP,
+          EMA_USUEMP,
+          ALI_USUEMP  
+      FROM
+          usuarios
+      ORDER BY COD_USUEMP ASC LIMIT 1`;
+    const userQueryResult: ResultSet = await legacyConn.query(userQuery );
+    const [user]: any[] = userQueryResult as Array<any>;
+    return user;
+  } catch (err) {
+    throw err;
+  }
+}
+
+export async function findFirstDefaultCustomer({
+  legacyConn
+}){
+  try {
+    const customerQuery = `
+      SELECT
+          COD_CLI,
+          TIP_IDENCLI,
+          NOM_USUEMP,
+          CED_CLI,
+          REL_CLI,
+          NOM_CLI  
+      FROM
+          COD_CLI
+      ORDER BY COD_USUEMP ASC LIMIT 1`;
+    const customerQueryResult: ResultSet = await legacyConn.query(customerQuery);
+    const [customer]: any[] = customerQueryResult as Array<any>;
+    return customer;
+  } catch (err) {
+    throw err;
+  }
+} 
