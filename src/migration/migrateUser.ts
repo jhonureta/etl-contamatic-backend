@@ -39,7 +39,7 @@ async function batchInsertUsers(
 
 export async function migrateUsersForCompany(
     legacyConn: any, conn: any, newCompanyId: number, dataBaseIds: any
-): Promise<Record<number, number>> {
+): Promise<{ userMap: Record<number, number>, userNameIdMap: Record<string, number> }> {
 
     console.log("Migrando usuarios...");
 
@@ -99,7 +99,7 @@ export async function migrateUsersForCompany(
 
    
     const detailValues = [];
-
+    const userNameIdMap: Record<number, number> = {};
     for (const u of users) {
         const branchId = dataBaseIds.branchMap[u.idSucursal];
         const userId = userMap[u.CCOD_USUEMP];
@@ -109,6 +109,7 @@ export async function migrateUsersForCompany(
             detailValues.push([branchId, userId]);
             detailSet.add(key);
         }
+        userNameIdMap[u.NOM_USUEMP?.toUpperCase()] = userId;
     }
 
     if (detailValues.length > 0) {
@@ -120,5 +121,5 @@ export async function migrateUsersForCompany(
 
     console.log(` -> Detalle usuarios insertados: ${detailValues.length}`);
 
-    return userMap;
+    return { userMap , userNameIdMap };
 }
