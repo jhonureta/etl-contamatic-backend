@@ -4,7 +4,13 @@ export async function migrateSales(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
-    branchMap: any, userMap: any, mapClients: any, mapProducts: any, mapRetentions: any
+    branchMap: any,
+    userMap: any,
+    mapClients: any,
+    mapProducts: any,
+    mapRetentions: any,
+    oldRetentionCodeMap: any,
+    newRetentionIdMap: any
 ): Promise<{ mapSales: Record<number, number>; mapAuditSales: Record<number, number> }> {
     console.log("Migrando ventas...");
 
@@ -224,7 +230,7 @@ FROM
                 .filter((ret: any) => ret && ret.renta) // Filtrar nulos/undefined y renta vacío
                 .map((ret: any) => ({
                     codigoRenta: ret.renta || null,
-                    idRetRenta: mapRetentions[ret.idRetencionRenta],
+                    idRetRenta: newRetentionIdMap[ret.idRetencionRenta],
                     nombreRenta: ret.nombreRetencionFuente || null,
                     porcentajeRenta: formatDecimal(ret.porcentaje),
                     subtotalBase0: formatDecimal(ret.subtotalBase0),
@@ -247,7 +253,7 @@ FROM
 
                     return {
                         codigoIva: ret.rentaIva || null,
-                        idRetIva: mapRetentions[ret.idRetencionIva],
+                        idRetIva: newRetentionIdMap[ret.idRetencionIva],
                         nombreIva: ret.nombreRetencionIva || null,
                         porcentajeIva: formatDecimal(ret.porcentajeIva),
                         subtotalDiferenteIva: formatDecimal(ret.subtotalDiferenteIva),
@@ -338,8 +344,8 @@ FROM
                     t.PUNTO_EMISION_DOC,
                     t.SECUENCIA_DOC,
                     t.SECUENCIA_REL_DOC,
-                    t.CLAVE_TRANS.trim(),
-                    t.CLAVE_REL_TRANS.trim(),
+                    t.CLAVE_TRANS,
+                    t.CLAVE_REL_TRANS,
                     t.TIP_DET_DOC,
                     t.FEC_PERIODO_TRAC,
                     t.FEC_MES_TRAC,

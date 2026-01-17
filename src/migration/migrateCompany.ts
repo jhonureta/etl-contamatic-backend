@@ -19,12 +19,13 @@ import { migrateSales } from './migrateSales';
 import { migrateSuppliersForCompany } from './migrateSuppliers';
 import { migrateUsersForCompany } from './migrateUser';
 import { migrateWarehouseDetails } from './migrateWarehouseDetails';
-import { migratePurchaseAndLiquidationsMovements, migratePurchasesAndLiquidations } from './migratePurchasesLiquidations';
+import { migratePurchaseAndLiquidationsMovements, migratePurchaseObligationDetail, migratePurchasesAndLiquidations } from './migratePurchasesLiquidations';
 import { migrateBankReconciliation } from './migrateBankReconciliation';
 import { migrateMovementDetail0bligations } from './migrateMovementDetail0bligations';
 import { migrateCustomerAccounting } from './migrateCustomerObligations';
-import { migrateAdvancesCustomers } from './migrateAdvancesCustomers';
+import { migrateAdvancesCustomers, migrateSupplierAdvances } from './migrateAdvances';
 import { migrateSalesRetentions } from './migrateSalesRetentions';
+import { migrateCreditNote } from './migrateSalesCreditNote';
 import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
 export async function migrateCompany(codEmp: number) {
@@ -395,14 +396,14 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const { costeExpenseMap: mapCostExpenses, costExpenseIdMapping} = await migrateExpensesDetails(
+    const { costeExpenseMap: mapCostExpenses, costExpenseIdMapping } = await migrateExpensesDetails(
       legacyConn,
       conn,
       newCompanyId,
       mapAccounts
     );
 
-    const { costeExpenseMap: mapRetentions , retentionsByCode } = await migrateRetentions(
+    const { mapRetentions, oldRetentionCodeMap, newRetentionIdMap } = await migrateRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -443,7 +444,7 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-    const mapProducts = await batchInsertProducts(
+    const { mapProducts, oldProductCodeMap } = await batchInsertProducts(
       legacyConn,
       conn,
       newCompanyId,
@@ -460,10 +461,10 @@ export async function migrateCompany(codEmp: number) {
       mapProducts
     );
 
-    const mapsSales = await migrateSales(
+    const { mapSales, mapAuditSales } = await migrateSales(
       legacyConn,
       conn,
-      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions);
+      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions, oldRetentionCodeMap, newRetentionIdMap);
 
     //MIGRACION DE CONCILIACION BANCARIA
 
@@ -486,8 +487,8 @@ export async function migrateCompany(codEmp: number) {
       legacyConn,
       conn,
       newCompanyId,
-      mapsSales.mapSales,
-      mapsSales.mapAuditSales,
+      mapSales,
+      mapAuditSales,
       mapClients,
       bankMap,
       boxMap,
@@ -503,7 +504,7 @@ export async function migrateCompany(codEmp: number) {
       legacyConn,
       conn,
       newCompanyId,
-      mapsSales.mapSales,
+      mapSales,
       bankMap,
       boxMap,
       userMap,
@@ -539,7 +540,7 @@ export async function migrateCompany(codEmp: number) {
     })
 
     //==  Migracion de Compras y liquidaciones ===/
-    const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap} = await migratePurchasesAndLiquidations({
+    const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap } = await migratePurchasesAndLiquidations({
       legacyConn,
       conn,
       newCompanyId,
@@ -547,10 +548,16 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapSuppliers,
       mapProducts,
-      mapRetentions,
-      retentionsByCode,
+      oldRetentionCodeMap,
+      newRetentionIdMap,
       mapCostExpenses: costExpenseIdMapping
     });
+
+    const { supplierAdvanceIdMap } = await migrateSupplierAdvances(
+      legacyConn,
+      conn,
+      mapClients
+    );
 
     await migratePurchaseAndLiquidationsMovements({
       legacyConn,
@@ -569,7 +576,24 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
-  
+    /* await migratePurchaseObligationDetail({
+      legacyConn,
+      conn,
+      newCompanyId,
+      purchaseLiquidationIdMap,
+      purchaseLiquidationAuditIdMap,
+      mapSuppliers,
+      bankMap,
+      boxMap,
+      userMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      mapConciliation
+    }) */
+
+
     const mapRetentionsMov = await migrateSalesRetentions(
       legacyConn,
       conn,
@@ -578,16 +602,38 @@ export async function migrateCompany(codEmp: number) {
       bankMap,
       boxMap,
       mapConciliation,
-      mapsSales.mapSales,
+      mapSales,
       mapObligationsCustomers.mapObligationsCustomers,
       mapPeriodo,
       mapProject,
       mapCenterCost,
       mapAccounts,
       mapRetentions
-    ); 
+    );
 
-  
+    const mapCreditNoteMigrate = await migrateCreditNote(
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapClients,
+      mapProducts,
+      oldProductCodeMap,
+      mapAuditSales,
+      bankMap,
+      boxMap,
+      mapConciliation,
+      mapObligationsCustomers.mapObligationsCustomers,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+    );
+
+    
+
+
     await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
@@ -606,9 +652,9 @@ export async function migrateCompany(codEmp: number) {
     console.log("MAPEO MARCAS MIGRADAS:", Object.keys(mapBrand).length);
     console.log("MAPEO PRODUCTOS MIGRADOS:", Object.keys(mapProducts).length);
     console.log("DETALLE DE BODEGA MIGRADOS:", Object.keys(mapDetWare).length);
-    console.log("VENTAS MIGRADAS:", Object.keys(mapsSales.mapSales).length);
+    console.log("VENTAS MIGRADAS:", Object.keys(mapSales).length);
     console.log("CONCILIACION MIGRADA :", Object.keys(mapConciliation).length);
-    console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapsSales.mapAuditSales).length);
+    console.log("AUDITORIA DE VENTAS MIGRADAS:", Object.keys(mapAuditSales).length);
     console.log("COMPRAS  Y LIQUIDACIONES MIGRADAS:", Object.keys(purchaseLiquidationIdMap).length);
     console.log("AUDITORIA DE COMPRAS Y LIQUIDACIONES MIGRADAS:", Object.keys(purchaseLiquidationAuditIdMap).length);
     console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);

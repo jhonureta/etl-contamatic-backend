@@ -1,8 +1,9 @@
 import { RetentionCodeValue } from "./purchaseHelpers";
 
 type BuildResult = {
-  costeExpenseMap: Record<number, number>;
-  retentionsByCode: Map<string, RetentionCodeValue>;
+  mapRetentions: Record<number, number>;
+  oldRetentionCodeMap: Map<string, RetentionCodeValue>;
+  newRetentionIdMap: Record<number, number>;
 };
 
 export async function migrateRetentions(
@@ -12,9 +13,9 @@ export async function migrateRetentions(
     mapAccounts: Record<number, number | null>
 ): Promise<BuildResult> {
 
-    const costeExpenseMap: Record<number, number> = {};
-    const retentionsByCode = new Map<string, RetentionCodeValue>();
-
+    const mapRetentions: Record<number, number> = {};
+    const oldRetentionCodeMap = new Map<string, RetentionCodeValue>();
+    const newRetentionIdMap: Record<number, number> = {};
     try {
         // 1. Obtener retenciones existentes
         const costQuery = `
@@ -92,11 +93,12 @@ export async function migrateRetentions(
                             item.estado_CG
                         ]
                     );
-                    costeExpenseMap[item.id] = insertDetail.insertId;
-                    retentionsByCode.set(
+                    mapRetentions[item.id] = insertDetail.insertId;
+                    newRetentionIdMap[item.id] = existing.COSTEXPENSEID;
+                    oldRetentionCodeMap.set(
                         `${item.codigoRetencion}:${item.tipoRetencion}`,
                         {
-                            id: insertDetail.insertId,
+                            id: existing.COSTEXPENSEID,
                             name: item.nombre_CG
                         }
                     );
@@ -114,11 +116,12 @@ export async function migrateRetentions(
                             newCompanyId
                         ]
                     );
-                    costeExpenseMap[item.id] = row.ID_DET;
-                    retentionsByCode.set(
+                    mapRetentions[item.id] = row.ID_DET;
+                    newRetentionIdMap[item.id] = existing.COSTEXPENSEID;
+                    oldRetentionCodeMap.set(
                         `${item.codigoRetencion}:${item.tipoRetencion}`,
                         {
-                            id: row.ID_DET,
+                            id: existing.COSTEXPENSEID,
                             name: item.nombre_CG
                         }
                     )
@@ -127,18 +130,19 @@ export async function migrateRetentions(
                 /*  console.log(`✔ Actualizada retención ${item.nombre_CG}`); */
             } else {
                 // Insertar retención completa
-                const { insertId } = await insertNewRetentionCodeMdl(conn, {
+                const { detail, tax } = await insertNewRetentionCodeMdl(conn, {
                     companyId: newCompanyId,
                     ...item,
                     planCountActivoId: codIdPlanCosto,
                     planCountPasivoId: codIdPlanGasto,
                     statusTax: item.estado_CG,
                 });
-                costeExpenseMap[item.id] = insertId;
-                retentionsByCode.set(
+                mapRetentions[item.id] = detail.insertId;
+                newRetentionIdMap[item.id] = tax.insertId;
+                oldRetentionCodeMap.set(
                     `${item.codigoRetencion}:${item.tipoRetencion}`,
                      {
-                        id: insertId,
+                        id: tax.insertId,
                         name: item.nombre_CG
                     }
                 )
@@ -150,7 +154,7 @@ export async function migrateRetentions(
         throw error;
     }
 
-    return { costeExpenseMap, retentionsByCode};
+    return { mapRetentions, oldRetentionCodeMap, newRetentionIdMap};
 }
 
 // -----------------------------
@@ -190,7 +194,7 @@ async function insertNewRetentionCodeMdl(conn: any, taxData: any) {
             ]
         );
 
-        return detail;
+        return { detail, tax };
     } catch (error) {
         console.error('❌ Error insertando retención:', error);
         throw error;

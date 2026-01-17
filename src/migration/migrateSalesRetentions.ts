@@ -56,7 +56,7 @@ IFNULL(CAUSA_MOVI, 'INGRESO') AS CAUSA_MOVI,
 IFNULL( m.IMPOR_MOVI, detalle_anticipos.IMPOR_DET_ANT) AS IMPOR_MOVI,
 
  CASE WHEN  m.ESTADO_MOVI='ACTIVO' THEN 1 ELSE 0 END AS ESTADO_MOVI, 
-   IFNULL(m.PER_BENE_MOVI, 'MIG') AS PER_BENE_MOVI,
+   IFNULL(m.PER_BENE_MOVI,  clientes.NOM_CLI) AS PER_BENE_MOVI,
 NULL AS FK_COD_EMP,
  m.FK_CONCILIADO, m.CONCILIADO,
 FK_COD_CAJAS_MOVI AS IDCAJA,
@@ -104,6 +104,7 @@ m.ID_MOVI
 FROM
     transacciones
 LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
+LEFT JOIN clientes on clientes.COD_CLI = transacciones.FK_COD_CLI
 LEFT JOIN movimientos AS m
 ON
     m.FK_TRAC_MOVI = transacciones.COD_TRAC AND m.CONCEP_MOVI LIKE '%RETENCION%'
@@ -222,7 +223,7 @@ DESC;`);
                     o.IMPOR_MOVI,
                     o.ESTADO_MOVI,
                     o.PER_BENE_MOVI,
-                    o.CONCILIATED ?? 0,
+                    o.CONCILIATED ?? null,
                     newCompanyId,
                     boxMap[o.IDCAJA] ?? null,
                     o.OBS_MOVI,
@@ -372,7 +373,7 @@ IFNULL(CAUSA_MOVI, 'INGRESO') AS CAUSA_MOVI,
 'RETENCION-VENTA' as MODULO,NULL AS SECU_MOVI, 
 transacciones.TOTPAG_TRAC AS IMPOR_MOVI,
  1 as ESTADO_MOVI, 
-   IFNULL(m.PER_BENE_MOVI, 'MIG') AS PER_BENE_MOVI,
+   IFNULL(m.PER_BENE_MOVI,  clientes.NOM_CLI) AS PER_BENE_MOVI,
 NULL AS FK_COD_EMP,
  m.FK_CONCILIADO, m.CONCILIADO,
 FK_COD_CAJAS_MOVI AS IDCAJA,
@@ -429,6 +430,7 @@ LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD
 LEFT JOIN movimientos AS m
 ON
     m.FK_TRAC_MOVI = transacciones.COD_TRAC AND m.CONCEP_MOVI LIKE '%RETENCION%'
+    LEFT JOIN clientes on clientes.COD_CLI = transacciones.FK_COD_CLI
 WHERE
     transacciones.TIP_TRAC IN(
         'Electronica',
@@ -543,7 +545,7 @@ DESC;`);
                     o.IMPOR_MOVI,
                     o.ESTADO_MOVI,
                     o.PER_BENE_MOVI,
-                    o.CONCILIATED ?? 0,
+                    o.CONCILIATED ?? null,
                     newCompanyId,
                     boxMap[o.IDCAJA] ?? null,
                     o.OBS_MOVI,
@@ -1117,8 +1119,8 @@ export async function detRetSale(
                     currentAuditId,
                     idMov,
                     newCompanyId,
-                    o.NUM_REL_DOC.trim(),
-                    o.CLAVE_REL_TRANS.trim()
+                    o.NUM_REL_DOC,
+                    o.CLAVE_REL_TRANS
                 ];
             });
 
