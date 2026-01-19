@@ -1,4 +1,18 @@
+import { ClientIdentity, UserIdentity } from "./migrationTools";
 import { findFirstDefaultCustomer, findFirstDefaultUser, findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
+
+
+interface MigrateShippingGuideParams {
+  legacyConn: any;
+  conn: any;
+  newCompanyId: number;
+  mapClients: Record<number, number>;
+  mapProducts: Record<number, number>;
+  branchMap: Record<number, number>;
+  userNameIdMap: Map<string, UserIdentity>;
+  clientNameIdMap: Map<string, ClientIdentity>;
+  vehicleIdMap: Record<number, number>
+}
 
 export async function migrateShippingGuide({
   legacyConn,
@@ -10,7 +24,7 @@ export async function migrateShippingGuide({
   userNameIdMap,
   clientNameIdMap,
   vehicleIdMap
-}) {
+}: MigrateShippingGuideParams) {
   try {
     const [shippingGuide]: any[] = await legacyConn.query(`
       SELECT
@@ -140,17 +154,22 @@ export async function migrateShippingGuide({
     const shippingGuideIdMap: Record<number, number> = {};
     const shippingGuideAuditIdMap: Record<number, number> = {};
 
-    const [defaultUser]: any[] = await findFirstDefaultUser({ legacyConn });
-    const [defaultCustomer]: any[] = await findFirstDefaultCustomer({
-      legacyConn,
-    });
+    const [ [defaultUser], [defaultCustomer] ] = await Promise.all([
+      findFirstDefaultUser({ conn, companyId: newCompanyId }),
+      findFirstDefaultCustomer({ conn, companyId: newCompanyId })
+    ]);
+
     let defaultUserId = null;
     let defaultCustomerId = null;
+    let defacultCiUser = null;
+    let defacultCiCustomer = null;
     if (defaultUser) {
       defaultUserId = defaultUser.COD_USUEMP;
+      defacultCiUser = defaultUser.IDE_USUEMP;
     }
     if (defaultCustomer) {
-      defaultCustomerId = defaultCustomer.COD_CLI;
+      defaultCustomerId = defaultCustomer.CUST_ID;
+      defacultCiCustomer = defaultCustomer.CUST_CI;
     }
 
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
@@ -171,10 +190,14 @@ export async function migrateShippingGuide({
       const shippingGuideValues = batch.map((shippingGuide, index: number) => {
         console.log(`transformando y normalizando guias ${shippingGuide.NUM_TRANS}`);
 
-        const userId = userNameIdMap[shippingGuide.NAME_USER?.toUpperCase()] || defaultUserId;
-        const clientId = clientNameIdMap[shippingGuide.NAME_CLIENT?.toUpperCase()] || defaultCustomerId;
+        const userId = userNameIdMap.get(shippingGuide.NAME_USER?.toUpperCase())?.id || defaultUserId;
+        const clientId = clientNameIdMap.get(shippingGuide.NAME_CLIENT?.toUpperCase())?.id || defaultCustomerId;
+        const carrierId = userNameIdMap.get(shippingGuide.NAME_USER?.toUpperCase())?.id || defaultUserId;
+
+        const userIdCi = userNameIdMap.get(shippingGuide.NAME_USER?.toUpperCase())?.ci || defacultCiUser;
+        const clientCi = clientNameIdMap.get(shippingGuide.NAME_CLIENT?.toUpperCase())?.ci || defacultCiCustomer;
+
         const productDetails = toJSONArray(shippingGuide.DOCUMENT_DETAIL);
-        const carrierId = userNameIdMap[shippingGuide.NAME_USER?.toUpperCase()] || defaultUserId;// verificar
 
         const auditId = firstInsertedAuditId + index;
         shippingGuideAuditIdMap[shippingGuide.COD_TRANS] = auditId;
@@ -204,14 +227,14 @@ export async function migrateShippingGuide({
           shippingGuide.H_SALIDA,
           shippingGuide.P_LLEGADA,
           shippingGuide.H_LLEGADA,
-          '1234567891', // cedula de destinatario
-          '1234567891', // cedula de transportista
+          clientCi, // cedula de destinatario
+          userIdCi, // cedula de transportista
           shippingGuide.NAME_USER, // nombre del transportista
           shippingGuide.PLACA, // placa del vehiculo
           clientId, // destinatario
           carrierId, // transportista
           branchId, // sucursal
-          []
+          toJSONArray(shippingGuide.INFO_ADIC)
         );
 
 

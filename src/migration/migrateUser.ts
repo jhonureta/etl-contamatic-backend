@@ -1,3 +1,4 @@
+import { UserIdentity } from "./migrationTools";
 
 async function batchInsertUsers(
     filteredUsers: any[],
@@ -39,7 +40,7 @@ async function batchInsertUsers(
 
 export async function migrateUsersForCompany(
     legacyConn: any, conn: any, newCompanyId: number, dataBaseIds: any
-): Promise<{ userMap: Record<number, number>, userNameIdMap: Record<string, number> }> {
+): Promise<{ userMap: Record<number, number>, userNameIdMap: Map<string, UserIdentity> }> {
 
     console.log("Migrando usuarios...");
 
@@ -99,7 +100,7 @@ export async function migrateUsersForCompany(
 
    
     const detailValues = [];
-    const userNameIdMap: Record<number, number> = {};
+    const userNameIdMap = new Map<string, UserIdentity>();
     for (const u of users) {
         const branchId = dataBaseIds.branchMap[u.idSucursal];
         const userId = userMap[u.CCOD_USUEMP];
@@ -109,7 +110,10 @@ export async function migrateUsersForCompany(
             detailValues.push([branchId, userId]);
             detailSet.add(key);
         }
-        userNameIdMap[u.NOM_USUEMP?.toUpperCase()] = userId;
+        userNameIdMap.set(u.NOM_USUEMP?.toUpperCase(), {
+            id: userId,
+            ci: u.IDE_USUEMP
+        });
     }
 
     if (detailValues.length > 0) {

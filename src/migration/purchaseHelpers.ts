@@ -33,6 +33,15 @@ type FindNextAdutiCodeParams = {
   companyId: number
 }
 
+type FindFirstDefaultUserParams = {
+  conn: Connection;
+  companyId: number
+}
+type FindFirstDefaultCustomerParams = {
+  conn: Connection;
+  companyId: number
+}
+
 const codigoIvaPorcentaje: Record<string, number> = {
   '12': 2,
   '0': 0,
@@ -340,21 +349,27 @@ export async function findNextAuditCode({
 }
 
 export async function findFirstDefaultUser({
-  legacyConn
-}){
+  conn,
+  companyId
+}: FindFirstDefaultUserParams){
   try {
     const userQuery = `
       SELECT
           COD_USUEMP,
           IDE_USUEMP,
           NOM_USUEMP,
-          TEL_USUEMP,
           EMA_USUEMP,
-          ALI_USUEMP  
+          ROL_USUEMP,
+          EST_USUEMP
       FROM
-          usuarios
-      ORDER BY COD_USUEMP ASC LIMIT 1`;
-    const userQueryResult: ResultSet = await legacyConn.query(userQuery );
+          users
+      WHERE
+          FK_COD_EMP = ? AND ROL_USUEMP <> 'superadmin'
+      ORDER BY
+          COD_USUEMP ASC
+      LIMIT 1;
+    `;
+    const userQueryResult: ResultSet = await conn.query(userQuery, [companyId]);
     const [user]: any[] = userQueryResult as Array<any>;
     return user;
   } catch (err) {
@@ -363,21 +378,27 @@ export async function findFirstDefaultUser({
 }
 
 export async function findFirstDefaultCustomer({
-  legacyConn
-}){
+  conn,
+  companyId
+}: FindFirstDefaultCustomerParams){
   try {
     const customerQuery = `
       SELECT
-          COD_CLI,
-          TIP_IDENCLI,
-          NOM_USUEMP,
-          CED_CLI,
-          REL_CLI,
-          NOM_CLI  
+          CUST_ID,
+          CUST_CI,
+          CUST_NOM,
+          CUST_NOMCOM,
+          CUST_DIR,
+          CUST_TELF
       FROM
-          COD_CLI
-      ORDER BY COD_USUEMP ASC LIMIT 1`;
-    const customerQueryResult: ResultSet = await legacyConn.query(customerQuery);
+          customers
+      WHERE
+          CUST_TYPE = 'CLIENTE' AND FK_COD_EMP = ?
+      ORDER BY
+          CUST_ID ASC
+      LIMIT 1;
+    `;
+    const customerQueryResult: ResultSet = await conn.query(customerQuery, [companyId]);
     const [customer]: any[] = customerQueryResult as Array<any>;
     return customer;
   } catch (err) {
