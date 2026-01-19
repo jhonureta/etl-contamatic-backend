@@ -16,6 +16,16 @@ export interface AccountingEntry {
     id_plan: number;
 }
 
+export interface ClientIdentity {
+    id: number;
+    ci: string;
+}
+
+export interface UserIdentity  {
+    id: number;
+    ci: string;
+}
+
 export class AccountingService {
     async checkAccountingParameters(
         data: AccountingParameterInput,

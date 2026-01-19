@@ -221,15 +221,14 @@ export async function migrateProformaInvoices({
           proforma.RESP_SRI,
           proforma.INFO_ADIC,
           proforma.DET_EXP_REEMBOLSO,
-          proforma.JSON_METODO,
+          JSON.stringify(toJSONArray(proforma.JSON_METODO)),
           proforma.ITEMS_PROF,
           proforma.OBS_AUXILIAR,
           proforma.OBS_ORDEN,
         ];
       });
 
-      const [resulCreateProformas]: any = await conn.query(
-        `
+      const [resulCreateProformas]: any = await conn.query(`
         INSERT INTO transactions (PUNTO_EMISION_DOC,
             SECUENCIA_DOC,
             SECUENCIA_REL_DOC,
@@ -304,9 +303,10 @@ export async function migrateProformaInvoices({
         [proformaValues]
       );
       let nextId = resulCreateProformas.insertId;
-      batch.forEach(({COD_TRANS}) => {
+      batch.forEach(({ COD_TRANS }) => {
         proformaIdMap[COD_TRANS] = nextId++;
       });
+      console.log(` -> Batch migrado: ${batch.length} proformas`);
     }
 
     return { proformaIdMap, proformaAuditIdMap };

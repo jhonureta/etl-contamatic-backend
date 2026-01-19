@@ -28,6 +28,8 @@ import { migrateSalesRetentions } from './migrateSalesRetentions';
 import { migrateCreditNote } from './migrateSalesCreditNote';
 import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
+import { migrateVehicles } from './migrateVehicles';
+import { migrateWorkOrders } from './migrateWorkOrders';
 import { migrateDataMovements } from './migrateDetailAdvances';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
@@ -528,6 +530,24 @@ export async function migrateCompany(codEmp: number) {
       branchMap
     })
 
+    //== Migrar ordenes de trabajos ===/
+    await migrateWorkOrders({
+      legacyConn,
+      conn,
+      newCompanyId,
+      userMap,
+      mapClients,
+      mapProducts,
+      branchMap
+    })
+
+    //== Migrar vehiculos ===/
+    const { vehicleIdMap } = await migrateVehicles({
+      legacyConn,
+      conn,
+      newCompanyId,
+    })
+
     //= Migrar guias de remision ===/
     await migrateShippingGuide({
       legacyConn,
@@ -537,7 +557,8 @@ export async function migrateCompany(codEmp: number) {
       mapProducts,
       branchMap,
       userNameIdMap,
-      clientNameIdMap
+      clientNameIdMap,
+      vehicleIdMap
     })
 
     //==  Migracion de Compras y liquidaciones ===/
@@ -554,12 +575,14 @@ export async function migrateCompany(codEmp: number) {
       mapCostExpenses: costExpenseIdMapping
     });
 
+    //== Migrar anticipos de proveedores ===/
     const { supplierAdvanceIdMap } = await migrateSupplierAdvances(
       legacyConn,
       conn,
       mapClients
     );
 
+    //== Migrar movimientos de compras y liquidaciones ===/
     const { purchaseLiquidationObligationIdMap } = await migratePurchaseAndLiquidationsMovements({
       legacyConn,
       conn,
@@ -577,6 +600,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
+    //== Migrar detalle de obligaciones de compras y liquidaciones ===/
     await migratePurchaseObligationDetail({
       legacyConn,
       conn,
