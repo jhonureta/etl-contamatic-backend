@@ -16,12 +16,13 @@ export async function migrateSalesRetentions(
     mapAccounts: Record<number, number | null>,
     mapRetentions: Record<number, number | null>,
     /* mapEntryAccount: Record<number, number | null> */
-): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number> }> {
+): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number>; movAudit: any[] }> {
     console.log("Migrando retenciones en ventas...");
 
 
 
     const mapRetMovements: Record<number, number> = {};
+    const mapRetAuditMovements: Record<number, number> = {};
 
     const [rows] = await legacyConn.query(`SELECT
     COD_TRAC,
@@ -191,10 +192,11 @@ DESC;`);
         [newCompanyId]
     );
     let secuenciaMovimiento = nextSecu;
-
+    let movAudit = [];
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
         try {
+
 
             // Preparar valores para INSERT en batch
             const values = batch.map((o, index) => {
@@ -202,6 +204,12 @@ DESC;`);
                 // Lógica de Negocio
                 let idPlanCuenta = null;
                 const currentAuditId = mapRetAuditSales[o.COD_TRAC];
+
+                movAudit.push({
+                    idAuditoria: currentAuditId,
+                    idDocumento: mapSales[o.COD_TRAC],
+                    idMovimiento: null
+                });
 
                 return [
                     bankMap[o.FKBANCO] ?? null,
@@ -256,8 +264,17 @@ DESC;`);
             // Actualizar mapeo de movimientos
             let currentMovId = resMov.insertId;
             batch.forEach(o => {
-                mapRetMovements[o.COD_TRAC] = currentMovId++;
+                let idMov = currentMovId++;
+                mapRetMovements[o.COD_TRAC] = idMov;
+                //Actualizar id de movimiento en el arreglo de auditoria
+                const movAud = movAudit.find(ma => ma.idDocumento === mapSales[o.COD_TRAC]);
+                if (movAud) {
+                    movAud.idMovimiento = idMov;
+                }
             });
+
+
+
             console.log(` -> Batch migrado: ${batch.length} retenciones de ventas.`);
 
 
@@ -319,8 +336,8 @@ DESC;`);
         mapAccounts,
         mapEntryAccount.mapEntryAccount
     )
-
-    return { mapRetMovements, mapRetAuditSales };
+    //mapRetAuditSales
+    return { mapRetMovements, mapRetAuditSales, movAudit };
 }
 
 

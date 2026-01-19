@@ -4,50 +4,78 @@ export async function migrateAdvancesCustomers(
     legacyConn: any,
     conn: any,
     mapClients: any,
-    mapAdvancesCustomers
+    mapAdvancesCustomers,
+    supplierAdvanceIdMap: Record<number, number>,
+    mapCreditNote: Record<number, number>,
+    mapAuditCreditNote: Record<number, number>,
+    mapRetMovements: Record<number, number>,
+    mapRetAuditSales: Record<number, number>,
+    movAudit: any[],
+    mapMovements: Record<number, number>,
+    mapAuditMovements: Record<number, number>
 ): Promise<Record<string, number>> {
 
     console.log("Migrando anticipos de clientes...");
     // Obtiene centroCosto únicas normalizadas
     const [rows] = await legacyConn.query(`SELECT
-    ID_DET_ANT AS ID_DET_ANT,
-    FEC_DET_ANT,
-    OBS_DET_ANT AS ABS_ANT,
-    CASE WHEN FDP_DET_ANT = 'CUENTA CONTABLE' THEN 'CCTACONT' WHEN FDP_DET_ANT = 'DEVOLUCION A CAJA' THEN 'DEVCAJA' WHEN FDP_DET_ANT = 'DEVOLUCION' THEN 'DEVBANCO' ELSE FDP_DET_ANT
-END AS FORMAPAGO,
-ABS(IMPOR_DET_ANT) AS IMPORTE_DET,
-SALDO_DET_ANT AS SALDO_DET,
-SECU_DET_ANT AS SECUENCIA_DET,
-FK_COD_ANT AS FK_IDANT,
-PER_DET_ANT AS BENEFICIARIA,
-CASE WHEN ref_cuentas > 0 THEN 'CXC' WHEN ref_cuentas > 0 THEN 'CXC' WHEN FDP_DET_ANT = 'NOTA DE CREDITO' THEN 'nota' WHEN FDP_DET_ANT = 'RETENCION EN VENTA' THEN 'RETENCION-VENTA' WHEN CONCAT(
-    SUBSTRING_INDEX(FK_ORDEN, '-', 1),
-    '-'
-) = 'OE-' THEN 'ANT-ORDEN' WHEN CONCAT(
-    SUBSTRING_INDEX(FK_ORDEN, '-', 1),
-    '-'
-) = 'OV-' THEN 'ANT-ORDEN' ELSE 'ANTCLI'
-END AS ORIGEN_ANT,
-ref_cuentas,
-CASE WHEN CONCAT(
-    SUBSTRING_INDEX(FK_ORDEN, '-', 1),
-    '-'
-) = 'OE-' THEN FK_ORDEN WHEN CONCAT(
-    SUBSTRING_INDEX(FK_ORDEN, '-', 1),
-    '-'
-) = 'OV-' THEN FK_ORDEN ELSE NULL
-END AS FK_ID_ORDEN,
-CASE WHEN FK_COD_TRAC > 0 THEN FK_COD_TRAC ELSE NULL
-END AS FK_COD_TRAC,
-CASE WHEN FECH_REG = '0000-00-00 00:00:00' THEN FEC_DET_ANT ELSE FECH_REG
-END AS FECH_REG,
-CASE WHEN IMPOR_DET_ANT > 0 THEN 'INGRESO' ELSE 'EGRESO'
-END AS CAUSA_ANT
-FROM
-    detalle_anticipos
-INNER JOIN anticipos ON detalle_anticipos.FK_COD_ANT = anticipos.ID_ANT
-WHERE
-    anticipos.TIPO_ANT = 'CLIENTES';;`);
+    da.ID_DET_ANT,
+    da.FEC_DET_ANT,
+    da.OBS_DET_ANT AS ABS_ANT,
+
+    CASE da.FDP_DET_ANT
+        WHEN 'CUENTA CONTABLE'     THEN 'CCTACONT'
+        WHEN 'DEVOLUCION A CAJA'   THEN 'DEVCAJA'
+        WHEN 'DEVOLUCION'          THEN 'DEVBANCO'
+        ELSE da.FDP_DET_ANT
+    END AS FORMAPAGO,
+
+    ABS(da.IMPOR_DET_ANT) AS IMPORTE_DET,
+    da.SALDO_DET_ANT AS SALDO_DET,
+    da.SECU_DET_ANT AS SECUENCIA_DET,
+    da.FK_COD_ANT AS FK_IDANT,
+    da.PER_DET_ANT AS BENEFICIARIA,
+
+    CASE
+        WHEN da.ref_cuentas > 0 THEN 'CXC'
+        WHEN da.FDP_DET_ANT = 'NOTA DE CREDITO' THEN 'nota'
+        WHEN da.FDP_DET_ANT = 'RETENCION EN VENTA' THEN 'RETENCION-VENTA'
+        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV') THEN 'ANT-ORDEN'
+        ELSE 'ANTCLI'
+    END AS ORIGEN_ANT,
+
+    da.ref_cuentas,
+
+    CASE
+        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV')
+        THEN da.FK_ORDEN
+        ELSE NULL
+    END AS FK_ID_ORDEN,
+
+    CASE
+        WHEN da.FK_COD_TRAC > 0 THEN da.FK_COD_TRAC
+        ELSE NULL
+    END AS FK_COD_TRAC,
+
+    CASE
+        WHEN da.FECH_REG = '0000-00-00 00:00:00'
+        THEN da.FEC_DET_ANT
+        ELSE da.FECH_REG
+    END AS FECH_REG,
+
+    CASE
+        WHEN da.IMPOR_DET_ANT > 0 THEN 'INGRESO'
+        ELSE 'EGRESO'
+    END AS CAUSA_ANT
+
+FROM detalle_anticipos da
+INNER JOIN anticipos a 
+    ON a.ID_ANT = da.FK_COD_ANT
+INNER JOIN clientes c 
+    ON c.COD_CLI = a.FK_COD_CLI_ANT
+LEFT JOIN movimientos m 
+    ON m.FK_ANT_MOVI = da.ID_DET_ANT
+
+WHERE a.TIPO_ANT = 'CLIENTES';`);
 
     const anticiposClientes = rows as any[];
 
@@ -61,15 +89,56 @@ WHERE
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 
-        const values = batch.map(c => {
+        const values = [];
+        for (const a of batch) {
+            let idMov = null;
+            let idAuditoria = null;
+            if (a.FORMAPAGO == 'NOTA DE CREDITO') {
+                idAuditoria = mapAuditCreditNote[a.FK_COD_TRAC];
+                const [accountRows]: any = await conn.query(
+                    `SELECT * FROM movements WHERE FK_AUDITMV = ?`,
+                    [idAuditoria]
+                );
+                idMov = accountRows[0]?.ID_MOVI || null;
+            }
+            if (a.FORMAPAGO == 'RETENCION EN VENTA') {
+                idAuditoria = mapRetAuditSales[a.FK_COD_TRAC];
+                const [accountRows]: any = await conn.query(
+                    `SELECT * FROM movements WHERE FK_AUDITMV = ?`,
+                    [idAuditoria]
+                );
+                idMov = accountRows[0]?.ID_MOVI || null;
+            }
+            //CUENTAS POR COBRAR
+            if (a.ref_cuentas != null) {
 
-            const idPersona = mapClients[c.FK_PERSONA] || null;
-            return [
-                c.FECH_REGANT,
-                c.SALDO_ANT,
-                idPersona
-            ];
-        });
+                idAuditoria = mapAuditMovements[a.ref_cuentas];
+                idMov = mapMovements[a.ref_cuentas] || null;
+
+            }
+
+
+
+
+            const idAdvance = supplierAdvanceIdMap[a.FK_IDANT];
+            a.FK_ID_ORDEN = null;
+            values.push([
+                a.FEC_DET_ANT,
+                a.ABS_ANT,
+                a.FORMAPAGO,
+                a.IMPORTE_DET,
+                a.SALDO_DET,
+                a.SECUENCIA_DET,
+                idAdvance,
+                idMov,
+                a.BENEFICIARIA,
+                a.ORIGEN_ANT,
+                a.FECH_REG,
+                idAuditoria,
+                a.CAUSA_ANT,
+                a.FK_ID_ORDEN
+            ]);
+        };
         const [res]: any = await conn.query(
             `INSERT INTO detail_advances(FEC_DET_ANT, ABS_ANT, FORMAPAGO, IMPORTE_DET, SALDO_DET, SECUENCIA_DET, FK_IDANT, FK_ID_MOVI, BENEFICIARIA, ORIGEN_ANT, FECH_REG, FK_AUDITANT, CAUSA_ANT, FK_ID_ORDEN) VALUES  ?`,
             [values]
@@ -85,7 +154,7 @@ WHERE
 }
 
 
-export async function migrateSupplierAdvances(
+/* export async function migrateSupplierAdvances(
     legacyConn: any,
     conn: any,
     mapClients: any
@@ -158,137 +227,147 @@ WHERE
         console.log(` -> Batch migrado: ${batch.length} anticipos de proveedores`);
     }
     return { supplierAdvanceIdMap };
-}
+} */
 
-async function migrateDataMovements({
-    legacyConn,
-    conn,
-    newCompanyId,
-    purchaseLiquidationIdMap,
-    purchaseLiquidationAuditIdMap,
-    mapConciliation,
-    userMap,
-    bankMap,
-    boxMap,
-    accountMap
-}: MigrateDataMovementsParams): Promise<{
-    movementIdMap: Record<number, number>
-}> {
+export async function migrateDataMovements(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    purchaseLiquidationIdMap: Record<number, number>,
+    purchaseLiquidationAuditIdMap: Record<number, number>,
+    mapConciliation: Record<number, number>,
+    userMap: Record<number, number>,
+    bankMap: Record<number, number>,
+    boxMap: Record<number, number>,
+    supplierAdvanceIdMap: Record<number, number>,
+    mapCreditNote: Record<number, number>,
+    mapAuditCreditNote: Record<number, number>,
+    mapRetMovements: Record<number, number>,
+    mapRetAuditSales: Record<number, number>,
+    movAudit: any[],
+    mapMovements: Record<number, number>,
+    mapAuditMovements: Record<number, number>
+
+): Promise<{ movementIdAdvancesMap: Record<number, number> }> {
     try {
-        const movementIdMap: Record<number, number> = {};
+        const movementIdAdvancesMap: Record<number, number> = {};
+        const mapAuditAdvances: Record<number, number> = {};
 
-        const movementsQuery: ResultSet = await legacyConn.query(`
-			SELECT
-    ID_MOVI AS ID_MOVI,
-    CASE WHEN FK_COD_CAJAS_MOVI > 0 THEN FK_COD_CAJAS_MOVI ELSE NULL
-END AS FK_COD_CAJAS_MOVI,
-CASE WHEN FK_COD_BANCO_MOVI > 0 THEN FK_COD_BANCO_MOVI ELSE NULL
-END AS FK_COD_BANCO_MOVI,
-CASE WHEN TIPO_MOVI = 'CUENTA CONTABLE' THEN 'CCTACONT' 
-WHEN TIPO_MOVI = 'ANTICIPO' THEN 'ANTICIPO' ELSE TIP_MOVI
-END AS TIP_MOVI,
-periodo_caja,
-FECHA_MOVI AS FECHA_MOVI,
-CASE WHEN ORIGEN_MOVI = 'ANTICIPOS-CLIENTES' THEN 'ANTCLI' ELSE ORIGEN_MOVI
-END AS ORIGEN_MOVI,
-abs(detalle_anticipos.IMPOR_DET_ANT) AS IMPOR_MOVI,
-
-
-CASE 
-    WHEN TIPO_MOVI = 'DEVOLUCION' AND TIP_MOVI = 'CAJAS' THEN 'DEVCAJA'
-    WHEN TIPO_MOVI = 'DEVOLUCION' AND TIP_MOVI <> 'CAJAS' THEN 'DEVBANCO'
-    WHEN TIPO_MOVI='CUENTA CONTABLE' THEN 'CCTACONT'
-    ELSE TIPO_MOVI
-END AS TIPO_MOVI,
-
-
-REF_MOVI,
-CONCEP_MOVI,
-SALDO_CAJA_MOVI,
-SALDO_BANCO_MOVI,
-
-CASE WHEN ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 0
-			END AS ESTADO_MOVI,
-
-CASE WHEN PER_BENE_MOVI = '' THEN  clientes.NOM_CLI ELSE PER_BENE_MOVI
-			END AS PER_BENE_MOVI,
-
-
-CAUSA_MOVI,
-
-CASE WHEN ORIGEN_MOVI = 'ANTICIPOS-CLIENTES' THEN 'ANTCLI' ELSE ORIGEN_MOVI
-END AS MODULO,
-
-FECHA_MANUAL AS FECHA_MANUAL,
-CONCILIADO,
-FK_COD_CX,
-SECU_MOVI,
-FK_CONCILIADO AS FK_CONCILIADO,
-FK_ANT_MOVI,
-FK_USER_EMP_MOVI AS FK_USER,
-FK_TRAC_MOVI AS FK_COD_TRAN,
-FK_COD_RH,
-FK_DET_PREST,
-COD_AUDIT,
-FK_COD_TARJETA,
-NUM_UNIDAD AS NUMERO_UNIDAD,
-RECIBO_CAJA,
-COD_EMP,
-NULL AS NUM_VOUCHER,
-NULL AS NUM_LOTE,
-CONCEP_MOVI AS OBS_MOVI,
-abs(IMPOR_MOVI) AS IMPOR_MOVITOTAL,
-NULL AS FK_AUDITMV,
-NULL AS FK_ARQUEO,
-NULL AS ID_TARJETA,
-NULL AS RECIBO_CAJA,
-NULL AS FK_CTAM_PLAN,
-NULL AS NUMERO_UNIDAD
-FROM
-    movimientos
-INNER JOIN detalle_anticipos ON movimientos.FK_ANT_MOVI = detalle_anticipos.ID_DET_ANT
-INNER JOIN anticipos ON detalle_anticipos.FK_COD_ANT = anticipos.ID_ANT
-INNER JOIN clientes ON clientes.COD_CLI= anticipos.FK_COD_CLI_ANT
-WHERE
-    anticipos.TIPO_ANT = 'CLIENTES';;
-		`);
-        const [movements]: any[] = movementsQuery as Array<any>;
+        const [rows]: any[] = await legacyConn.query(`
+                                            SELECT
+                                            ID_MOVI AS ID_MOVI,
+                                            CASE WHEN FK_COD_CAJAS_MOVI > 0 THEN FK_COD_CAJAS_MOVI ELSE NULL
+                                        END AS FK_COD_CAJAS_MOVI,
+                                        CASE WHEN FK_COD_BANCO_MOVI > 0 THEN FK_COD_BANCO_MOVI ELSE NULL
+                                        END AS FK_COD_BANCO_MOVI,
+                                        CASE WHEN TIPO_MOVI = 'CUENTA CONTABLE' THEN 'CCTACONT' WHEN TIPO_MOVI = 'ANTICIPO' THEN 'ANTICIPO' ELSE TIP_MOVI
+                                        END AS TIP_MOVI,
+                                        periodo_caja,
+                                        FECHA_MOVI AS FECHA_MOVI,
+                                        CASE WHEN ORIGEN_MOVI = 'ANTICIPOS-CLIENTES' THEN 'ANTCLI' ELSE ORIGEN_MOVI
+                                        END AS ORIGEN_MOVI,
+                                        ABS(
+                                            detalle_anticipos.IMPOR_DET_ANT
+                                        ) AS IMPOR_MOVI,
+                                        CASE WHEN TIPO_MOVI = 'DEVOLUCION' AND TIP_MOVI = 'CAJAS' THEN 'DEVCAJA' WHEN TIPO_MOVI = 'DEVOLUCION' AND TIP_MOVI <> 'CAJAS' THEN 'DEVBANCO' WHEN TIPO_MOVI = 'CUENTA CONTABLE' THEN 'CCTACONT' ELSE TIPO_MOVI
+                                        END AS TIPO_MOVI,
+                                        REF_MOVI,
+                                        CONCEP_MOVI,
+                                        SALDO_CAJA_MOVI,
+                                        SALDO_BANCO_MOVI,
+                                        CASE WHEN ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 0
+                                        END AS ESTADO_MOVI,
+                                        CASE WHEN PER_BENE_MOVI = '' THEN clientes.NOM_CLI ELSE PER_BENE_MOVI
+                                        END AS PER_BENE_MOVI,
+                                        CAUSA_MOVI,
+                                        CASE WHEN ORIGEN_MOVI = 'ANTICIPOS-CLIENTES' THEN 'ANTCLI' ELSE ORIGEN_MOVI
+                                        END AS MODULO,
+                                        FECHA_MANUAL AS FECHA_MANUAL,
+                                        CONCILIADO,
+                                        FK_COD_CX,
+                                        SECU_MOVI,
+                                        FK_CONCILIADO AS FK_CONCILIADO,
+                                        FK_ANT_MOVI,
+                                        FK_USER_EMP_MOVI AS FK_USER,
+                                        FK_TRAC_MOVI AS FK_COD_TRAN,
+                                        FK_COD_RH,
+                                        FK_DET_PREST,
+                                        COD_AUDIT,
+                                        FK_COD_TARJETA,
+                                        NUM_UNIDAD AS NUMERO_UNIDAD,
+                                        RECIBO_CAJA,
+                                        COD_EMP,
+                                        NULL AS NUM_VOUCHER,
+                                        NULL AS NUM_LOTE,
+                                        CONCEP_MOVI AS OBS_MOVI,
+                                        ABS(IMPOR_MOVI) AS IMPOR_MOVITOTAL,
+                                        NULL AS FK_AUDITMV,
+                                        NULL AS FK_ARQUEO,
+                                        NULL AS ID_TARJETA,
+                                        NULL AS RECIBO_CAJA,
+                                        NULL AS FK_CTAM_PLAN,
+                                        NULL AS NUMERO_UNIDAD,
+                                        FDP_DET_ANT
+                                        FROM
+                                            detalle_anticipos
+                                        INNER JOIN anticipos ON anticipos.ID_ANT = detalle_anticipos.FK_COD_ANT
+                                        INNER JOIN movimientos ON movimientos.FK_ANT_MOVI = detalle_anticipos.ID_DET_ANT
+                                        INNER JOIN clientes ON clientes.COD_CLI = anticipos.FK_COD_CLI_ANT
+                                        WHERE
+                                            anticipos.TIPO_ANT = 'CLIENTES' AND ORIGEN_MOVI <>  'CxC';`);
+        const [movements]: any[] = rows as Array<any>;
         if (movements.length === 0) {
-            return { movementIdMap };
+            return { movementIdAdvancesMap };
         }
 
-        const cardQuery: ResultSet = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`, [newCompanyId]);
-        const [cardData]: any[] = cardQuery as Array<any>;
-        const cardId = cardData[0].ID_TARJETA ?? null;
+        const [[{ nextAudit }]]: any = await conn.query(
+            `SELECT IFNULL(MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1, 1) AS nextAudit FROM audit WHERE FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+        let auditSeq = nextAudit;
 
-        const movementSequenceQuery = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO = 'COMPRAS' AND  FK_COD_EMP = ?`,
+
+        const [cardData]: any[] = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`, [newCompanyId]);
+        const cardId = cardData[0]?.ID_TARJETA ?? null;
+
+        const movementSequenceQuery = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO = 'ANTCLI' AND  FK_COD_EMP = ?`,
             [newCompanyId]
         );
         const [movementData] = movementSequenceQuery as Array<any>;
         let movementSequence = movementData[0]?.SECU_MOVI ?? 1;
 
+
+        const [accountRows]: any = await conn.query(
+            `SELECT ID_PLAN, CODIGO_PLAN FROM account_plan WHERE FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+        const accountMap = new Map(accountRows.map((a: any) => [a.CODIGO_PLAN, a.ID_PLAN]));
+
         const BATCH_SIZE = 500;
 
         for (let i = 0; i < movements.length; i += BATCH_SIZE) {
             const batchMovements = movements.slice(i, i + BATCH_SIZE);
-            const movementValues: any[] = [];
-
-            for (const m of batchMovements) {
+            const auditValues = batchMovements.map(o => [auditSeq++, o.forma, newCompanyId]);
+            const [resAudit]: any = await conn.query(
+                `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
+                [auditValues]
+            );
+            const firstAuditId = resAudit.insertId;
+            const movementValues = batchMovements.map((m, index) => {
+                /* for (const m of batchMovements) { */
                 const bankId = bankMap[m.FK_COD_BANCO_MOVI];
                 const idBoxDetail = boxMap[m.FK_COD_CAJAS_MOVI];
-                const transactionId = purchaseLiquidationIdMap[m.FK_TRAC_MOVI];
+                const transactionId = null;
                 const userId = userMap[m.FK_USER_EMP_MOVI];
-                const transAuditId = purchaseLiquidationAuditIdMap[m.COD_TRANS];
+                const currentAuditId = firstAuditId;
+                mapAuditAdvances[m.FK_ANT_MOVI] = currentAuditId;
                 const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
-                const idPlanAccount = null;
                 let idPlanCuenta = null;
                 if (m.TIPO_MOVI === 'CCTACONT') {
                     const codigoPlan = m.REF_MOVI?.split('--')[0].trim();
                     idPlanCuenta = accountMap.get(codigoPlan) || null;
-
                 }
-
-                movementValues.push([
+                return [
                     bankId,
                     transactionId,
                     idFkConciliation,
@@ -314,16 +393,16 @@ WHERE
                     m.OBS_MOVI,
                     m.TOTPAG_TRAC,
                     m.FK_ASIENTO,
-                    transAuditId,
+                    currentAuditId,
                     m.FK_ARQUEO,
                     cardId,
                     m.RECIBO_CAJA,
-                    idPlanAccount,
+                    idPlanCuenta,
                     m.NUM_UNIDAD,
                     m.JSON_PAGOS
-                ]);
+                ];
                 movementSequence++;
-            }
+            });
 
             const resultCreateMovement = await conn.query(`
 				INSERT INTO movements(
@@ -362,13 +441,14 @@ WHERE
 				)
 				VALUES ?
 			`, [movementValues]);
-            let nextMovementId = (resultCreateMovement[0] as ResultSetHeader).insertId;
-            batchMovements.forEach(({ COD_TRANS }) => {
-                movementIdMap[COD_TRANS] = nextMovementId++;
-            });
+
+            let newId = resultCreateMovement.insertId;
+            for (const o of batchMovements) {
+                movementIdAdvancesMap[o.FK_ANT_MOVI] = newId++;
+            }
         }
         console.log("✅ Migración de movimientos compra y liquidacion completada correctamente");
-        return { movementIdMap };
+        return { movementIdAdvancesMap };
     } catch (error) {
         throw error;
     }
@@ -385,12 +465,6 @@ export async function migrateAccountingEntriesCustomerObligations(
     mapEntryAccount: Record<number, number>
 }> {
 
-    /* legacyConn,
-      conn,
-      newCompanyId,
-      mapNoteMovementsFull,
-      mapPeriodo,
-      mapAuditCreditNote */
 
     console.log("🚀 Migrando encabezado de asiento contables retenciones..........");
     try {//IMPORTE_GD

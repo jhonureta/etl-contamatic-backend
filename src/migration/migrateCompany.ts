@@ -28,6 +28,7 @@ import { migrateSalesRetentions } from './migrateSalesRetentions';
 import { migrateCreditNote } from './migrateSalesCreditNote';
 import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
+import { migrateDataMovements } from './migrateDetailAdvances';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -500,7 +501,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     )
 
-    const map = await migrateMovementDetail0bligations(
+    const { mapMovements, mapAuditMovements } = await migrateMovementDetail0bligations(
       legacyConn,
       conn,
       newCompanyId,
@@ -590,10 +591,10 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapConciliation,
-    }) 
+    })
 
 
-    const mapRetentionsMov = await migrateSalesRetentions(
+    const { mapRetMovements, mapRetAuditSales, movAudit } = await migrateSalesRetentions(
       legacyConn,
       conn,
       newCompanyId,
@@ -610,7 +611,7 @@ export async function migrateCompany(codEmp: number) {
       mapRetentions
     );
 
-    const mapCreditNoteMigrate = await migrateCreditNote(
+    const { mapCreditNote, mapAuditCreditNote } = await migrateCreditNote(
       legacyConn,
       conn,
       newCompanyId,
@@ -630,7 +631,46 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     );
 
-    
+    const migrateCustomeradvances = await migrateDataMovements(
+      legacyConn,
+      conn,
+      newCompanyId,
+      purchaseLiquidationIdMap,
+      purchaseLiquidationAuditIdMap,
+      mapConciliation,
+      userMap,
+      bankMap,
+      boxMap,
+      supplierAdvanceIdMap,//ANTICIPOS
+      mapCreditNote,//NOTAS DE CREDITO
+      mapAuditCreditNote,//NOTAS DE CREDITO
+      mapRetMovements, //RETENCIONES EN VENTA
+      mapRetAuditSales,//RETENCIONES EN VENTA
+      movAudit,
+      mapMovements,  //MOVIMIENTOS PAGOS OBLIGACIONES
+      mapAuditMovements //MOVIMIENTOS AUDITORIA PAGOS OBLIGACIONES
+    );
+
+    /*   migrateDataMovements(
+      legacyConn: any,
+      conn: any,
+      newCompanyId: number,
+      purchaseLiquidationIdMap: Record<number, number>,
+      purchaseLiquidationAuditIdMap: Record<number, number>,
+      mapConciliation: Record<number, number>,
+      userMap: Record<number, number>,
+      bankMap: Record<number, number>,
+      boxMap: Record<number, number>,
+      supplierAdvanceIdMap: Record<number, number>,
+      mapCreditNote: Record<number, number>,
+      mapAuditCreditNote: Record<number, number>,
+      mapRetMovements: Record<number, number>,
+      mapRetAuditSales: Record<number, number>,
+      movAudit: any[],
+      mapMovements: Record<number, number>,
+      mapAuditMovements: Record<number, number>
+  
+  ) */
 
 
     await conn.commit();

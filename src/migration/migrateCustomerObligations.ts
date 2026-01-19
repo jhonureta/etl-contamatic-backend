@@ -762,6 +762,12 @@ export async function migrateMovementsObligations(
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
                 const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
+
+
+                /* if (!idTrn) {
+
+                } */
+
                 //o.ID_MOVI,
                 insertValues.push([
                     idBanco,//ok
@@ -791,7 +797,7 @@ export async function migrateMovementsObligations(
                     o.FK_ASIENTO,
                     idAuditTr,
                     o.FK_ARQUEO,
-                    idCard,
+                    o.TIPO_MOVI === 'TARJETA' ? idCard : null,
                     o.RECIBO_CAJA,
                     idPlanCuenta,
                     o.NUM_UNIDAD,

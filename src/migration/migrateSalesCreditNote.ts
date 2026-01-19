@@ -251,6 +251,7 @@ DESC;`);
 
 
 
+
                 return [
                     t.PUNTO_EMISION_DOC,
                     t.SECUENCIA_DOC,
@@ -410,6 +411,8 @@ DESC;`);
 
             throw err;
         }
+
+        return { mapCreditNote, mapAuditCreditNote };
     }
 
     const { mapNoteMovements } = await migrateMovementeAdvancesNote(
@@ -429,20 +432,6 @@ DESC;`);
         mapAuditCreditNote
     )
 
-    /*   legacyConn: any,
-     conn: any,
-     newCompanyId: number,
-     userMap: any,
-     bankMap: Record<number, number | null>,
-     boxMap: Record<number, number | null>,
-     mapConciliation: Record<number, number | null>,
-     mapObligationsCustomers: Record<number, number | null>,
-     mapPeriodo: Record<number, number | null>,
-     mapProject: Record<number, number | null>,
-     mapCenterCost: Record<number, number | null>,
-     mapAccounts: Record<number, number | null>,
-     mapCreditNote: Record<number, number | null>,
-     mapAuditCreditNote: Record<number, number | null> */
 
     return { mapCreditNote, mapAuditCreditNote };
 }

@@ -342,9 +342,8 @@ export async function migrateAccountingEntriesCustomerObligations(
     mapMovements: Record<number, number | null>,
     mapPeriodo: Record<number, number | null>,
     mapAuditMovements: Record<number, number | null>,
-): Promise<{
-    mapEntryAccount: Record<number, number>
-}> {
+): Promise<{ mapEntryAccount: Record<number, number> }> {
+
     console.log("🚀 Migrando encabezado de asiento contables cobros obligaciones..........");
     try {//IMPORTE_GD
         const mapEntryAccount: Record<number, number> = {};
