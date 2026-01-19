@@ -36,7 +36,7 @@ export async function migrateVehicles({
     ]);
 
     const [createVehicle]: any[] = await conn.query(`
-      INSERT INTO vehicles (PLACA_VEH, TIPO_VEH, DESC_VEH, ESTADO_VEH, FK_COD_EMPRESA, FEC_REG, FEC_MOD) VALUES ?`,
+      INSERT INTO vehicle (PLACA_VEH, TIPO_VEH, DESC_VEH, ESTADO_VEH, FK_COD_EMPRESA, FEC_REG, FEC_MOD) VALUES ?`,
       [vehicleValues]
     );
 

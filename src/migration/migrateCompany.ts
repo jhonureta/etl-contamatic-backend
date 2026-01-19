@@ -29,6 +29,7 @@ import { migrateCreditNote } from './migrateSalesCreditNote';
 import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
 import { migrateVehicles } from './migrateVehicles';
+import { migrateWorkOrders } from './migrateWorkOrders';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -528,6 +529,18 @@ export async function migrateCompany(codEmp: number) {
       branchMap
     })
 
+    //== Migrar ordenes de trabajos ===/
+    await migrateWorkOrders({
+      legacyConn,
+      conn,
+      newCompanyId,
+      userMap,
+      mapClients,
+      mapProducts,
+      branchMap
+    })
+
+    //== Migrar vehiculos ===/
     const { vehicleIdMap } = await migrateVehicles({
       legacyConn,
       conn,
@@ -561,12 +574,14 @@ export async function migrateCompany(codEmp: number) {
       mapCostExpenses: costExpenseIdMapping
     });
 
+    //== Migrar anticipos de proveedores ===/
     const { supplierAdvanceIdMap } = await migrateSupplierAdvances(
       legacyConn,
       conn,
       mapClients
     );
 
+    //== Migrar movimientos de compras y liquidaciones ===/
     const { purchaseLiquidationObligationIdMap } = await migratePurchaseAndLiquidationsMovements({
       legacyConn,
       conn,
@@ -584,6 +599,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
+    //== Migrar detalle de obligaciones de compras y liquidaciones ===/
     await migratePurchaseObligationDetail({
       legacyConn,
       conn,
