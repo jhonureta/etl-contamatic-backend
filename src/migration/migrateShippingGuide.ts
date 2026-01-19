@@ -1,4 +1,18 @@
-import { findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
+import { ClientIdentity, UserIdentity } from "./migrationTools";
+import { findFirstDefaultCustomer, findFirstDefaultUser, findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
+
+
+interface MigrateShippingGuideParams {
+  legacyConn: any;
+  conn: any;
+  newCompanyId: number;
+  mapClients: Record<number, number>;
+  mapProducts: Record<number, number>;
+  branchMap: Record<number, number>;
+  userNameIdMap: Map<string, UserIdentity>;
+  clientNameIdMap: Map<string, ClientIdentity>;
+  vehicleIdMap: Record<number, number>
+}
 
 export async function migrateShippingGuide({
   legacyConn,
@@ -8,8 +22,9 @@ export async function migrateShippingGuide({
   mapProducts,
   branchMap,
   userNameIdMap,
-  clientNameIdMap
-}) {
+  clientNameIdMap,
+  vehicleIdMap
+}: MigrateShippingGuideParams) {
   try {
     const [shippingGuide]: any[] = await legacyConn.query(`
       SELECT
@@ -53,7 +68,7 @@ export async function migrateShippingGuide({
       0 AS TOT_PAG_TRAC,
       0,
       NULL AS OTRA_PER,
-      NULL AS COD_COMPROBANTE,
+      06 AS COD_COMPROBANTE,
       NULL AS COD_COMPROBANTE_REL,
       NULL AS COD_DOCSUS_TRIB,
       NULL AS FK_COD_EMP,
@@ -88,9 +103,22 @@ export async function migrateShippingGuide({
       NULL AS OBS_AUXILIAR,
       NULL AS OBS_ORDEN,
       g.emailCliente AS EMAIL_CLIENTE,
-      g.NUM_AUTORIZACION
+      g.NUM_AUTORIZACION,
+      IFNULL(tr.NUM_TRAC, '001-001-000000001') AS NUM_FACTURA,
+      g.FECHA_INICIO,
+      g.FECHA_FIN,
+      g.MOTIVO_TRASLADO,
+      g.NUM_ADUANERA,
+      g.P_PARTIDA,
+      g.P_LLEGADA,
+      g.H_SALIDA,
+      g.H_LLEGADA,
+      v.COD_VEH,
+      v.PLACA
       FROM
           guia_remision g
+      JOIN vehiculo v ON
+          g.vehiculo = v.COD_VEH
       LEFT JOIN transacciones tr ON
           g.FK_COD_TRANSACCION = tr.COD_TRAC
       ORDER BY
@@ -109,14 +137,14 @@ export async function migrateShippingGuide({
         SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
     FROM
         sucursales;`;
-  
+
     const [sequentialBranches]: any[] = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
-  
+
     let idFirstBranch: number | null = null;
     if (sequentialBranches && sequentialBranches.length > 0) {
       idFirstBranch = Number(sequentialBranches[0].COD_SURC);
     }
-  
+
     const electronicSequences = new Map<string, number>();
     sequentialBranches.forEach((branch: any, index: number) => {
       electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
@@ -125,6 +153,24 @@ export async function migrateShippingGuide({
     const BATCH_SIZE = 1000;
     const shippingGuideIdMap: Record<number, number> = {};
     const shippingGuideAuditIdMap: Record<number, number> = {};
+
+    const [ [defaultUser], [defaultCustomer] ] = await Promise.all([
+      findFirstDefaultUser({ conn, companyId: newCompanyId }),
+      findFirstDefaultCustomer({ conn, companyId: newCompanyId })
+    ]);
+
+    let defaultUserId = null;
+    let defaultCustomerId = null;
+    let defacultCiUser = null;
+    let defacultCiCustomer = null;
+    if (defaultUser) {
+      defaultUserId = defaultUser.COD_USUEMP;
+      defacultCiUser = defaultUser.IDE_USUEMP;
+    }
+    if (defaultCustomer) {
+      defaultCustomerId = defaultCustomer.CUST_ID;
+      defacultCiCustomer = defaultCustomer.CUST_CI;
+    }
 
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
@@ -143,10 +189,14 @@ export async function migrateShippingGuide({
 
       const shippingGuideValues = batch.map((shippingGuide, index: number) => {
         console.log(`transformando y normalizando guias ${shippingGuide.NUM_TRANS}`);
-        
-        const sellerId = null;
-        const userId = userNameIdMap[shippingGuide.NAME_USER?.toUpperCase()];
-        const clientId = clientNameIdMap[shippingGuide.NAME_CLIENT?.toUpperCase()];
+
+        const userId = userNameIdMap.get(shippingGuide.NAME_USER?.toUpperCase())?.id || defaultUserId;
+        const clientId = clientNameIdMap.get(shippingGuide.NAME_CLIENT?.toUpperCase())?.id || defaultCustomerId;
+        const carrierId = userNameIdMap.get(shippingGuide.NAME_USER?.toUpperCase())?.id || defaultUserId;
+
+        const userIdCi = userNameIdMap.get(shippingGuide.NAME_USER?.toUpperCase())?.ci || defacultCiUser;
+        const clientCi = clientNameIdMap.get(shippingGuide.NAME_CLIENT?.toUpperCase())?.ci || defacultCiCustomer;
+
         const productDetails = toJSONArray(shippingGuide.DOCUMENT_DETAIL);
 
         const auditId = firstInsertedAuditId + index;
@@ -164,6 +214,30 @@ export async function migrateShippingGuide({
           idFirstBranch
         );
 
+        const detailedShippingGuide = generateDetailShippingGuide(
+          shippingGuide.NUM_TRANS,
+          shippingGuide.NUM_FACTURA,
+          shippingGuide.NUM_AUTORIZACION,
+          'FACTURA',
+          shippingGuide.FECHA_INICIO,
+          shippingGuide.FECHA_FIN,
+          shippingGuide.MOTIVO_TRASLADO,
+          shippingGuide.NUM_ADUANERA,
+          shippingGuide.P_PARTIDA,
+          shippingGuide.H_SALIDA,
+          shippingGuide.P_LLEGADA,
+          shippingGuide.H_LLEGADA,
+          clientCi, // cedula de destinatario
+          userIdCi, // cedula de transportista
+          shippingGuide.NAME_USER, // nombre del transportista
+          shippingGuide.PLACA, // placa del vehiculo
+          clientId, // destinatario
+          carrierId, // transportista
+          branchId, // sucursal
+          toJSONArray(shippingGuide.INFO_ADIC)
+        );
+
+
         return [
           shippingGuide.PUNTO_EMISION_DOC,
           shippingGuide.SECUENCIA_DOC,
@@ -179,7 +253,7 @@ export async function migrateShippingGuide({
           shippingGuide.MET_PAG_TRAC,
           shippingGuide.OBS_TRAC,
           userId,
-          sellerId,
+          userId,
           clientId,
           shippingGuide.ESTADO,
           shippingGuide.ESTADO_REL,
@@ -226,7 +300,7 @@ export async function migrateShippingGuide({
           shippingGuide.NUM_TRANS,
           shippingGuide.NUM_REL_DOC,
           shippingGuide.DIV_PAY_YEAR,
-          null,
+          JSON.stringify(detailedShippingGuide),
           shippingGuide.RESP_SRI,
           shippingGuide.INFO_ADIC,
           shippingGuide.DET_EXP_REEMBOLSO,
@@ -308,7 +382,7 @@ export async function migrateShippingGuide({
             OBS_AUXILIAR,
             OBS_ORDEN
         ) VALUES ?
-      `,[shippingGuideValues]);
+      `, [shippingGuideValues]);
       let newId = resCreateShippingGuide.insertId;
       for (const s of batch) {
         shippingGuideIdMap[s.COD_TRANS] = newId++;
@@ -316,7 +390,7 @@ export async function migrateShippingGuide({
       console.log(` -> Batch migrado: ${batch.length} guías de envío`);
     }
     return { shippingGuideIdMap, shippingGuideAuditIdMap };
-  }catch (error) {
+  } catch (error) {
     console.error('Error al migrar guías de envío:', error);
     throw error;
   }
@@ -362,4 +436,52 @@ function transformProductDetail(
     };
   });
   return detailTransformed as any[];
+}
+
+function generateDetailShippingGuide(
+  sequential: string,
+  voucher: string,
+  authorization: string,
+  document: string,
+  startDate: string,
+  endDate: string,
+  reason: string,
+  authorizationCutoms: string,
+  origin: string,
+  startTime: string,
+  destination: string,
+  endTime: string,
+  ciRecipient: string,
+  ciCarrier: string,
+  nameCarrier: string,
+  plate: string,
+  recipient: number,
+  carrier: number,
+  sucursal: number,
+  detalleItemsAdic: any[]
+) {
+  return [
+    {
+      sequential,
+      voucher,
+      authorization,
+      document,
+      startDate,
+      endDate,
+      reason,
+      authorizationCutoms,
+      origin,
+      startTime,
+      destination,
+      endTime,
+      ciRecipient,
+      ciCarrier,
+      nameCarrier,
+      plate,
+      recipient,
+      carrier,
+      sucursal,
+      detalleItemsAdic,
+    },
+  ];
 }

@@ -33,6 +33,15 @@ type FindNextAdutiCodeParams = {
   companyId: number
 }
 
+type FindFirstDefaultUserParams = {
+  conn: Connection;
+  companyId: number
+}
+type FindFirstDefaultCustomerParams = {
+  conn: Connection;
+  companyId: number
+}
+
 const codigoIvaPorcentaje: Record<string, number> = {
   '12': 2,
   '0': 0,
@@ -338,3 +347,61 @@ export async function findNextAuditCode({
     throw err;
   }
 }
+
+export async function findFirstDefaultUser({
+  conn,
+  companyId
+}: FindFirstDefaultUserParams){
+  try {
+    const userQuery = `
+      SELECT
+          COD_USUEMP,
+          IDE_USUEMP,
+          NOM_USUEMP,
+          EMA_USUEMP,
+          ROL_USUEMP,
+          EST_USUEMP
+      FROM
+          users
+      WHERE
+          FK_COD_EMP = ? AND ROL_USUEMP <> 'superadmin'
+      ORDER BY
+          COD_USUEMP ASC
+      LIMIT 1;
+    `;
+    const userQueryResult: ResultSet = await conn.query(userQuery, [companyId]);
+    const [user]: any[] = userQueryResult as Array<any>;
+    return user;
+  } catch (err) {
+    throw err;
+  }
+}
+
+export async function findFirstDefaultCustomer({
+  conn,
+  companyId
+}: FindFirstDefaultCustomerParams){
+  try {
+    const customerQuery = `
+      SELECT
+          CUST_ID,
+          CUST_CI,
+          CUST_NOM,
+          CUST_NOMCOM,
+          CUST_DIR,
+          CUST_TELF
+      FROM
+          customers
+      WHERE
+          CUST_TYPE = 'CLIENTE' AND FK_COD_EMP = ?
+      ORDER BY
+          CUST_ID ASC
+      LIMIT 1;
+    `;
+    const customerQueryResult: ResultSet = await conn.query(customerQuery, [companyId]);
+    const [customer]: any[] = customerQueryResult as Array<any>;
+    return customer;
+  } catch (err) {
+    throw err;
+  }
+} 

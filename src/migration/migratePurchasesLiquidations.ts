@@ -1499,7 +1499,7 @@ async function migrateAccountingEntriesDetail({
 
 // Migrar cobros obligaciones CXP
 export async function migratePurchaseObligationDetail({
-  legacyConn,
+	legacyConn,
 	conn,
 	newCompanyId,
 	purchaseLiquidationIdMap,
@@ -1513,13 +1513,13 @@ export async function migratePurchaseObligationDetail({
 	mapAccounts,
 	mapConciliation,
 }: MigratePurchaseObligationDetailParams) {
-  try {
-    const movementIdMap: Record<number, number> = {};
-    const movementAuditIdMap: Record<number, number> = {};
+	try {
+		const movementIdMap: Record<number, number> = {};
+		const movementAuditIdMap: Record<number, number> = {};
 
-    let nexAuditId = await findNextAuditCode({ conn, companyId: newCompanyId });
+		let nexAuditId = await findNextAuditCode({ conn, companyId: newCompanyId });
 
-    const movementSequenceQuery: ResultSet = await conn.query(`
+		const movementSequenceQuery: ResultSet = await conn.query(`
 			SELECT
 					IFNULL(MAX(SECU_MOVI) + 1,
 					1) AS nextSeq
@@ -1528,29 +1528,29 @@ export async function migratePurchaseObligationDetail({
 			WHERE
 					MODULO = 'CXP' AND FK_COD_EMP = ?
 		`,
-      [newCompanyId]
-    );
-    const [movementData] = movementSequenceQuery as Array<any>;
-    let movementSeq = movementData[0]?.nextSeq ?? 1;
+			[newCompanyId]
+		);
+		const [movementData] = movementSequenceQuery as Array<any>;
+		let movementSeq = movementData[0]?.nextSeq ?? 1;
 
-    const cardQuery: ResultSet = await conn.query(
-      `SELECT ID_TARJETA AS idCard FROM cards WHERE FK_COD_EMP = ? LIMIT 1`,
-      [newCompanyId]
-    );
-    const [cardData]: any[] = cardQuery as Array<any>;
-    const cardId = cardData[0].idCard ?? null;
+		const cardQuery: ResultSet = await conn.query(
+			`SELECT ID_TARJETA AS idCard FROM cards WHERE FK_COD_EMP = ? LIMIT 1`,
+			[newCompanyId]
+		);
+		const [cardData]: any[] = cardQuery as Array<any>;
+		const cardId = cardData[0].idCard ?? null;
 
-    const accountPlanQuery: ResultSet = await conn.query(
-      `SELECT ID_PLAN, CODIGO_PLAN FROM account_plan WHERE FK_COD_EMP = ?`,
-      [newCompanyId]
-    );
-    const [chartOfAccounts]: any[] = accountPlanQuery as Array<any>;
+		const accountPlanQuery: ResultSet = await conn.query(
+			`SELECT ID_PLAN, CODIGO_PLAN FROM account_plan WHERE FK_COD_EMP = ?`,
+			[newCompanyId]
+		);
+		const [chartOfAccounts]: any[] = accountPlanQuery as Array<any>;
 
-    const accountMap = new Map(
-      chartOfAccounts.map((a: any) => [a.CODIGO_PLAN, a.ID_PLAN])
-    );
+		const accountMap = new Map(
+			chartOfAccounts.map((a: any) => [a.CODIGO_PLAN, a.ID_PLAN])
+		);
 
-    const [obligationDetails]: any[] = await legacyConn.query(`
+		const [obligationDetails]: any[] = await legacyConn.query(`
 			SELECT
 					detalles_cuentas.fk_cod_cuenta,
 					detalles_cuentas.FK_COD_GD,
@@ -1627,86 +1627,86 @@ export async function migratePurchaseObligationDetail({
 					cod_detalle
 			DESC;`);
 
-    if (obligationDetails.length === 0) {
-      return { movementIdMap, movementAuditIdMap };
-    }
-    const BATCH_SIZE = 500;
+		if (obligationDetails.length === 0) {
+			return { movementIdMap, movementAuditIdMap };
+		}
+		const BATCH_SIZE = 500;
 
-    for (let i = 0; i < obligationDetails.length; i += BATCH_SIZE) {
-      const obligationBatch = obligationDetails.slice(i, i + BATCH_SIZE);
+		for (let i = 0; i < obligationDetails.length; i += BATCH_SIZE) {
+			const obligationBatch = obligationDetails.slice(i, i + BATCH_SIZE);
 
-      const auditValues = obligationBatch.map((o) => [
-        nexAuditId++,
-        o.forma,
-        newCompanyId,
-      ]);
+			const auditValues = obligationBatch.map((o) => [
+				nexAuditId++,
+				o.forma,
+				newCompanyId,
+			]);
 
-      const resultCreateAudit: ResultSet = await conn.query(
-        `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
-        [auditValues]
-      );
-      const firstAuditId = (resultCreateAudit[0] as ResultSetHeader).insertId;
+			const resultCreateAudit: ResultSet = await conn.query(
+				`INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
+				[auditValues]
+			);
+			const firstAuditId = (resultCreateAudit[0] as ResultSetHeader).insertId;
 
-      const movementValues = obligationBatch.map((obl: any, index: number) => {
-        const auditId = firstAuditId + index;
-        movementAuditIdMap[obl.FK_COD_GD] = auditId;
+			const movementValues = obligationBatch.map((obl: any, index: number) => {
+				const auditId = firstAuditId + index;
+				movementAuditIdMap[obl.FK_COD_GD] = auditId;
 
-        let modulo = "CXP";
-        let origen = "CXP";
-        let causa = "EGRESO";
-        let tipMovi = obl.TIP_MOVI;
-        let tipoMovi = obl.TIPO_MOVI;
-        let idPlanCuenta = null;
+				let modulo = "CXP";
+				let origen = "CXP";
+				let causa = "EGRESO";
+				let tipMovi = obl.TIP_MOVI;
+				let tipoMovi = obl.TIPO_MOVI;
+				let idPlanCuenta = null;
 
-        if (obl.forma === "CCTACONT") {
-          const codigoPlan = obl.REF_MOVI?.split("--")[0].trim();
-          idPlanCuenta = accountMap.get(codigoPlan) || null;
-          tipMovi = tipoMovi = "CCTACONT";
-        } else if (obl.forma === "RET-VENTA") {
-          tipMovi = tipoMovi = origen = "RET-VENTA";
-          modulo = "RETENCION-VENTA";
-        } else if (obl.forma === "NOTA DE CREDITO") {
-          tipMovi = tipoMovi = "CREDITO";
-          modulo = "NCVENTA";
-          origen = "NOTA CREDITO VENTA";
-        }
+				if (obl.forma === "CCTACONT") {
+					const codigoPlan = obl.REF_MOVI?.split("--")[0].trim();
+					idPlanCuenta = accountMap.get(codigoPlan) || null;
+					tipMovi = tipoMovi = "CCTACONT";
+				} else if (obl.forma === "RET-VENTA") {
+					tipMovi = tipoMovi = origen = "RET-VENTA";
+					modulo = "RETENCION-VENTA";
+				} else if (obl.forma === "NOTA DE CREDITO") {
+					tipMovi = tipoMovi = "CREDITO";
+					modulo = "NCVENTA";
+					origen = "NOTA CREDITO VENTA";
+				}
 
-        return [
-          bankMap[obl.FK_COD_BANCO_MOVI] ?? null,
-          purchaseLiquidationIdMap[obl.FK_TRAC_MOVI] ?? null,
-          mapConciliation[obl.FK_CONCILIADO] ?? null,
-          userMap[obl.fk_cod_Vemp] ?? null,
-          obl.FECHA_MOVI,
-          obl.FECHA_MANUAL,
-          tipMovi,
-          origen,
-          tipoMovi,
-          obl.REF_MOVI,
-          obl.CONCEP_MOVI,
-          obl.NUM_VOUCHER,
-          obl.NUM_LOTE,
-          causa,
-          modulo,
-          movementSeq++,
-          obl.IMPOR_MOVI,
-          obl.ESTADO_MOVI,
-          obl.PER_BENE_MOVI,
-          obl.CONCILIATED ?? 0,
-          newCompanyId,
-          boxMap[obl.FK_COD_CAJAS_MOVI] ?? null,
-          obl.OBS_MOVI,
-          obl.IMPOR_MOVITOTAL,
-          null, // FK_ASIENTO
-          auditId,
-          null, // FK_ARQUEO
-          obl.forma === "TARJETA" ? cardId : null,
-          null, // RECIBO_CAJA
-          idPlanCuenta,
-          null, // NUM_UNIDAD
-          "[]", // JSON_PAGOS
-        ];
-      });
-      const resultCreateMovement = await conn.query(`
+				return [
+					bankMap[obl.FK_COD_BANCO_MOVI] ?? null,
+					purchaseLiquidationIdMap[obl.FK_TRAC_MOVI] ?? null,
+					mapConciliation[obl.FK_CONCILIADO] ?? null,
+					userMap[obl.fk_cod_Vemp] ?? null,
+					obl.FECHA_MOVI,
+					obl.FECHA_MANUAL,
+					tipMovi,
+					origen,
+					tipoMovi,
+					obl.REF_MOVI,
+					obl.CONCEP_MOVI,
+					obl.NUM_VOUCHER,
+					obl.NUM_LOTE,
+					causa,
+					modulo,
+					movementSeq++,
+					obl.IMPOR_MOVI,
+					obl.ESTADO_MOVI,
+					obl.PER_BENE_MOVI,
+					obl.CONCILIATED ?? 0,
+					newCompanyId,
+					boxMap[obl.FK_COD_CAJAS_MOVI] ?? null,
+					obl.OBS_MOVI,
+					obl.IMPOR_MOVITOTAL,
+					null, // FK_ASIENTO
+					auditId,
+					null, // FK_ARQUEO
+					obl.forma === "TARJETA" ? cardId : null,
+					null, // RECIBO_CAJA
+					idPlanCuenta,
+					null, // NUM_UNIDAD
+					"[]", // JSON_PAGOS
+				];
+			});
+			const resultCreateMovement = await conn.query(`
 				INSERT INTO movements(
 						FKBANCO,
 						FK_COD_TRAN,
@@ -1743,71 +1743,71 @@ export async function migratePurchaseObligationDetail({
 				)
 				VALUES ?
 			`,
-        [movementValues]
-      );
-      let nextMovementId = (resultCreateMovement[0] as ResultSetHeader)
-        .insertId;
-      obligationBatch.forEach(({ COD_TRANS }) => {
-        movementIdMap[COD_TRANS] = nextMovementId++;
-      });
-    }
+				[movementValues]
+			);
+			let nextMovementId = (resultCreateMovement[0] as ResultSetHeader)
+				.insertId;
+			obligationBatch.forEach(({ COD_TRANS }) => {
+				movementIdMap[COD_TRANS] = nextMovementId++;
+			});
+		}
 
-    const { detailObligationIdMap } = await migrateDetailsOfObligations({
-      legacyConn,
-      conn,
-      purchaseLiquidationObligationIdMap,
-      movementIdMap,
-    });
-    console.log(
-      "Movimientos de cobros realizados:",
-      Object.keys(movementIdMap).length
-    );
-    console.log("Detalle migrado:", Object.keys(detailObligationIdMap).length);
-    console.log("✅ Migración de cobros completadas");
+		const { detailObligationIdMap } = await migrateDetailsOfObligations({
+			legacyConn,
+			conn,
+			purchaseLiquidationObligationIdMap,
+			movementIdMap,
+		});
+		console.log(
+			"Movimientos de cobros realizados:",
+			Object.keys(movementIdMap).length
+		);
+		console.log("Detalle migrado:", Object.keys(detailObligationIdMap).length);
+		console.log("✅ Migración de cobros completadas");
 
-    const { accountingEntriesIdMap } = await migrateObligationJournalEntries({
-      legacyConn,
-      conn,
-      newCompanyId,
-      movementIdMap,
-      mapPeriodo,
-      movementAuditIdMap,
-    });
+		const { accountingEntriesIdMap } = await migrateObligationJournalEntries({
+			legacyConn,
+			conn,
+			newCompanyId,
+			movementIdMap,
+			mapPeriodo,
+			movementAuditIdMap,
+		});
 
-    console.log(
-      "Encabezado de asiento contable migrados CXP:",
-      Object.keys(accountingEntriesIdMap).length
-    );
+		console.log(
+			"Encabezado de asiento contable migrados CXP:",
+			Object.keys(accountingEntriesIdMap).length
+		);
 
-    const { accountingEntryDetailsIdMap } = await migrateObligationJournalEntryDetails({
-      legacyConn,
-      conn,
-      newCompanyId,
-      mapProject,
-      mapCenterCost,
-      mapAccounts,
-      accountingEntriesIdMap,
-    });
+		const { accountingEntryDetailsIdMap } = await migrateObligationJournalEntryDetails({
+			legacyConn,
+			conn,
+			newCompanyId,
+			mapProject,
+			mapCenterCost,
+			mapAccounts,
+			accountingEntriesIdMap,
+		});
 		console.log("Detalle de asientos contables migrados CXP:", Object.keys(accountingEntryDetailsIdMap).length);
 		return { movementIdMap, movementAuditIdMap };
-  } catch (error) {
-    throw error;
-  }
+	} catch (error) {
+		throw error;
+	}
 }
 
 // Migrar detalles de cobros obligaciones CXP
 async function migrateDetailsOfObligations({
-  legacyConn,
-  conn,
-  purchaseLiquidationObligationIdMap,
-  movementIdMap,
+	legacyConn,
+	conn,
+	purchaseLiquidationObligationIdMap,
+	movementIdMap,
 }: MigrateDetailsOfObligationsParams): Promise<{
-  detailObligationIdMap: Record<number, number>;
+	detailObligationIdMap: Record<number, number>;
 }> {
-  try {
-    const detailObligationIdMap: Record<number, number> = {};
+	try {
+		const detailObligationIdMap: Record<number, number> = {};
 
-    const [detailsObligations]: any[] = await legacyConn.query(`
+		const [detailsObligations]: any[] = await legacyConn.query(`
 			SELECT
 					detalles_cuentas.fk_cod_cuenta,
 					detalles_cuentas.FK_COD_GD,
@@ -1826,61 +1826,61 @@ async function migrateDetailsOfObligations({
 					cod_detalle
 			DESC;
 		`);
-    if (detailsObligations.length === 0) {
-      return { detailObligationIdMap };
-    }
-    const BATCH_SIZE = 500;
+		if (detailsObligations.length === 0) {
+			return { detailObligationIdMap };
+		}
+		const BATCH_SIZE = 500;
 
-    for (let i = 0; i < detailsObligations.length; i += BATCH_SIZE) {
-      const batchObligations = detailsObligations.slice(i, i + BATCH_SIZE);
-      const movementValues = batchObligations.map((o: any, index: number) => {
-        const idCuenta = purchaseLiquidationObligationIdMap[o.fk_cod_cuenta];
-        const idMovimiento = movementIdMap[o.FK_COD_GD];
-        return [
-          idCuenta,
-          idMovimiento,
-          o.fecha,
-          o.importe,
-          o.saldo,
-          o.nuevo_saldo,
-        ];
-      });
-      const resultCreateDetail: ResultSet = await conn.query(
-        `INSERT INTO account_detail (
+		for (let i = 0; i < detailsObligations.length; i += BATCH_SIZE) {
+			const batchObligations = detailsObligations.slice(i, i + BATCH_SIZE);
+			const movementValues = batchObligations.map((o: any, index: number) => {
+				const idCuenta = purchaseLiquidationObligationIdMap[o.fk_cod_cuenta];
+				const idMovimiento = movementIdMap[o.FK_COD_GD];
+				return [
+					idCuenta,
+					idMovimiento,
+					o.fecha,
+					o.importe,
+					o.saldo,
+					o.nuevo_saldo,
+				];
+			});
+			const resultCreateDetail: ResultSet = await conn.query(
+				`INSERT INTO account_detail (
 						FK_COD_CUENTA, FK_ID_MOVI, FECHA_REG, IMPORTE, SALDO, NEW_SALDO
 				) VALUES ?`,
-        [movementValues]
-      );
-      let nextDetailId = (resultCreateDetail[0] as ResultSetHeader).insertId;
-      batchObligations.forEach(({ FK_COD_GD }) => {
-        detailObligationIdMap[FK_COD_GD] = nextDetailId++;
-      });
-    }
-    console.log("✅ Migración completada");
-    return { detailObligationIdMap };
-  } catch (error) {
-    throw error;
-  }
+				[movementValues]
+			);
+			let nextDetailId = (resultCreateDetail[0] as ResultSetHeader).insertId;
+			batchObligations.forEach(({ FK_COD_GD }) => {
+				detailObligationIdMap[FK_COD_GD] = nextDetailId++;
+			});
+		}
+		console.log("✅ Migración completada");
+		return { detailObligationIdMap };
+	} catch (error) {
+		throw error;
+	}
 }
 
 // Migrar asientos contables de cobros obligaciones CXP
 async function migrateObligationJournalEntries({
-  legacyConn,
-  conn,
-  newCompanyId,
-  movementIdMap,
-  mapPeriodo,
-  movementAuditIdMap,
+	legacyConn,
+	conn,
+	newCompanyId,
+	movementIdMap,
+	mapPeriodo,
+	movementAuditIdMap,
 }: MigrateAccountingEntryObligationsParams): Promise<{
-  accountingEntriesIdMap: Record<number, number>;
+	accountingEntriesIdMap: Record<number, number>;
 }> {
-  try {
-    console.log(
-      "🚀 Migrando encabezado de asiento contables cobros obligaciones CXP"
-    );
-    const accountingEntriesIdMap: Record<number, number> = {};
+	try {
+		console.log(
+			"🚀 Migrando encabezado de asiento contables cobros obligaciones CXP"
+		);
+		const accountingEntriesIdMap: Record<number, number> = {};
 
-    const [accountingEntries]: any[] = await legacyConn.query(`
+		const [accountingEntries]: any[] = await legacyConn.query(`
 			SELECT
 					cod_asiento,
 					fecha_asiento AS FECHA_ASI,
@@ -1912,40 +1912,40 @@ async function migrateObligationJournalEntries({
 			WHERE
 					origen_asiento = 'CXP' AND tipo_asiento <> 'OBLIGACIONES';
 		`);
-    if (accountingEntries.length === 0) {
-      return { accountingEntriesIdMap };
-    }
-    const BATCH_SIZE = 1000;
-    for (let i = 0; i < accountingEntries.length; i += BATCH_SIZE) {
-      const batchAccountingEntries = accountingEntries.slice(i, i + BATCH_SIZE);
-      const accountingEntriesValues = batchAccountingEntries.map(
-        (o: any, index: number) => {
-          const periodId = mapPeriodo[o.FK_PERIODO];
-          const transAuditId = movementAuditIdMap[o.cod_origen];
-          const movementId = movementIdMap[o.cod_origen];
-          return [
-            o.FECHA_ASI,
-            o.DESCRIP_ASI,
-            o.NUM_ASI,
-            o.ORG_ASI,
-            o.TDEBE_ASI,
-            o.THABER_ASI,
-            o.TIP_ASI,
-            periodId,
-            o.FECHA_REG,
-            o.FECHA_ACT,
-            o.JSON_ASI,
-            o.RES_ASI,
-            o.BEN_ASI,
-            transAuditId,
-            newCompanyId,
-            o.SEC_ASI,
-            null,
-            movementId,
-          ];
-        }
-      );
-      const resultCreateAccountingEntries: ResultSet = await conn.query(`
+		if (accountingEntries.length === 0) {
+			return { accountingEntriesIdMap };
+		}
+		const BATCH_SIZE = 1000;
+		for (let i = 0; i < accountingEntries.length; i += BATCH_SIZE) {
+			const batchAccountingEntries = accountingEntries.slice(i, i + BATCH_SIZE);
+			const accountingEntriesValues = batchAccountingEntries.map(
+				(o: any, index: number) => {
+					const periodId = mapPeriodo[o.FK_PERIODO];
+					const transAuditId = movementAuditIdMap[o.cod_origen];
+					const movementId = movementIdMap[o.cod_origen];
+					return [
+						o.FECHA_ASI,
+						o.DESCRIP_ASI,
+						o.NUM_ASI,
+						o.ORG_ASI,
+						o.TDEBE_ASI,
+						o.THABER_ASI,
+						o.TIP_ASI,
+						periodId,
+						o.FECHA_REG,
+						o.FECHA_ACT,
+						o.JSON_ASI,
+						o.RES_ASI,
+						o.BEN_ASI,
+						transAuditId,
+						newCompanyId,
+						o.SEC_ASI,
+						null,
+						movementId,
+					];
+				}
+			);
+			const resultCreateAccountingEntries: ResultSet = await conn.query(`
 				INSERT INTO accounting_movements(
 						FECHA_ASI,
 						DESCRIP_ASI,
@@ -1968,39 +1968,39 @@ async function migrateObligationJournalEntries({
 				)
 				VALUES ?
 				`,
-        [accountingEntriesValues]
-      );
-      let nextId = (resultCreateAccountingEntries[0] as ResultSetHeader).insertId;
-      batchAccountingEntries.forEach(({ cod_asiento }) => {
-        accountingEntriesIdMap[cod_asiento] = nextId++;
-      });
-    }
-    console.log("✅ Migración de asiento contable completada CXP");
-    return { accountingEntriesIdMap };
-  } catch (error) {
-    throw error;
-  }
+				[accountingEntriesValues]
+			);
+			let nextId = (resultCreateAccountingEntries[0] as ResultSetHeader).insertId;
+			batchAccountingEntries.forEach(({ cod_asiento }) => {
+				accountingEntriesIdMap[cod_asiento] = nextId++;
+			});
+		}
+		console.log("✅ Migración de asiento contable completada CXP");
+		return { accountingEntriesIdMap };
+	} catch (error) {
+		throw error;
+	}
 }
 
 // Migrar detalles de asientos contables de cobros obligaciones CXP
 async function migrateObligationJournalEntryDetails({
-  legacyConn,
-  conn,
-  newCompanyId,
-  mapProject,
-  mapCenterCost,
-  mapAccounts,
-  accountingEntriesIdMap,
+	legacyConn,
+	conn,
+	newCompanyId,
+	mapProject,
+	mapCenterCost,
+	mapAccounts,
+	accountingEntriesIdMap,
 }: MigrateObligationJournalEntryDetailsParams): Promise<{
-  accountingEntryDetailsIdMap: Record<number, number>;
+	accountingEntryDetailsIdMap: Record<number, number>;
 }> {
-  try {
-    console.log(
-      "🚀 Migrando detalle de asiento contable cobros obligaciones CXP"
-    );
-    const accountingEntryDetailsIdMap: Record<number, number> = {};
+	try {
+		console.log(
+			"🚀 Migrando detalle de asiento contable cobros obligaciones CXP"
+		);
+		const accountingEntryDetailsIdMap: Record<number, number> = {};
 
-    const [accountingEntryDetails]: any[] = await legacyConn.query(`
+		const [accountingEntryDetails]: any[] = await legacyConn.query(`
 			SELECT
 					d.cod_detalle_asiento,
 					a.fecha_asiento,
@@ -2018,55 +2018,55 @@ async function migrateObligationJournalEntryDetails({
 					origen_asiento = 'CXP' AND tipo_asiento <> 'OBLIGACIONES';
 		`);
 
-    if (accountingEntryDetails.length === 0) {
-      return { accountingEntryDetailsIdMap };
-    }
-    const BATCH_SIZE = 1000;
-    let totalDebe = 0;
-    let totalHaber = 0;
-    for (let i = 0; i < accountingEntryDetails.length; i += BATCH_SIZE) {
-      const batchAccountingEntryDetails = accountingEntryDetails.slice(i, i + BATCH_SIZE);
-      const insertValues = [];
-      const totalsMap = new Map<string, any>();
+		if (accountingEntryDetails.length === 0) {
+			return { accountingEntryDetailsIdMap };
+		}
+		const BATCH_SIZE = 1000;
+		let totalDebe = 0;
+		let totalHaber = 0;
+		for (let i = 0; i < accountingEntryDetails.length; i += BATCH_SIZE) {
+			const batchAccountingEntryDetails = accountingEntryDetails.slice(i, i + BATCH_SIZE);
+			const insertValues = [];
+			const totalsMap = new Map<string, any>();
 
-      for (const o of batchAccountingEntryDetails) {
-        const planId = mapAccounts[o.FK_CTAC_PLAN];
-        const projectId = mapProject[o.FK_COD_PROJECT] || null;
-        const costId = mapCenterCost[o.FK_COD_COST] || null;
-        const entryId = accountingEntriesIdMap[o.FK_COD_ASIENTO] || null;
+			for (const o of batchAccountingEntryDetails) {
+				const planId = mapAccounts[o.FK_CTAC_PLAN];
+				const projectId = mapProject[o.FK_COD_PROJECT] || null;
+				const costId = mapCenterCost[o.FK_COD_COST] || null;
+				const entryId = accountingEntriesIdMap[o.FK_COD_ASIENTO] || null;
 
-        if (!planId || !entryId) continue;
-        const debe = Number(o.DEBE_DET) || 0;
-        const haber = Number(o.HABER_DET) || 0;
+				if (!planId || !entryId) continue;
+				const debe = Number(o.DEBE_DET) || 0;
+				const haber = Number(o.HABER_DET) || 0;
 
-        insertValues.push([entryId, debe, haber, planId, projectId, costId]);
+				insertValues.push([entryId, debe, haber, planId, projectId, costId]);
 
-        const key = `${newCompanyId}-${planId}-${o.fecha_asiento}`;
+				const key = `${newCompanyId}-${planId}-${o.fecha_asiento}`;
 
-        if (!totalsMap.has(key)) {
-          totalsMap.set(key, {
-            id_plan: planId,
-            fecha: o.fecha_asiento,
-            debe: 0,
-            haber: 0,
-            total: 0,
-            operacion: "suma",
-          });
-        }
+				if (!totalsMap.has(key)) {
+					totalsMap.set(key, {
+						id_plan: planId,
+						fecha: o.fecha_asiento,
+						debe: 0,
+						haber: 0,
+						total: 0,
+						operacion: "suma",
+					});
+				}
 
-        const acc = totalsMap.get(key);
-        acc.debe += debe;
-        acc.haber += haber;
-        acc.total++;
+				const acc = totalsMap.get(key);
+				acc.debe += debe;
+				acc.haber += haber;
+				acc.total++;
 
-        totalHaber += haber;
-        totalDebe += debe;
-      }
-      if (insertValues.length === 0) {
-        console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
-        continue;
-      }
-      const resultCreateDetail: ResultSet = await conn.query(`
+				totalHaber += haber;
+				totalDebe += debe;
+			}
+			if (insertValues.length === 0) {
+				console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
+				continue;
+			}
+			const resultCreateDetail: ResultSet = await conn.query(`
 				INSERT INTO accounting_movements_det(
 						FK_COD_ASIENTO,
 						DEBE_DET,
@@ -2077,24 +2077,24 @@ async function migrateObligationJournalEntryDetails({
 				)
 				VALUES ?
 			`,
-        [insertValues]
-      );
-      let nextId = (resultCreateDetail[0] as ResultSetHeader).insertId;
-      for (const o of batchAccountingEntryDetails) {
+				[insertValues]
+			);
+			let nextId = (resultCreateDetail[0] as ResultSetHeader).insertId;
+			for (const o of batchAccountingEntryDetails) {
 				const idPlan = mapAccounts[o.FK_CTAC_PLAN];
 				console.log(`➡️ Procesando detalle de asiento CXP  ${idPlan}`);
 				const idCodAsiento = accountingEntriesIdMap[o.FK_COD_ASIENTO];
 				if (!idPlan || !idCodAsiento) continue;
 				accountingEntryDetailsIdMap[o.cod_detalle_asiento] = nextId++;
-      }
-      for (const t of totalsMap.values()) {
-        await upsertTotaledEntry(conn, t, newCompanyId);
-      }
+			}
+			for (const t of totalsMap.values()) {
+				await upsertTotaledEntry(conn, t, newCompanyId);
+			}
 			console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
-    }
+		}
 		console.log("🎉 Migración de detalles de asiento contable cobros obligaciones CXP completada");
-    return { accountingEntryDetailsIdMap };
-  } catch (error) {
-    throw error;
-  }
+		return { accountingEntryDetailsIdMap };
+	} catch (error) {
+		throw error;
+	}
 }
