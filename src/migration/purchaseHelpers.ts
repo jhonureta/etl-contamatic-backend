@@ -116,7 +116,7 @@ function transformProductsMerchandise(
     const impuestoCode = isOld ?
       (codigoIvaPorcentaje?.[product.impuesto] ?? "2") :
       toInteger(product.codigoimpuesto, 0);
-    const impuestoName = isOld ? toNumber(product.impuesto) : toNumber(product.nombreImpuesto);
+    const impuestoName = isOld ? toNumber(product.impuesto) : product.nombreImpuesto;
     const cost = isOld ? toNumber(product.precioProducto) : toNumber(product.costoProducto);
     const manualPrice = isOld ? 1 : toInteger(mapProducts[product.preciomanual]);
     return {

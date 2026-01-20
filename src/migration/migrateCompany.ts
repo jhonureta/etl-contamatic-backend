@@ -30,6 +30,7 @@ import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
 import { migrateVehicles } from './migrateVehicles';
 import { migrateWorkOrders } from './migrateWorkOrders';
+import { migratePurchaseOrders } from './migratePurchaseOrders';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -615,6 +616,20 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       mapConciliation,
     }) 
+
+    //== Migrar Pedidos de compra ===/
+    const { purchaseOrderIdMap, purchaseOrderAuditIdMap } = await migratePurchaseOrders({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      mapProducts,
+      oldRetentionCodeMap,
+      newRetentionIdMap,
+      mapCostExpenses: costExpenseIdMapping
+    })
 
 
     const mapRetentionsMov = await migrateSalesRetentions(
