@@ -779,7 +779,7 @@ async function migrateObligationsTransactions({
 	`);
 		const [obligations]: any[] = resultObligationsQuery as Array<any>;
 		if (obligations.length === 0) {
-			return { purchaseLiquidationObligationIdMap, purchaseLiquidationObligationAuditIdMap, oblAsiToAuditId, migratedMovementsIdMap: {} };
+			return { purchaseLiquidationObligationIdMap, purchaseLiquidationObligationAuditIdMap, oblAsiToAuditId };
 		}
 
 		const BATCH_SIZE: number = 500;
@@ -886,7 +886,7 @@ async function migrateObligationsTransactions({
 			mapAccounts
 		})
 
-		return { purchaseLiquidationObligationIdMap, purchaseLiquidationObligationAuditIdMap, oblAsiToAuditId, migratedMovementsIdMap };
+		return { purchaseLiquidationObligationIdMap, purchaseLiquidationObligationAuditIdMap, oblAsiToAuditId };
 	} catch (error) {
 		throw error;
 	}
@@ -1620,7 +1620,7 @@ export async function migratePurchaseObligationDetail({
 			INNER JOIN grupo_detalles_t ON detalles_cuentas.FK_COD_GD = grupo_detalles_t.ID_GD
 			LEFT JOIN movimientos ON movimientos.FK_COD_CX = grupo_detalles_t.ID_GD
 			WHERE
-					cuentascp.Tipo_cxp = 'CXP' AND forma_pago_cp NOT IN('17', '16')
+					cuentascp.Tipo_cxp = 'CXP' AND forma_pago_cp NOT IN('17', '16') AND cuentascp.tipo_documento <> 3
 			GROUP BY
 					detalles_cuentas.FK_COD_GD
 			ORDER BY
@@ -1745,10 +1745,9 @@ export async function migratePurchaseObligationDetail({
 			`,
 				[movementValues]
 			);
-			let nextMovementId = (resultCreateMovement[0] as ResultSetHeader)
-				.insertId;
-			obligationBatch.forEach(({ COD_TRANS }) => {
-				movementIdMap[COD_TRANS] = nextMovementId++;
+			let nextMovementId = (resultCreateMovement[0] as ResultSetHeader).insertId;
+			obligationBatch.forEach(({ FK_COD_GD }) => {
+				movementIdMap[FK_COD_GD] = nextMovementId++;
 			});
 		}
 
@@ -1821,7 +1820,7 @@ async function migrateDetailsOfObligations({
 			INNER JOIN grupo_detalles_t ON detalles_cuentas.FK_COD_GD = grupo_detalles_t.ID_GD
 			LEFT JOIN movimientos ON movimientos.FK_COD_CX = grupo_detalles_t.ID_GD
 			WHERE
-					cuentascp.Tipo_cxp = 'CXP' AND detalles_cuentas.forma_pago_cp NOT IN('17', '16')
+					cuentascp.Tipo_cxp = 'CXP' AND detalles_cuentas.forma_pago_cp NOT IN('17', '16') AND cuentascp.tipo_documento <> 3
 			ORDER BY
 					cod_detalle
 			DESC;
