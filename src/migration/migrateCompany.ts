@@ -531,7 +531,7 @@ export async function migrateCompany(codEmp: number) {
     })
 
     //== Migrar ordenes de trabajos ===/
-    await migrateWorkOrders({
+    const { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap } = await migrateWorkOrders({
       legacyConn,
       conn,
       newCompanyId,
@@ -677,6 +677,9 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
+      workOrderIdMap,
+      workOrderAuditIdMap,
+      workOrderSecuencieMap
     );
 
     await conn.rollback();

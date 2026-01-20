@@ -121,6 +121,7 @@ export async function migrateWorkOrders({
     const BATCH_SIZE = 1000;
     const workOrderIdMap: Record<number, number> = {};
     const workOrderAuditIdMap: Record<number, number> = {};
+    const workOrderSecuencieMap: Record<number, number> = {};
     for (let i = 0; i < workOrders.length; i += BATCH_SIZE) {
 
       const batch = workOrders.slice(i, i + BATCH_SIZE);
@@ -304,13 +305,15 @@ export async function migrateWorkOrders({
       `, [workOrderValues]);
 
       let nextId = resultCreateWorkOrders.insertId;
-      batch.forEach(({ COD_TRANS }) => {
-        workOrderIdMap[COD_TRANS] = nextId++;
+      batch.forEach(({ COD_TRANS, NUM_TRANS }) => {
+        let secNext = nextId++;
+        workOrderIdMap[COD_TRANS] = secNext;
+        workOrderSecuencieMap[NUM_TRANS] = secNext;
       });
       console.log(` -> Batch migrado: ${batch.length} ordenes de trabajos`);
     }
 
-    return { workOrderIdMap, workOrderAuditIdMap };
+    return { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap };
   } catch (error) {
     console.error("Error al migrar ordenes de trabajos:", error);
     throw error;

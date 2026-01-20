@@ -23,6 +23,9 @@ export async function migrateDataMovements(
     mapProject: Record<number, number>,
     mapCenterCost: Record<number, number>,
     mapAccounts: Record<number, number>,
+    workOrderIdMap: Record<number, number>,
+    workOrderAuditIdMap: Record<number, number>,
+    workOrderSecuencieMap: Record<number, number>
 ): Promise<{ movementIdAdvancesMap: Record<number, number> }> {
     try {
         const movementIdAdvancesMap: Record<number, number> = {};
@@ -64,8 +67,11 @@ CAUSA_MOVI,
 #CASE WHEN ORIGEN_MOVI = 'ANTICIPOS-CLIENTES' THEN 'ANTCLI' ELSE ORIGEN_MOVI
 case
 WHEN SUBSTRING_INDEX(detalle_anticipos.FK_ORDEN, '-', 1) IN('OE', 'OV') THEN 'ANT-ORDEN' ELSE 'ANTCLI'
-
 END AS MODULO,
+CASE
+WHEN SUBSTRING_INDEX(detalle_anticipos.FK_ORDEN, '-', 1) IN('OE') THEN 'ANT-ORDEN-TRABAJO' 
+WHEN SUBSTRING_INDEX(detalle_anticipos.FK_ORDEN, '-', 1) IN('OV') THEN 'ANT-ORDEN-VENTA' ELSE 'ANTCLI'
+END AS ORG_ORDEN,
 FECHA_MANUAL AS FECHA_MANUAL,
 CONCILIADO,
 FK_COD_CX,
@@ -143,7 +149,7 @@ WHERE
                 /* for (const m of batchMovements) { */
                 const bankId = bankMap[m.FK_COD_BANCO_MOVI];
                 const idBoxDetail = boxMap[m.FK_COD_CAJAS_MOVI];
-                const transactionId = null;
+                let transactionId = null;
                 const userId = userMap[m.FK_USER_EMP_MOVI];
                 const currentAuditId = firstAuditId + index;
                 mapAuditAdvances[m.FK_ANT_MOVI] = currentAuditId;
@@ -153,6 +159,20 @@ WHERE
                     const codigoPlan = m.REF_MOVI?.split('--')[0].trim();
                     idPlanCuenta = accountMap.get(codigoPlan) || null;
                 }
+                if (m.MODULO === 'ANT-ORDEN') {
+                    /*  console.log(workOrderSecuencieMap);
+                     console.log(m.ORG_ORDEN);
+                     console.log(m.CONCEP_MOVI); */
+                    if (m.ORG_ORDEN === 'ANT-ORDEN-VENTA') {
+                        transactionId = null;
+                    }
+                    if (m.ORG_ORDEN === 'ANT-ORDEN-TRABAJO') {
+                        transactionId = workOrderSecuencieMap[m.CONCEP_MOVI] || null;
+                        /*  console.log(`transactionId: ${transactionId}`); */
+                    }
+                }
+
+
                 return [
                     bankId,
                     transactionId,
@@ -245,7 +265,8 @@ WHERE
             mapMovements,
             mapAuditMovements,
             movementIdAdvancesMap,
-            mapAuditAdvances
+            mapAuditAdvances,
+            workOrderSecuencieMap
         );
 
 
@@ -287,7 +308,8 @@ export async function migrateAdvancesCustomers(
     mapMovements: Record<number, number>,
     mapAuditMovements: Record<number, number>,
     movementIdAdvancesMap: Record<number, number>,
-    mapAuditAdvances: Record<number, number>
+    mapAuditAdvances: Record<number, number>,
+    workOrderSecuencieMap: Record<number, number>
 ): Promise<Record<string, number>> {
 
 
@@ -318,6 +340,12 @@ export async function migrateAdvancesCustomers(
         WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV') THEN 'ANT-ORDEN'
         ELSE 'ANTCLI'
     END AS ORIGEN_ANT,
+
+CASE
+WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN('OE') THEN 'ANT-ORDEN-TRABAJO' 
+WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN('OV') THEN 'ANT-ORDEN-VENTA' ELSE 'ANTCLI'
+END AS ORG_ORDEN,
+
     CASE
         WHEN da.ref_cuentas > 0 THEN da.ref_cuentas else NULL
     END AS ref_cuentas,
@@ -326,6 +354,13 @@ export async function migrateAdvancesCustomers(
         THEN da.FK_ORDEN
         ELSE NULL
     END AS FK_ID_ORDEN,
+
+    CASE
+        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV')
+        THEN da.FK_ORDEN
+        ELSE NULL
+    END AS  SECUENCIA,
+
     CASE
         WHEN da.FK_COD_TRAC > 0 THEN da.FK_COD_TRAC
         ELSE NULL
@@ -366,6 +401,7 @@ WHERE a.TIPO_ANT = 'CLIENTES';`);
         for (const a of batch) {
             let idMov = null;
             let idAuditoria = null;
+            a.FK_ID_ORDEN = null;
             if (a.FORMAPAGO == 'NOTA DE CREDITO') {
                 idAuditoria = mapAuditCreditNote[a.FK_COD_TRAC];
                 const [accountRows]: any = await conn.query(
@@ -402,9 +438,24 @@ WHERE a.TIPO_ANT = 'CLIENTES';`);
                 console.log(`idMov: ${idMov}`);
             }
 
+            if (a.ORIGEN_ANT === 'ANT-ORDEN') {
+
+
+                if (a.ORG_ORDEN === 'ANT-ORDEN-VENTA') {
+                    a.FK_ID_ORDEN = null;
+                }
+                if (a.ORG_ORDEN === 'ANT-ORDEN-TRABAJO') {
+                    a.FK_ID_ORDEN = workOrderSecuencieMap[a.SECUENCIA] || null;
+                    console.log(`transactionId: ${a.FK_ID_ORDEN}`);
+                }
+            }
+
+
+
+
 
             const idAdvance = mapAdvancesCustomers[a.FK_IDANT];
-            a.FK_ID_ORDEN = null;
+            /* a.FK_ID_ORDEN = null; */
             values.push([
                 a.FEC_DET_ANT,
                 a.ABS_ANT,
