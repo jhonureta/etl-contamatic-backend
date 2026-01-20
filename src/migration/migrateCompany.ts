@@ -617,7 +617,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation,
     })
 
-
+    //== Migrar movimientos de retenciones en ventas ===/
     const { mapRetMovements, mapRetAuditSales, movAudit } = await migrateSalesRetentions(
       legacyConn,
       conn,
@@ -634,7 +634,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       mapRetentions
     );
-
+    //== Migrar procesos notas de credito ventas ===/
     const { mapCreditNote, mapAuditCreditNote } = await migrateCreditNote(
       legacyConn,
       conn,
@@ -654,7 +654,7 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
     );
-
+    //== Migrar anticipos clientes ===/
     const migrateCustomeradvances = await migrateDataMovements(
       legacyConn,
       conn,
@@ -679,7 +679,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     );
 
-    await conn.commit();
+    await conn.rollback();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
