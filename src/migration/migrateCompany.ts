@@ -665,37 +665,19 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       bankMap,
       boxMap,
-      supplierAdvanceIdMap,//ANTICIPOS
+      mapAdvancesCustomers,//ANTICIPOS
       mapCreditNote,//NOTAS DE CREDITO
       mapAuditCreditNote,//NOTAS DE CREDITO
       mapRetMovements, //RETENCIONES EN VENTA
       mapRetAuditSales,//RETENCIONES EN VENTA
       movAudit,
       mapMovements,  //MOVIMIENTOS PAGOS OBLIGACIONES
-      mapAuditMovements //MOVIMIENTOS AUDITORIA PAGOS OBLIGACIONES
+      mapAuditMovements, //MOVIMIENTOS AUDITORIA PAGOS OBLIGACIONES
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
     );
-
-    /*   migrateDataMovements(
-      legacyConn: any,
-      conn: any,
-      newCompanyId: number,
-      purchaseLiquidationIdMap: Record<number, number>,
-      purchaseLiquidationAuditIdMap: Record<number, number>,
-      mapConciliation: Record<number, number>,
-      userMap: Record<number, number>,
-      bankMap: Record<number, number>,
-      boxMap: Record<number, number>,
-      supplierAdvanceIdMap: Record<number, number>,
-      mapCreditNote: Record<number, number>,
-      mapAuditCreditNote: Record<number, number>,
-      mapRetMovements: Record<number, number>,
-      mapRetAuditSales: Record<number, number>,
-      movAudit: any[],
-      mapMovements: Record<number, number>,
-      mapAuditMovements: Record<number, number>
-  
-  ) */
-
 
     await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);

@@ -412,7 +412,7 @@ DESC;`);
             throw err;
         }
 
-        return { mapCreditNote, mapAuditCreditNote };
+        /* return { mapCreditNote, mapAuditCreditNote }; */
     }
 
     const { mapNoteMovements } = await migrateMovementeAdvancesNote(
@@ -944,14 +944,7 @@ export async function migratePaymentDetails(
     mapDetailObligationsAplicate: Record<number, number>
 }> {
 
-    /*  legacyConn,
-            conn,
-            mapObligationsCustomers,
-            mapNoteMovementsFull */
-
     console.log("🚀 Migrando movimientos  por retenciones");
-
-
     const mapDetailObligationsAplicate: Record<number, number> = {};
 
     try {
