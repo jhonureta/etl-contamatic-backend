@@ -46,7 +46,7 @@ export async function migrateAdvancesCustomers(
 export async function migrateSupplierAdvances(
     legacyConn: any,
     conn: any,
-    mapClients: any
+    mapSuppliers: any
 ): Promise<{ supplierAdvanceIdMap: Record<number, number> }> {
     console.log("Migrando totales de anticipos de proveedores...");
     const [rows] = await legacyConn.query(`
@@ -54,7 +54,7 @@ export async function migrateSupplierAdvances(
             ID_ANT,
             FEC_ANT AS FECH_REGANT,
             SALDO_ANT AS SALDO_ANT,
-            FK_COD_CLI_ANT AS FK_PERSONA
+            FK_COD_PROV_ANT AS FK_PERSONA
         FROM
             detalle_anticipos
         INNER JOIN anticipos ON anticipos.ID_ANT = detalle_anticipos.FK_COD_ANT
@@ -75,7 +75,7 @@ export async function migrateSupplierAdvances(
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 
         const values = batch.map(c => {
-            const idPersona = mapClients[c.FK_PERSONA] || null;
+            const idPersona = mapSuppliers[c.FK_PERSONA] || null;
             return [
                 c.FECH_REGANT,
                 c.SALDO_ANT,

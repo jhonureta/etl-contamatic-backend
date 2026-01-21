@@ -32,6 +32,7 @@ import { migrateVehicles } from './migrateVehicles';
 import { migrateWorkOrders } from './migrateWorkOrders';
 import { migrateDataMovements } from './migrateDetailAdvances';
 import { migrateBankCashTransactions } from './migrateBankCashTransactions';
+import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -580,7 +581,7 @@ export async function migrateCompany(codEmp: number) {
     const { supplierAdvanceIdMap } = await migrateSupplierAdvances(
       legacyConn,
       conn,
-      mapClients
+      mapSuppliers
     );
 
     //== Migrar movimientos de compras y liquidaciones ===/
@@ -699,6 +700,25 @@ export async function migrateCompany(codEmp: number) {
     )
 
 
+    const migrateSuppliersAdvances = await migrateDataMovementsSuppliersAdvances(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapConciliation,
+      userMap,
+      bankMap,
+      boxMap,
+      supplierAdvanceIdMap,//mapAdvancesCustomers
+      mapAuditCreditNote,
+      mapRetAuditSales,
+      mapMovements,
+      mapAuditMovements,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      workOrderSecuencieMap
+    );
 
 
     await conn.commit();

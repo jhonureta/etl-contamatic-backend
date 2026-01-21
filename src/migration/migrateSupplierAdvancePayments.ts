@@ -1,7 +1,7 @@
 import { upsertTotaledEntry } from "./migrationTools";
 
 
-export async function migrateDataMovements(
+export async function migrateDataMovementsSuppliersAdvances(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
@@ -9,7 +9,7 @@ export async function migrateDataMovements(
     userMap: Record<number, number>,
     bankMap: Record<number, number>,
     boxMap: Record<number, number>,
-    mapAdvancesCustomers: Record<number, number>,
+    supplierAdvanceIdMap: Record<number, number>,
     mapAuditCreditNote: Record<number, number>,
     mapRetAuditSales: Record<number, number>,
     mapMovements: Record<number, number>,
@@ -249,7 +249,7 @@ WHERE
         const { mapNoteMovementsFull } = await migrateAdvancesCustomers(
             legacyConn,
             conn,
-            mapAdvancesCustomers,
+            supplierAdvanceIdMap,
             mapAuditCreditNote,
             mapRetAuditSales,
             mapMovements,
@@ -292,7 +292,7 @@ WHERE
 export async function migrateAdvancesCustomers(
     legacyConn: any,
     conn: any,
-    mapAdvancesCustomers: Record<number, number>,
+    supplierAdvanceIdMap: Record<number, number>,
     mapAuditCreditNote: Record<number, number>,
     mapRetAuditSales: Record<number, number>,
     mapMovements: Record<number, number>,
@@ -303,7 +303,7 @@ export async function migrateAdvancesCustomers(
 ): Promise<Record<string, number>> {
 
 
-    console.log("Migrando detalle de anticipos de clientes...");
+    console.log("Migrando detalle de anticipos de proveedores...");
     // Obtiene centroCosto únicas normalizadas
     const [rows] = await legacyConn.query(`SELECT
     da.ID_DET_ANT,
@@ -324,7 +324,7 @@ export async function migrateAdvancesCustomers(
     da.PER_DET_ANT AS BENEFICIARIA,
 
     CASE
-        WHEN da.ref_cuentas > 0 THEN 'CXC'
+        WHEN da.ref_cuentas > 0 THEN 'CXP'
         WHEN da.FDP_DET_ANT = 'NOTA DE CREDITO' THEN 'nota'
         WHEN da.FDP_DET_ANT = 'RETENCION EN VENTA' THEN 'RETENCION-VENTA'
         WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV') THEN 'ANT-ORDEN'
@@ -383,6 +383,9 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
     }
     const BATCH_SIZE = 1000;
     const mapAdvancesDetailCustomers: Record<string, number> = {};
+
+    console.log(supplierAdvanceIdMap);
+
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 
@@ -443,7 +446,7 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
 
 
 
-            const idAdvance = mapAdvancesCustomers[a.FK_IDANT];
+            const idAdvance = supplierAdvanceIdMap[a.FK_IDANT];
             /* a.FK_ID_ORDEN = null; */
             values.push([
                 a.FEC_DET_ANT,
@@ -471,7 +474,7 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
             mapAdvancesDetailCustomers[b.ID_ANT] = newId;
             newId++;
         }
-        console.log(` -> Batch migrado: ${batch.length} anticipos de clientes`);
+        console.log(` -> Batch migrado: ${batch.length} anticipos de proveedores`);
     }
     return mapAdvancesDetailCustomers;
 }
