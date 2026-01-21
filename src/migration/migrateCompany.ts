@@ -30,6 +30,7 @@ import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
 import { migrateVehicles } from './migrateVehicles';
 import { migrateWorkOrders } from './migrateWorkOrders';
+import { migratePurchaseOrderMovements, migratePurchaseOrders } from './migratePurchaseOrders';
 import { migrateDataMovements } from './migrateDetailAdvances';
 import { migrateBankCashTransactions } from './migrateBankCashTransactions';
 import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
@@ -563,6 +564,39 @@ export async function migrateCompany(codEmp: number) {
       vehicleIdMap
     })
 
+
+    //== Migrar Pedidos de compra ===/
+    const { purchaseOrderIdMap, purchaseOrderAuditIdMap } = await migratePurchaseOrders({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      mapProducts,
+      oldRetentionCodeMap,
+      newRetentionIdMap,
+      mapCostExpenses: costExpenseIdMapping
+    })
+
+    //== Migrar movimientos de pedidos  ===/
+    const { orderObligationIdMap } =await migratePurchaseOrderMovements({
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      userMap,
+      mapSuppliers,
+      purchaseOrderIdMap,
+      purchaseOrderAuditIdMap,
+      mapAccounts,
+      bankMap,
+      boxMap,
+      mapConciliation
+    })
+
     //==  Migracion de Compras y liquidaciones ===/
     const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap } = await migratePurchasesAndLiquidations({
       legacyConn,
@@ -602,13 +636,13 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
-    //== Migrar detalle de obligaciones de compras y liquidaciones ===/
+    //== Migrar detalle de obligaciones de compras , liquidaciones, pedidos ===/
     await migratePurchaseObligationDetail({
       legacyConn,
       conn,
       newCompanyId,
-      purchaseLiquidationIdMap,
-      purchaseLiquidationObligationIdMap,
+      purchaseLiquidationIdMap: { ...purchaseOrderIdMap, ...purchaseLiquidationIdMap },
+      purchaseLiquidationObligationIdMap: { ...orderObligationIdMap, ...purchaseLiquidationObligationIdMap },
       bankMap,
       boxMap,
       userMap,
