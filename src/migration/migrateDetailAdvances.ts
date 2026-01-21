@@ -150,7 +150,7 @@ WHERE
                 const bankId = bankMap[m.FK_COD_BANCO_MOVI];
                 const idBoxDetail = boxMap[m.FK_COD_CAJAS_MOVI];
                 let transactionId = null;
-                const userId = userMap[m.FK_USER_EMP_MOVI];
+                const userId = userMap[m.FK_USER];
                 const currentAuditId = firstAuditId + index;
                 mapAuditAdvances[m.FK_ANT_MOVI] = currentAuditId;
                 const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
