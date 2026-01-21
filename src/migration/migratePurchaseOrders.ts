@@ -68,6 +68,26 @@ type MigrateAccountingEntriesPurchaseOrderDetailParams = {
   accountingEntryOrderIdMap: Record<number, number>;
 }
 
+type MigratePurchaseOrderObligationDetailParams = Omit<MigrateMovementsParams, 'purchaseOrderAuditIdMap' | 'mapSuppliers'> & {
+  orderObligationIdMap: Record<number, number>;
+}
+
+type MigrateDetailsOrderObligationsParams = {
+	legacyConn: Connection;
+	conn: Connection;
+	orderObligationIdMap: Record<number, number>;
+	movementIdMap: Record<number, number>;
+}
+
+type MigrateAccountingEntriesOrderParams = {
+  legacyConn: Connection;
+  conn: Connection;
+  newCompanyId: number;
+  movementIdMap: Record<number, number>;
+  mapPeriodo: Record<number, number>;
+  movementAuditIdMap: Record<number, number>;
+}
+
 export async function migratePurchaseOrders({
   legacyConn,
   conn,
@@ -513,8 +533,6 @@ async function migratePurchaseOrderObligations({
     const orderObligationIdMap: Record<number, number> = {};
     const orderObligationAuditIdMap: Record<number, number> = {};
 
-    const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
-
     const resultObligationsQuery: ResultSet = await legacyConn.query(`
       SELECT
           cp.cod_cp AS old_id,
@@ -550,7 +568,6 @@ async function migratePurchaseOrderObligations({
     }
 
     const BATCH_SIZE: number = 500;
-    let nexAuditId = auditId;
 
     for (let i = 0; i < obligations.length; i += BATCH_SIZE) {
       const batchObligation = obligations.slice(i, i + BATCH_SIZE);
@@ -959,7 +976,7 @@ async function migrateAccountingEntriesPurchaseOrderDetail({
 			INNER JOIN contabilidad_detalle_asiento d ON
 					d.fk_cod_asiento = a.cod_asiento
 			WHERE
-					t.TIP_TRAC IN('Compra', 'liquidacion') AND a.descripcion_asiento NOT LIKE '%(RETENCION%'
+					t.TIP_TRAC = 'pedido' AND a.descripcion_asiento NOT LIKE '%(RETENCION%'
 			ORDER BY
 					t.COD_TRAC;
 		`);
@@ -1050,11 +1067,4 @@ async function migrateAccountingEntriesPurchaseOrderDetail({
     console.error("Error al migrar detalle de asientos contables de pedidos:", error);
     throw error;
   }
-}
-
-export async function migratePurchaseOrderObligationDetail({
-
-  
-}){
-
 }

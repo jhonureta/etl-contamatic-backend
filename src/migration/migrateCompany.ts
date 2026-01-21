@@ -30,7 +30,7 @@ import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
 import { migrateVehicles } from './migrateVehicles';
 import { migrateWorkOrders } from './migrateWorkOrders';
-import { migratePurchaseOrderMovements, migratePurchaseOrderObligationDetail, migratePurchaseOrders } from './migratePurchaseOrders';
+import { migratePurchaseOrderMovements, migratePurchaseOrders } from './migratePurchaseOrders';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -561,6 +561,39 @@ export async function migrateCompany(codEmp: number) {
       vehicleIdMap
     })
 
+
+    //== Migrar Pedidos de compra ===/
+    const { purchaseOrderIdMap, purchaseOrderAuditIdMap } = await migratePurchaseOrders({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      mapProducts,
+      oldRetentionCodeMap,
+      newRetentionIdMap,
+      mapCostExpenses: costExpenseIdMapping
+    })
+
+    //== Migrar movimientos de pedidos  ===/
+    const { orderObligationIdMap } =await migratePurchaseOrderMovements({
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      userMap,
+      mapSuppliers,
+      purchaseOrderIdMap,
+      purchaseOrderAuditIdMap,
+      mapAccounts,
+      bankMap,
+      boxMap,
+      mapConciliation
+    })
+
     //==  Migracion de Compras y liquidaciones ===/
     const { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap } = await migratePurchasesAndLiquidations({
       legacyConn,
@@ -600,13 +633,13 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation
     })
 
-    //== Migrar detalle de obligaciones de compras y liquidaciones ===/
+    //== Migrar detalle de obligaciones de compras , liquidaciones, pedidos ===/
     await migratePurchaseObligationDetail({
       legacyConn,
       conn,
       newCompanyId,
-      purchaseLiquidationIdMap,
-      purchaseLiquidationObligationIdMap,
+      purchaseLiquidationIdMap: { ...purchaseOrderIdMap, ...purchaseLiquidationIdMap },
+      purchaseLiquidationObligationIdMap: { ...orderObligationIdMap, ...purchaseLiquidationObligationIdMap },
       bankMap,
       boxMap,
       userMap,
@@ -616,54 +649,6 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       mapConciliation,
     }) 
-
-    //== Migrar Pedidos de compra ===/
-    const { purchaseOrderIdMap, purchaseOrderAuditIdMap } = await migratePurchaseOrders({
-      legacyConn,
-      conn,
-      newCompanyId,
-      branchMap,
-      userMap,
-      mapSuppliers,
-      mapProducts,
-      oldRetentionCodeMap,
-      newRetentionIdMap,
-      mapCostExpenses: costExpenseIdMapping
-    })
-
-    //== Migrar movimientos de pedidos  ===/
-    const { orderObligationIdMap } =await migratePurchaseOrderMovements({
-      legacyConn,
-      conn,
-      newCompanyId,
-      mapPeriodo,
-      mapProject,
-      mapCenterCost,
-      userMap,
-      mapSuppliers,
-      purchaseOrderIdMap,
-      purchaseOrderAuditIdMap,
-      mapAccounts,
-      bankMap,
-      boxMap,
-      mapConciliation
-    })
-
-   /*  await migratePurchaseOrderObligationDetail({
-      legacyConn,
-      conn,
-      newCompanyId,
-      purchaseOrderIdMap,
-      orderObligationIdMap,
-      bankMap,
-      boxMap,
-      userMap,
-      mapPeriodo,
-      mapProject,
-      mapCenterCost,
-      mapAccounts,
-      mapConciliation,
-    }) */
 
     const mapRetentionsMov = await migrateSalesRetentions(
       legacyConn,

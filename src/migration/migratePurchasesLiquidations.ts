@@ -1612,14 +1612,15 @@ export async function migratePurchaseObligationDetail({
 			) AS CONCEP_MOVI,
 			grupo_detalles_t.SECU_CXC AS SECU_MOVI,
 			movimientos.FK_COD_CAJAS_MOVI,
-			movimientos.FK_COD_BANCO_MOVI
+			movimientos.FK_COD_BANCO_MOVI,
+			movimientos.FK_TRAC_MOVI
 			FROM
 					cuentascp
 			INNER JOIN detalles_cuentas ON cuentascp.cod_cp = detalles_cuentas.fk_cod_cuenta
 			INNER JOIN grupo_detalles_t ON detalles_cuentas.FK_COD_GD = grupo_detalles_t.ID_GD
 			LEFT JOIN movimientos ON movimientos.FK_COD_CX = grupo_detalles_t.ID_GD
 			WHERE
-					cuentascp.Tipo_cxp = 'CXP' AND forma_pago_cp NOT IN('17', '16') AND cuentascp.tipo_documento <> 3
+					cuentascp.Tipo_cxp = 'CXP' AND forma_pago_cp NOT IN('17', '16')
 			GROUP BY
 					detalles_cuentas.FK_COD_GD
 			ORDER BY
@@ -1670,6 +1671,8 @@ export async function migratePurchaseObligationDetail({
 					origen = "NOTA CREDITO VENTA";
 				}
 
+				const importMovi = Math.abs(obl.IMPOR_MOVI);
+				const importMoviTotal = Math.abs(obl.IMPOR_MOVITOTAL);
 				return [
 					bankMap[obl.FK_COD_BANCO_MOVI] ?? null,
 					purchaseLiquidationIdMap[obl.FK_TRAC_MOVI] ?? null,
@@ -1687,14 +1690,14 @@ export async function migratePurchaseObligationDetail({
 					causa,
 					modulo,
 					movementSeq++,
-					obl.IMPOR_MOVI,
+					importMovi,
 					obl.ESTADO_MOVI,
 					obl.PER_BENE_MOVI,
-					obl.CONCILIATED ?? 0,
+					obl.CONCILIADO ?? 0,
 					newCompanyId,
 					boxMap[obl.FK_COD_CAJAS_MOVI] ?? null,
 					obl.OBS_MOVI,
-					obl.IMPOR_MOVITOTAL,
+					importMoviTotal,
 					null, // FK_ASIENTO
 					auditId,
 					null, // FK_ARQUEO
@@ -1819,7 +1822,7 @@ async function migrateDetailsOfObligations({
 			INNER JOIN grupo_detalles_t ON detalles_cuentas.FK_COD_GD = grupo_detalles_t.ID_GD
 			LEFT JOIN movimientos ON movimientos.FK_COD_CX = grupo_detalles_t.ID_GD
 			WHERE
-					cuentascp.Tipo_cxp = 'CXP' AND detalles_cuentas.forma_pago_cp NOT IN('17', '16') AND cuentascp.tipo_documento <> 3
+					cuentascp.Tipo_cxp = 'CXP' AND detalles_cuentas.forma_pago_cp NOT IN('17', '16')
 			ORDER BY
 					cod_detalle
 			DESC;
