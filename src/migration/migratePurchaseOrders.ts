@@ -1,9 +1,10 @@
 import { Connection, FieldPacket, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { findNextAuditCode, restructureProductDetails, RetentionCodeValue, toJSONArray, toNumber } from "./purchaseHelpers";
+import { upsertTotaledEntry } from "./migrationTools";
 
 type ResultSet = [RowDataPacket[] | RowDataPacket[][] | ResultSetHeader, FieldPacket[]];
 
-interface MigratePurchaseOrdersParams {
+type MigratePurchaseOrdersParams = {
   legacyConn: Connection;
   conn: Connection;
   newCompanyId: number;
@@ -14,6 +15,57 @@ interface MigratePurchaseOrdersParams {
   oldRetentionCodeMap: Map<string, RetentionCodeValue>;
   newRetentionIdMap: Record<number, number>;
   mapCostExpenses: Record<number, number>;
+}
+
+type MigrateMovementsParams = {
+  legacyConn: Connection;
+  conn: Connection;
+  newCompanyId: number;
+  purchaseOrderIdMap: Record<number, number>;
+  purchaseOrderAuditIdMap: Record<number, number>;
+  mapSuppliers: Record<number, number>;
+  mapPeriodo: Record<number, number>;
+  mapProject: Record<number, number>;
+  mapCenterCost: Record<number, number>;
+  userMap: Record<number, number>;
+  mapAccounts: Record<number, number>;
+  bankMap: Record<number, number>;
+  boxMap: Record<number, number>;
+  mapConciliation: Record<number, number>
+}
+
+type MigrateObligationsParams = Omit<
+  MigrateMovementsParams,
+  'mapPeriodo' |
+  'mapProject' |
+  'mapCenterCost' |
+  'bankMap' |
+  'boxMap' |
+  'mapConciliation' |
+  'userMap' |
+  'mapAccounts'
+>;
+
+type MigrateOrderMovementsParams = Omit<MigrateMovementsParams, 'mapCenterCost' | 'mapProject' | 'mapPeriodo' | 'mapAccounts' | 'mapSuppliers'>;
+
+type MigrateAccountingEntriesPurchaseOrderParams = {
+  legacyConn: Connection;
+  conn: Connection;
+  newCompanyId: number;
+  movementOrderIdMap: Record<number, number>;
+  purchaseOrderIdMap: Record<number, number>;
+  purchaseOrderAuditIdMap: Record<number, number>;
+  mapPeriodo: Record<number, number>;
+}
+
+type MigrateAccountingEntriesPurchaseOrderDetailParams = {
+  legacyConn: Connection;
+  conn: Connection;
+  newCompanyId: number;
+  mapProject: Record<number, number>;
+  mapCenterCost: Record<number, number>;
+  mapAccounts: Record<number, number>;
+  accountingEntryOrderIdMap: Record<number, number>;
 }
 
 export async function migratePurchaseOrders({
@@ -166,7 +218,6 @@ export async function migratePurchaseOrders({
         console.log(`transformando y normalizando secuencial de pedido: ${order.SECUENCIA_DOC}`);
 
         const codTrans = order.COD_TRANS;
-        const purchaseType = order.TIP_DET_DOC;
         const userId = userMap[order.FK_USER];// id usuario
         const sellerId = userMap[order.FK_USER];// id vendedor
         const supplierId = mapSuppliers[order.FK_PERSON];// id proveedor
@@ -377,4 +428,633 @@ function transformProductDetail(
     };
   });
   return { detailTransformed, branchId };
+}
+
+export async function migratePurchaseOrderMovements({
+  legacyConn,
+  conn,
+  newCompanyId,
+  mapPeriodo,
+  mapProject,
+  mapCenterCost,
+  userMap,
+  mapSuppliers,
+  purchaseOrderAuditIdMap,
+  purchaseOrderIdMap,
+  mapAccounts,
+  mapConciliation,
+  bankMap,
+  boxMap
+}: MigrateMovementsParams) {
+
+  console.log("Iniciando migración de obligaciones de pedidos de compra");
+
+  const { orderObligationIdMap, orderObligationAuditIdMap } = await migratePurchaseOrderObligations({
+    legacyConn,
+    conn,
+    newCompanyId,
+    purchaseOrderIdMap,
+    mapSuppliers,
+    purchaseOrderAuditIdMap,
+  })
+  console.log(` -> Migracion de obligaciones de pedidos completada`);
+
+  console.log(" -> migrando movimientos de pedidos");
+  const { movementOrderIdMap } = await migrateOrderMovements({
+    legacyConn,
+    conn,
+    newCompanyId,
+    purchaseOrderIdMap,
+    purchaseOrderAuditIdMap,
+    mapConciliation,
+    userMap,
+    bankMap,
+    boxMap
+  });
+  console.log(` -> Migracion de movimientos de pedidos completada`);
+
+  console.log(" -> Migrando asientos contables de pedidos");
+  const { accountingEntryOrderIdMap } = await migrateAccountingEntriesPurchaseOrder({
+    legacyConn,
+    conn,
+    newCompanyId,
+    movementOrderIdMap,
+    purchaseOrderIdMap,
+    purchaseOrderAuditIdMap,
+    mapPeriodo,
+  });
+  console.log(` -> Migracion de asientos contables de pedidos completada`);
+
+  console.log(" -> Migrando detalle de asientos contables de pedidos");
+  const { accountingEntryOrderDetailIdMap } = await migrateAccountingEntriesPurchaseOrderDetail({
+    legacyConn,
+    conn,
+    newCompanyId,
+    mapProject,
+    mapCenterCost,
+    mapAccounts,
+    accountingEntryOrderIdMap
+  });
+  console.log(` -> Migracion de pedidos completada`);
+  return { accountingEntryOrderIdMap, orderObligationIdMap, accountingEntryOrderDetailIdMap };
+}
+
+async function migratePurchaseOrderObligations({
+  legacyConn,
+  conn,
+  newCompanyId,
+  purchaseOrderIdMap,
+  mapSuppliers,
+  purchaseOrderAuditIdMap,
+}: MigrateObligationsParams) {
+
+  try {
+    console.log("Migrando obligaciones de pedidos de compra...");
+    const orderObligationIdMap: Record<number, number> = {};
+    const orderObligationAuditIdMap: Record<number, number> = {};
+
+    const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
+
+    const resultObligationsQuery: ResultSet = await legacyConn.query(`
+      SELECT
+          cp.cod_cp AS old_id,
+          cp.fk_cod_prov_cp AS fk_persona_old,
+          cp.FK_TRAC_CUENTA AS fk_cod_trans_old,
+          cp.OBL_ASI AS obl_asi_group,
+          cp.Tipo_cxp AS tipo_obl,
+          cp.fecha_emision_cxp AS fech_emision,
+          cp.fecha_vence_cxp AS fech_vencimiento,
+          cp.tipo_documento AS tip_doc,
+          cp.estado_cxp AS estado,
+          cp.saldo_cxp AS saldo,
+          cp.valor_cxp AS total,
+          cp.referencia_cxp AS ref_secuencia,
+          cp.TIPO_CUENTA AS tipo_cuenta,
+          cp.FK_SERVICIO AS fk_id_infcon,
+          cp.TIPO_ESTADO_CUENTA AS tipo_estado_cuenta,
+          t.TIP_TRAC AS tipoTransaccion,
+          fk_cod_usu_cp
+      FROM
+          cuentascp cp
+      LEFT JOIN transacciones t ON
+          t.COD_TRAC = cp.FK_TRAC_CUENTA
+      WHERE
+          cp.Tipo_cxp = 'CXP' AND t.TIP_TRAC = 'pedido'
+      ORDER BY
+          cp.cod_cp;
+    `);
+
+    const [obligations]: any[] = resultObligationsQuery as Array<any>;
+    if (obligations.length === 0) {
+      return { orderObligationIdMap, orderObligationAuditIdMap };
+    }
+
+    const BATCH_SIZE: number = 500;
+    let nexAuditId = auditId;
+
+    for (let i = 0; i < obligations.length; i += BATCH_SIZE) {
+      const batchObligation = obligations.slice(i, i + BATCH_SIZE);
+      const valuesInsertObligations: any[] = [];
+      for (const o of batchObligation) {
+        let auditIdInsert: number | null = null;
+        if (o.fk_cod_trans_old && purchaseOrderAuditIdMap[o.fk_cod_trans_old]) {
+          auditIdInsert = purchaseOrderAuditIdMap[o.fk_cod_trans_old];
+        }
+        if (!auditIdInsert) {
+          throw new Error(`No se pudo resolver AUDIT para obligación ${o.old_id}`);
+        }
+        orderObligationAuditIdMap[o.old_id] = auditIdInsert;
+
+        const supplierId = mapSuppliers[o.fk_persona_old];
+        if (!supplierId) {
+          throw new Error(`Cliente no mapeado: ${o.fk_persona_old}`);
+        }
+
+        valuesInsertObligations.push([
+          supplierId,
+          o.tipo_obl,
+          o.fech_emision,
+          o.fech_vencimiento,
+          o.tip_doc,
+          o.estado,
+          o.saldo,
+          o.total,
+          o.ref_secuencia,
+          purchaseOrderIdMap[o.fk_cod_trans_old] ?? null,
+          o.tipo_cuenta,
+          o.fk_id_infcon,
+          o.tipo_estado_cuenta,
+          auditIdInsert,
+          new Date(),
+          newCompanyId
+        ]);
+      };
+
+      const resultCreateObligations: ResultSet = await conn.query(`
+			INSERT INTO cuentas_obl(
+					FK_PERSONA,
+					TIPO_OBL,
+					FECH_EMISION,
+					FECH_VENCIMIENTO,
+					TIP_DOC,
+					ESTADO,
+					SALDO,
+					TOTAL,
+					REF_SECUENCIA,
+					FK_COD_TRANS,
+					TIPO_CUENTA,
+					FK_ID_INFCON,
+					TIPO_ESTADO_CUENTA,
+					FK_AUDITOB,
+					OBLG_FEC_REG,
+					FK_COD_EMP
+			)
+			VALUES ?
+		`, [valuesInsertObligations]);
+      let nextOrderObligationId = (resultCreateObligations[0] as ResultSetHeader).insertId;
+      batchObligation.forEach((o: any) => {
+        orderObligationIdMap[o.old_id] = nextOrderObligationId++;
+      });
+    }
+
+    return { orderObligationIdMap, orderObligationAuditIdMap };
+
+  } catch (error) {
+    console.error("Error al migrar obligaciones de pedidos de compra:", error);
+    throw error;
+  }
+}
+
+async function migrateOrderMovements({
+  legacyConn,
+  conn,
+  newCompanyId,
+  purchaseOrderIdMap,
+  purchaseOrderAuditIdMap,
+  mapConciliation,
+  userMap,
+  bankMap,
+  boxMap
+}: MigrateOrderMovementsParams) {
+  try {
+    console.log("Migrando movimientos de pedidos de compra...");
+    const movementOrderIdMap: Record<number, number> = {};
+    const movementsQuery: ResultSet = await legacyConn.query(`
+      SELECT
+          m.ID_MOVI,
+          t.COD_TRAC AS COD_TRANS,
+          m.FK_COD_CAJAS_MOVI,
+          m.FK_COD_BANCO_MOVI,
+          IFNULL(m.TIP_MOVI, t.METPAG_TRAC) AS TIP_MOVI,
+          m.periodo_caja,
+          IFNULL(m.FECHA_MOVI, t.fecha) AS FECHA_MOVI,
+          CASE WHEN t.TIP_TRAC = 'pedido' THEN 'PEDIDO'
+      END AS ORIGEN_MOVI,
+      IFNULL(m.IMPOR_MOVI, t.TOTPAG_TRAC) AS IMPOR_MOVI,
+      IFNULL(m.TIPO_MOVI, t.METPAG_TRAC) AS TIPO_MOVI,
+      m.REF_MOVI,
+      t.NUM_TRAC AS CONCEP_MOVIMIG,
+      CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 0
+      END AS ESTADO_MOVI,
+      IFNULL(
+          m.PER_BENE_MOVI,
+          IFNULL(mt.PER_BENE_MOVI, 'MIG')
+      ) AS PER_BENE_MOVI,
+      'EGRESO' AS CAUSA_MOVI,
+      CASE WHEN t.TIP_TRAC = 'pedido' THEN 'PEDIDO'
+      END AS MODULO,
+      IFNULL(m.FECHA_MANUAL, t.FEC_TRAC) AS FECHA_MANUAL,
+      m.CONCILIADO,
+      m.FK_COD_CX,
+      m.SECU_MOVI,
+      m.FK_CONCILIADO,
+      m.FK_ANT_MOVI,
+      IFNULL(
+          m.FK_USER_EMP_MOVI,
+          t.FK_COD_USU
+      ) AS FK_USER_EMP_MOVI,
+      IFNULL(m.FK_TRAC_MOVI, t.COD_TRAC) AS FK_TRAC_MOVI,
+      mt.NUM_VOUCHER AS NUM_VOUCHER,
+      mt.NUM_LOTE AS NUM_LOTE,
+      m.CONCEP_MOVI AS OBS_MOVI,
+      t.TOTPAG_TRAC,
+      NULL AS FK_ASIENTO,
+      NULL AS FK_ARQUEO,
+      m.RECIBO_CAJA,
+      m.NUM_UNIDAD
+      FROM
+          transacciones t
+      LEFT JOIN movimientos m ON
+          m.FK_TRAC_MOVI = t.COD_TRAC
+      LEFT JOIN movimientos_tarjeta mt ON
+          mt.FK_TRAC_MOVI = t.COD_TRAC
+      WHERE
+          t.TIP_TRAC = 'pedido'
+      ORDER BY
+          ID_MOVI ASC;
+    `);
+
+    const [movements]: any[] = movementsQuery as Array<any>;
+    if (movements.length === 0) {
+      return { movementOrderIdMap };
+    }
+
+    const cardQuery: ResultSet = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`, [newCompanyId]);
+    const [cardData]: any[] = cardQuery as Array<any>;
+    const cardId = cardData[0].ID_TARJETA ?? null;
+
+    const movementSequenceQuery = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO = 'COMPRAS' AND  FK_COD_EMP = ?`,
+      [newCompanyId]
+    );
+    const [movementData] = movementSequenceQuery as Array<any>;
+    let movementSequence = movementData[0]?.SECU_MOVI ?? 1;
+
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < movements.length; i += BATCH_SIZE) {
+      const batchMovements = movements.slice(i, i + BATCH_SIZE);
+      const movementValues: any[] = batchMovements.map((m) => {
+        const bankId = bankMap[m.FK_COD_BANCO_MOVI];
+        const idBoxDetail = boxMap[m.FK_COD_CAJAS_MOVI];
+        const transactionId = purchaseOrderIdMap[m.FK_TRAC_MOVI];
+        const userId = userMap[m.FK_USER_EMP_MOVI];
+        const transAuditId = purchaseOrderAuditIdMap[m.COD_TRANS];
+        const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
+        const idPlanAccount = null;
+
+        return [
+          bankId,
+          transactionId,
+          idFkConciliation,
+          userId,
+          m.FECHA_MOVI,
+          m.FECHA_MANUAL,
+          m.TIP_MOVI,
+          m.ORIGEN_MOVI,
+          m.TIPO_MOVI,
+          m.REF_MOVI,
+          m.CONCEP_MOVIMIG,
+          m.NUM_VOUCHER,
+          m.NUM_LOTE,
+          m.CAUSA_MOVI,
+          m.MODULO,
+          movementSequence++,
+          m.IMPOR_MOVI,
+          m.ESTADO_MOVI,
+          m.PER_BENE_MOVI,
+          m.CONCILIADO,
+          newCompanyId,
+          idBoxDetail,
+          m.OBS_MOVI,
+          m.TOTPAG_TRAC,
+          m.FK_ASIENTO,
+          transAuditId,
+          m.FK_ARQUEO,
+          m.TIPO_MOVI === 'TARJETA' ? cardId : null,
+          m.RECIBO_CAJA,
+          idPlanAccount,
+          m.NUM_UNIDAD,
+          m.JSON_PAGOS
+        ];
+      });
+
+      const resultCreateMovement = await conn.query(`
+				INSERT INTO movements(
+						FKBANCO,
+						FK_COD_TRAN,
+						FK_CONCILIADO,
+						FK_USER,
+						FECHA_MOVI,
+						FECHA_MANUAL,
+						TIP_MOVI,
+						ORIGEN_MOVI,
+						TIPO_MOVI,
+						REF_MOVI,
+						CONCEP_MOVI,
+						NUM_VOUCHER,
+						NUM_LOTE,
+						CAUSA_MOVI,
+						MODULO,
+						SECU_MOVI,
+						IMPOR_MOVI,
+						ESTADO_MOVI,
+						PER_BENE_MOVI,
+						CONCILIADO,
+						FK_COD_EMP,
+						IDDET_BOX,
+						OBS_MOVI,
+						IMPOR_MOVITOTAL,
+						FK_ASIENTO,
+						FK_AUDITMV,
+						FK_ARQUEO,
+						ID_TARJETA,
+						RECIBO_CAJA,
+						FK_CTAM_PLAN,
+						NUMERO_UNIDAD,
+						JSON_PAGOS
+				)
+				VALUES ?
+			`, [movementValues]);
+      let nextMovementId = (resultCreateMovement[0] as ResultSetHeader).insertId;
+      batchMovements.forEach(({ COD_TRANS }) => {
+        movementOrderIdMap[COD_TRANS] = nextMovementId++;
+      });
+    }
+    console.log("✅ Migración de movimientos pedidos completada correctamente");
+    return { movementOrderIdMap };
+  } catch (error) {
+    console.error("Error al migrar movimientos de pedidos de compra:", error);
+    throw error;
+  }
+}
+
+async function migrateAccountingEntriesPurchaseOrder({
+  legacyConn,
+  conn,
+  newCompanyId,
+  movementOrderIdMap,
+  purchaseOrderIdMap,
+  purchaseOrderAuditIdMap,
+  mapPeriodo,
+}: MigrateAccountingEntriesPurchaseOrderParams): Promise<{ accountingEntryOrderIdMap: Record<number, number> }> {
+  try {
+    console.log("Migrando asientos contables de pedidos ...");
+    const accountingEntryOrderIdMap: Record<number, number> = {};
+    const resultAccountingEntries: ResultSet = await legacyConn.query(`
+      SELECT
+          cod_asiento,
+          fecha_asiento AS FECHA_ASI,
+          descripcion_asiento AS DESCRIP_ASI,
+          numero_asiento AS NUM_ASI,
+          origen_asiento AS ORG_ASI,
+          debe_asiento AS TDEBE_ASI,
+          haber_asiento AS THABER_ASI,
+          origen_asiento AS TIP_ASI,
+          fk_cod_periodo AS FK_PERIODO,
+          fecha_registro_asiento AS FECHA_REG,
+          fecha_update_asiento AS FECHA_ACT,
+          json_asi AS JSON_ASI,
+          res_asiento AS RES_ASI,
+          ben_asiento AS BEN_ASI,
+          NULL AS FK_AUDIT,
+          NULL AS FK_COD_EMP,
+          CAST(
+              REGEXP_REPLACE(
+                  RIGHT(numero_asiento, 9),
+                  '[^0-9]',
+                  ''
+              ) AS UNSIGNED
+          ) AS SEC_ASI,
+          transacciones.COD_TRAC AS FK_MOVTRAC,
+          NULL AS FK_MOV
+      FROM
+          transacciones
+      LEFT JOIN contabilidad_asientos ON contabilidad_asientos.FK_CODTRAC = transacciones.COD_TRAC
+      WHERE
+          TIP_TRAC = 'pedido' AND contabilidad_asientos.descripcion_asiento NOT LIKE '%(RETENCION%'
+      ORDER BY
+          transacciones.COD_TRAC;
+		`);
+
+    const [accountingEntries]: any[] = resultAccountingEntries as Array<any>;
+    if (accountingEntries.length === 0) {
+      return { accountingEntryOrderIdMap };
+    }
+
+    const BATCH_SIZE = 1000;
+    for (let i = 0; i < accountingEntries.length; i += BATCH_SIZE) {
+      const batchAccountingEntries = accountingEntries.slice(i, i + BATCH_SIZE);
+      const accountingEntryValues = batchAccountingEntries.map((acc) => {
+        const transaccionId = purchaseOrderIdMap[acc.FK_MOVTRAC];
+        const periodId = mapPeriodo[acc.FK_PERIODO];
+        const transAuditId = purchaseOrderAuditIdMap[acc.FK_MOVTRAC];
+        const movementId = movementOrderIdMap[acc.FK_MOVTRAC];
+
+        return [
+          acc.FECHA_ASI,
+          acc.DESCRIP_ASI,
+          acc.NUM_ASI,
+          acc.ORG_ASI,
+          acc.TDEBE_ASI,
+          acc.THABER_ASI,
+          acc.TIP_ASI,
+          periodId,
+          acc.FECHA_REG,
+          acc.FECHA_ACT,
+          acc.JSON_ASI,
+          acc.RES_ASI,
+          acc.BEN_ASI,
+          transAuditId,
+          newCompanyId,
+          acc.SEC_ASI,
+          transaccionId,
+          movementId
+        ];
+      });
+      const createAccountingEntries: ResultSet = await conn.query(`
+				INSERT INTO accounting_movements(
+						FECHA_ASI,
+						DESCRIP_ASI,
+						NUM_ASI,
+						ORG_ASI,
+						TDEBE_ASI,
+						THABER_ASI,
+						TIP_ASI,
+						FK_PERIODO,
+						FECHA_REG,
+						FECHA_ACT,
+						JSON_ASI,
+						RES_ASI,
+						BEN_ASI,
+						FK_AUDIT,
+						FK_COD_EMP,
+						SEC_ASI,
+						FK_MOVTRAC,
+						FK_MOV
+				)
+				VALUES ?
+			`, [accountingEntryValues]);
+
+      let nextAccountingEntryId = (createAccountingEntries[0] as ResultSetHeader).insertId;
+      batchAccountingEntries.forEach(({ cod_asiento }) => {
+        accountingEntryOrderIdMap[cod_asiento] = nextAccountingEntryId++;
+      });
+    }
+    return { accountingEntryOrderIdMap };
+  } catch (error) {
+    console.error("Error al migrar asientos contables de pedidos de compra:", error);
+    throw error;
+  }
+}
+
+async function migrateAccountingEntriesPurchaseOrderDetail({
+  legacyConn,
+  conn,
+  newCompanyId,
+  mapProject,
+  mapCenterCost,
+  mapAccounts,
+  accountingEntryOrderIdMap
+}: MigrateAccountingEntriesPurchaseOrderDetailParams): Promise<{
+  accountingEntryOrderDetailIdMap: Record<number, number>
+}> {
+  try {
+    console.log("Migrando detalle de asientos contables de pedidos ...");
+    const accountingEntryOrderDetailIdMap: Record<number, number> = {};
+
+    const resultAccountingEntriesDetail: ResultSet = await legacyConn.query(`
+			SELECT
+					d.cod_detalle_asiento,
+					a.fecha_asiento,
+					a.cod_asiento AS FK_COD_ASIENTO,
+					d.debe_detalle_asiento AS DEBE_DET,
+					d.haber_detalle_asiento AS HABER_DET,
+					d.fk_cod_plan AS FK_CTAC_PLAN,
+					d.fkProyectoCosto AS FK_COD_PROJECT,
+					d.fkCentroCosto AS FK_COD_COST
+			FROM
+					transacciones t
+			INNER JOIN contabilidad_asientos a ON
+					a.FK_CODTRAC = t.COD_TRAC
+			INNER JOIN contabilidad_detalle_asiento d ON
+					d.fk_cod_asiento = a.cod_asiento
+			WHERE
+					t.TIP_TRAC IN('Compra', 'liquidacion') AND a.descripcion_asiento NOT LIKE '%(RETENCION%'
+			ORDER BY
+					t.COD_TRAC;
+		`);
+
+    const [accountingEntriesDetails]: any[] = resultAccountingEntriesDetail as Array<any>;
+    if (accountingEntriesDetails.length === 0) {
+      return { accountingEntryOrderDetailIdMap };
+    }
+    console.log(`📦 Total detalle asientos a migrar: ${accountingEntriesDetails.length}`);
+
+    const BATCH_SIZE = 1000;
+    let totalDebe: number = 0;
+    let totalHaber: number = 0;
+    for (let i = 0; i < accountingEntriesDetails.length; i += BATCH_SIZE) {
+      const batchAccountingEntries = accountingEntriesDetails.slice(i, i + BATCH_SIZE);
+      const accountingEntryValues: any[] = [];
+      const totalsMap = new Map<string, any>();
+
+      for (const a of batchAccountingEntries) {
+        const planId = mapAccounts[a.FK_CTAC_PLAN];
+        const projectId = mapProject[a.FK_COD_PROJECT] ?? null;
+        const costCenterId = mapCenterCost[a.FK_COD_COST] ?? null;
+        const seatCodeId = accountingEntryOrderIdMap[a.FK_COD_ASIENTO] ?? null;
+
+        if (!planId || !seatCodeId) continue;
+
+        const debe = toNumber(a.DEBE_DET);
+        const haber = toNumber(a.HABER_DET);
+
+        accountingEntryValues.push([
+          seatCodeId,
+          debe,
+          haber,
+          planId,
+          projectId,
+          costCenterId
+        ]);
+
+        const key = `${newCompanyId}-${planId}-${a.fecha_asiento}`;
+        if (!totalsMap.has(key)) {
+          totalsMap.set(key, {
+            id_plan: planId,
+            fecha: a.fecha_asiento,
+            debe: 0,
+            haber: 0,
+            total: 0,
+            operacion: "suma"
+          });
+        }
+        const acc = totalsMap.get(key);
+        acc.debe += debe;
+        acc.haber += haber;
+        acc.total++;
+
+        totalHaber += haber;
+        totalDebe += debe;
+      }
+      if (accountingEntryValues.length === 0) {
+        console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
+        continue;
+      }
+
+      const createAccountingEntryDetails: ResultSet = await conn.query(`
+				INSERT INTO accounting_movements_det(
+						FK_COD_ASIENTO,
+						DEBE_DET,
+						HABER_DET,
+						FK_CTAC_PLAN,
+						FK_COD_PROJECT,
+						FK_COD_COST
+				)
+				VALUES ?
+			`, [accountingEntryValues]);
+      let nextId = (createAccountingEntryDetails[0] as ResultSetHeader).insertId;
+      for (const o of batchAccountingEntries) {
+        const planId = mapAccounts[o.FK_CTAC_PLAN];
+        const seatCodeId = accountingEntryOrderDetailIdMap[o.FK_COD_ASIENTO];
+        if (!planId || !seatCodeId) continue;
+        accountingEntryOrderDetailIdMap[o.cod_detalle_asiento] = nextId++;
+      };
+      for (const t of totalsMap.values()) {
+        await upsertTotaledEntry(conn, t, newCompanyId);
+      }
+      console.log(`✅ Batch detalle contable asiento ${i / BATCH_SIZE + 1} procesado`)
+    }
+    return { accountingEntryOrderDetailIdMap };
+  } catch (error) {
+    console.error("Error al migrar detalle de asientos contables de pedidos:", error);
+    throw error;
+  }
+}
+
+export async function migratePurchaseOrderObligationDetail({
+
+  
+}){
+
 }

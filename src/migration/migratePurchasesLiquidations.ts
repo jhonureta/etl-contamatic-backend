@@ -63,7 +63,7 @@ type MigrateAccountingEntriesParams = {
 	mapPeriodo: Record<number, number>;
 }
 
-type migrateAccountingEntriesDetailParams = {
+type MigrateAccountingEntriesDetailParams = {
 	legacyConn: Connection;
 	conn: Connection;
 	newCompanyId: number;
@@ -512,7 +512,7 @@ export async function migratePurchaseAndLiquidationsMovements({
 		bankMap,
 		boxMap
 	});
-	console.log("✅ Migracion de movimientos compra y liquidacion completada correctamente");
+	console.log("✅ Migración de movimientos compra y liquidacion completada correctamente");
 
 	console.log("🚀 Migrando asientos contable compra y liquidacion...");
 	const { accountingEntryIdMap } = await migrateAccountingEntries({
@@ -719,7 +719,6 @@ async function migrateDataMovements({
 				movementIdMap[COD_TRANS] = nextMovementId++;
 			});
 		}
-		console.log("✅ Migración de movimientos compra y liquidacion completada correctamente");
 		return { movementIdMap };
 	} catch (error) {
 		throw error;
@@ -1380,7 +1379,7 @@ async function migrateAccountingEntriesDetail({
 	mapCenterCost,
 	mapAccounts,
 	accountingEntryIdMap
-}: migrateAccountingEntriesDetailParams): Promise<{
+}: MigrateAccountingEntriesDetailParams): Promise<{
 	accountingEntryDetailIdMap: Record<number, number>
 }> {
 	try {

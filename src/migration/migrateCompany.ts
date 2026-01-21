@@ -30,7 +30,7 @@ import { migrateProformaInvoices } from './migrateProformaInvoices';
 import { migrateShippingGuide } from './migrateShippingGuide';
 import { migrateVehicles } from './migrateVehicles';
 import { migrateWorkOrders } from './migrateWorkOrders';
-import { migratePurchaseOrders } from './migratePurchaseOrders';
+import { migratePurchaseOrderMovements, migratePurchaseOrderObligationDetail, migratePurchaseOrders } from './migratePurchaseOrders';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -631,6 +631,39 @@ export async function migrateCompany(codEmp: number) {
       mapCostExpenses: costExpenseIdMapping
     })
 
+    //== Migrar movimientos de pedidos  ===/
+    const { orderObligationIdMap } =await migratePurchaseOrderMovements({
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      userMap,
+      mapSuppliers,
+      purchaseOrderIdMap,
+      purchaseOrderAuditIdMap,
+      mapAccounts,
+      bankMap,
+      boxMap,
+      mapConciliation
+    })
+
+   /*  await migratePurchaseOrderObligationDetail({
+      legacyConn,
+      conn,
+      newCompanyId,
+      purchaseOrderIdMap,
+      orderObligationIdMap,
+      bankMap,
+      boxMap,
+      userMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      mapConciliation,
+    }) */
 
     const mapRetentionsMov = await migrateSalesRetentions(
       legacyConn,
