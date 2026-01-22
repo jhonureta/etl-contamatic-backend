@@ -34,6 +34,7 @@ import { migratePurchaseOrderMovements, migratePurchaseOrders } from './migrateP
 import { migrateDataMovements } from './migrateDetailAdvances';
 import { migrateBankCashTransactions } from './migrateBankCashTransactions';
 import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
+import { migrateCreditNotesPurchases } from './migrateCreditNotesPurchases';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -651,6 +652,26 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapConciliation,
+    })
+
+    await migrateCreditNotesPurchases({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      mapProducts,
+      oldProductCodeMap,
+      purchaseLiquidationAuditIdMap,
+      bankMap,
+      boxMap,
+      mapConciliation,
+      purchaseLiquidationObligationIdMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
     })
 
     //== Migrar movimientos de retenciones en ventas ===/
