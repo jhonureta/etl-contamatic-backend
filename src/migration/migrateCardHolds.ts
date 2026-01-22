@@ -249,7 +249,6 @@ WHERE
 debe_asiento AS TDEBE_ASI,
 haber_asiento AS THABER_ASI,
 numero_asiento,
-#'ANTPROV' AS TIP_ASI,
 'TARJETA' AS TIP_ASI,
 fk_cod_periodo AS FK_PERIODO,
 fecha_registro_asiento AS FECHA_REG,
@@ -364,22 +363,22 @@ export async function migrateDetailedAccountingEntriesRetention(
 
     const mapAccountDetail: Record<number, number> = {};
 
-    const [rows]: any[] = await legacyConn.query(`SELECT 
-     d.cod_detalle_asiento,
-            contabilidad_asientos.fecha_asiento,
-            contabilidad_asientos.cod_asiento AS FK_COD_ASIENTO,
-            d.debe_detalle_asiento AS DEBE_DET,
-            d.haber_detalle_asiento AS HABER_DET,
-            d.fk_cod_plan AS FK_CTAC_PLAN,
-            d.fkProyectoCosto AS FK_COD_PROJECT,
-            d.fkCentroCosto AS FK_COD_COST
+    const [rows]: any[] = await legacyConn.query(`SELECT
+    d.cod_detalle_asiento,
+    contabilidad_asientos.fecha_asiento,
+    contabilidad_asientos.cod_asiento AS FK_COD_ASIENTO,
+    d.debe_detalle_asiento AS DEBE_DET,
+    d.haber_detalle_asiento AS HABER_DET,
+    d.fk_cod_plan AS FK_CTAC_PLAN,
+    d.fkProyectoCosto AS FK_COD_PROJECT,
+    d.fkCentroCosto AS FK_COD_COST
 FROM
     retenciones_tarjeta
 INNER JOIN bancos_emisores_retencion ON bancos_emisores_retencion.ID_BAN_RET = retenciones_tarjeta.fk_banco_retenedor
-    INNER JOIN contabilidad_asientos ON retenciones_tarjeta.id = contabilidad_asientos.cod_origen
-INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = contabilidad_asientos.cod_asiento    
-    
-    WHERE tipo_asiento = 'RET-TAR';`);
+INNER JOIN contabilidad_asientos ON retenciones_tarjeta.id = contabilidad_asientos.cod_origen
+INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = contabilidad_asientos.cod_asiento
+WHERE
+    tipo_asiento = 'RET-TAR';`);
 
     if (!rows.length) {
         console.log("⚠️ No hay registros para migrar");
