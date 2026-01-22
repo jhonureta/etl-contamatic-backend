@@ -34,6 +34,7 @@ import { migratePurchaseOrderMovements, migratePurchaseOrders } from './migrateP
 import { migrateDataMovements } from './migrateDetailAdvances';
 import { migrateBankCashTransactions } from './migrateBankCashTransactions';
 import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
+import { migrateDataMovementsRetentionsHolds } from './migrateCardHolds';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -580,7 +581,7 @@ export async function migrateCompany(codEmp: number) {
     })
 
     //== Migrar movimientos de pedidos  ===/
-    const { orderObligationIdMap } =await migratePurchaseOrderMovements({
+    const { orderObligationIdMap } = await migratePurchaseOrderMovements({
       legacyConn,
       conn,
       newCompanyId,
@@ -755,7 +756,21 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-    await conn.commit();
+    const migrateCardsHolds = await migrateDataMovementsRetentionsHolds(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapConciliation,
+      userMap,
+      bankMap,
+      boxMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+    )
+
+    await conn.rollback();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
