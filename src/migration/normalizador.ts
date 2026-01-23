@@ -36,16 +36,16 @@ const detectarTipoProducto = (p: any): 'xml' | 'manual' | 'nuevo' => {
 
 /* ================= NORMALIZADORES ================= */
 
-const normalizarDesdeXml = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any): ProductoNuevo => ({
+const normalizarDesdeXml = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any, storeMap: Record<number, number>): ProductoNuevo => ({
     idProducto: p.idProducto ? Number(mapProducts[p.idProducto]) : null,
-    idBodega: p.idBodega ? Number(branchMap[p.idBodega]) : null,
+    idBodega: p.idBodega ? Number(storeMap[p.idBodega]) : null,
     codigo: p.codigo ?? null,
     nombre: p.nombre ?? null,
     observacion: p.observacion ?? null,
     cantidad: p.cantidad ?? null,
     total: p.tota ? Number(p.tota) : null,
-    impuesto:p.impuesto ?? null,
-    codigoImpuesto:p.codigoimpuesto ?? null,
+    impuesto: p.impuesto ?? null,
+    codigoImpuesto: p.codigoimpuesto ?? null,
     nombreImpuesto: p.nombreImpuesto ?? null,
     cantidadAnterior: p.cantidadfinal ?? p.cantidad ?? null,
     precioProducto: p.precioProducto ?? null,
@@ -63,7 +63,7 @@ const normalizarDesdeXml = (p: any, mapProducts: any, branchMap: any, oldProduct
     tarifaice: p.tarifaice ?? null
 });
 
-const normalizarDesdeManual = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any, idSucursal: number): ProductoNuevo => ({
+const normalizarDesdeManual = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any, idSucursal: number, storeMap: Record<number, number>): ProductoNuevo => ({
     idProducto: oldProductCodeMap.get(`${p.codigo}`)?.id || '',
     idBodega: idSucursal,
     codigo: p.codigo ?? null,
@@ -83,22 +83,22 @@ const normalizarDesdeManual = (p: any, mapProducts: any, branchMap: any, oldProd
     tarifaice: 0.0
 });
 
-const normalizarDesdeNuevo = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any): ProductoNuevo => ({
+const normalizarDesdeNuevo = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any, storeMap: Record<number, number>): ProductoNuevo => ({
     ...p
 });
 
 /* ================= NORMALIZADOR AUTOMÁTICO ================= */
 
-export const normalizarProducto = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any, idSucursal: number): ProductoNuevo => {
+export const normalizarProducto = (p: any, mapProducts: any, branchMap: any, oldProductCodeMap: any, idSucursal: number, storeMap: Record<number, number>): ProductoNuevo => {
     const tipo = detectarTipoProducto(p);
     switch (tipo) {
         case 'xml':
-            return normalizarDesdeXml(p, mapProducts, branchMap, oldProductCodeMap);
+            return normalizarDesdeXml(p, mapProducts, branchMap, oldProductCodeMap, storeMap);
         case 'manual':
-            return normalizarDesdeManual(p, mapProducts, branchMap, oldProductCodeMap, idSucursal);
+            return normalizarDesdeManual(p, mapProducts, branchMap, oldProductCodeMap, idSucursal, storeMap);
         case 'nuevo':
-            return normalizarDesdeNuevo(p, mapProducts, branchMap, oldProductCodeMap);
+            return normalizarDesdeNuevo(p, mapProducts, branchMap, oldProductCodeMap, storeMap);
         default:
-            return normalizarDesdeManual(p, mapProducts, branchMap, oldProductCodeMap, idSucursal);
+            return normalizarDesdeManual(p, mapProducts, branchMap, oldProductCodeMap, idSucursal, storeMap);
     }
 };

@@ -4,10 +4,38 @@ export async function migrateBranchesForCompany(
   legacyConn: any,
   conn: any,
   newCompanyId: number
-): Promise<Record<number, number>> {
+): Promise<{ branchMap: Record<number, number>; storeMap: Record<number, number> }> {
   console.log("Migrando sucursales...");
 
-  const [rows] = await legacyConn.query(`SELECT COD_SURC ,DIR_SURC, FECCREA_SURC, FK_COD_EMP, ESTADO, TRANS_SURC, TRANSDATOS_SURC, SUBSTRING(secuencial,1, 3) as NUM_EST_ELEC, SUBSTRING(secuencial,5, 3) AS PUNT_EMI_ELEC  , SUBSTRING(secuencialFisica,1, 3) as NUM_EST_FIS,SUBSTRING(secuencialFisica,5, 3) AS PUNT_EMI_FIS , SUBSTRING(secuencialFisica,9, 9) AS SURC_SEC_FIS, SUBSTRING(secuencial,9, 9) AS  SURC_SEC_ELECT, SUBSTRING(SECUENCIALRETENCION,9, 9) AS  SURC_SEC_RET, SUBSTRING(SURC_SEC_NOTACREDIT,9, 9) AS  SURC_SEC_NOTACREDIT,  SUBSTRING(SURC_SEC_NOTADEBIT,9, 9) AS  SURC_SEC_NOTADEBIT, SUBSTRING(SURC_SEC_GUIAREMI,9, 9) AS  SURC_SEC_GUIAREMI , SUBSTRING(SURC_SEC_LIQCOMP,9, 9) AS  SURC_SEC_LIQCOMP, SUBSTRING(SURC_SEC_COMPINGR,9, 9) AS  SURC_SEC_COMPINGR, SURC_NOMBRE, SURC_DIR,SURC_EMAIL,SURC_TELF, SURC_LOGO from sucursales;`);
+  const [rows] = await legacyConn.query(`SELECT
+    COD_SURC,
+    DIR_SURC,
+    FECCREA_SURC,
+    FK_COD_EMP,
+    ESTADO,
+    TRANS_SURC,
+    TRANSDATOS_SURC,
+    SUBSTRING(secuencial, 1, 3) AS NUM_EST_ELEC,
+    SUBSTRING(secuencial, 5, 3) AS PUNT_EMI_ELEC,
+    SUBSTRING(secuencialFisica, 1, 3) AS NUM_EST_FIS,
+    SUBSTRING(secuencialFisica, 5, 3) AS PUNT_EMI_FIS,
+    SUBSTRING(secuencialFisica, 9, 9) AS SURC_SEC_FIS,
+    SUBSTRING(secuencial, 9, 9) AS SURC_SEC_ELECT,
+    SUBSTRING(SECUENCIALRETENCION, 9, 9) AS SURC_SEC_RET,
+    SUBSTRING(SURC_SEC_NOTACREDIT, 9, 9) AS SURC_SEC_NOTACREDIT,
+    SUBSTRING(SURC_SEC_NOTADEBIT, 9, 9) AS SURC_SEC_NOTADEBIT,
+    SUBSTRING(SURC_SEC_GUIAREMI, 9, 9) AS SURC_SEC_GUIAREMI,
+    SUBSTRING(SURC_SEC_LIQCOMP, 9, 9) AS SURC_SEC_LIQCOMP,
+    SUBSTRING(SURC_SEC_COMPINGR, 9, 9) AS SURC_SEC_COMPINGR,
+    SURC_NOMBRE,
+    SURC_DIR,
+    SURC_EMAIL,
+    SURC_TELF,
+    SURC_LOGO,
+    bodegas.COD_BOD
+FROM
+    sucursales
+LEFT JOIN bodegas ON bodegas.FK_COD_SURCBOD = sucursales.COD_SURC;`);
   const sucursales = rows as any[];
 
   if (!sucursales.length) {
@@ -15,6 +43,7 @@ export async function migrateBranchesForCompany(
   }
   const BATCH_SIZE = 1000;
   const branchMap: Record<number, number> = {};
+  const storeMap: Record<number, number> = {};
   for (let i = 0; i < sucursales.length; i += BATCH_SIZE) {
     const batch = sucursales.slice(i, i + BATCH_SIZE);
 
@@ -71,6 +100,7 @@ export async function migrateBranchesForCompany(
       let newId = res.insertId;
       for (const s of batch) {
         branchMap[s.COD_SURC] = newId;
+        storeMap[s.COD_BOD] = newId;
         newId++;
       }
       //CLAVE DE SUCURSAL  COD_SURC  A ID NUEVA DE MIGRACION
@@ -81,5 +111,5 @@ export async function migrateBranchesForCompany(
     }
   }
 
-  return branchMap;
+  return { branchMap, storeMap };
 }

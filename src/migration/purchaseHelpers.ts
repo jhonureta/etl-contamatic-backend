@@ -20,6 +20,7 @@ type RestructureProductParams = {
   branchMap: Record<number, number>;
   mapProducts: Record<number, number>;
   mapCostExpenses: Record<number, number | null>;
+  storeMap: Record<number, number>;
 };
 
 type InsertAuditParams = {
@@ -84,14 +85,16 @@ export function restructureProductDetails({
   purchaseType,
   inputDetail,
   mapCostExpenses,
-  mapProducts
+  mapProducts,
+  storeMap
 }: RestructureProductParams): any[] {
   if (purchaseType === 'mercaderia') {
     return transformProductsMerchandise(
       idFirstBranch,
       branchMap,
       inputDetail,
-      mapProducts
+      mapProducts,
+      storeMap
     );
   }
   return transformProductsExpensesServices(
@@ -104,11 +107,12 @@ function transformProductsMerchandise(
   idFirstBranch: number,
   branchMap: Record<number, number>,
   inputDetail: any[],
-  mapProducts: Record<number, number>
+  mapProducts: Record<number, number>,
+  storeMap: Record<number, number>
 ) {
   const isOld = isDetailOldMerchandise(inputDetail);
   return inputDetail.map(product => {
-    const idBodega = isOld ? idFirstBranch : branchMap[product.idBodega];
+    const idBodega = isOld ? idFirstBranch : toInteger(storeMap[product.idBodega]);
     const oldCode = product.codigoXml ? product.codigoXml : product.codigoArticulo;
     const codigo = isOld ? oldCode : product.codigo;
     const productName = isOld ? product.descripcion : product.nombre;
@@ -351,7 +355,7 @@ export async function findNextAuditCode({
 export async function findFirstDefaultUser({
   conn,
   companyId
-}: FindFirstDefaultUserParams){
+}: FindFirstDefaultUserParams) {
   try {
     const userQuery = `
       SELECT
@@ -380,7 +384,7 @@ export async function findFirstDefaultUser({
 export async function findFirstDefaultCustomer({
   conn,
   companyId
-}: FindFirstDefaultCustomerParams){
+}: FindFirstDefaultCustomerParams) {
   try {
     const customerQuery = `
       SELECT

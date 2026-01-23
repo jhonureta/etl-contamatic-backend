@@ -8,6 +8,7 @@ export async function migrateProformaInvoices({
   mapClients,
   mapProducts,
   branchMap,
+  storeMap
 }) {
   try {
     console.log("Migrando proformas...");
@@ -153,7 +154,8 @@ export async function migrateProformaInvoices({
           productDetails,
           mapProducts,
           branchMap,
-          idFirstBranch
+          idFirstBranch,
+          storeMap
         );
 
         return [
@@ -320,7 +322,8 @@ function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
   branchMap: Record<number, number>,
-  idFirstBranch: number | null
+  idFirstBranch: number | null,
+  storeMap: Record<number, number>
 ) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {

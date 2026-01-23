@@ -15,6 +15,7 @@ type MigratePurchaseOrdersParams = {
   oldRetentionCodeMap: Map<string, RetentionCodeValue>;
   newRetentionIdMap: Record<number, number>;
   mapCostExpenses: Record<number, number>;
+  storeMap: Record<number, number>;
 }
 
 type MigrateMovementsParams = {
@@ -73,10 +74,10 @@ type MigratePurchaseOrderObligationDetailParams = Omit<MigrateMovementsParams, '
 }
 
 type MigrateDetailsOrderObligationsParams = {
-	legacyConn: Connection;
-	conn: Connection;
-	orderObligationIdMap: Record<number, number>;
-	movementIdMap: Record<number, number>;
+  legacyConn: Connection;
+  conn: Connection;
+  orderObligationIdMap: Record<number, number>;
+  movementIdMap: Record<number, number>;
 }
 
 type MigrateAccountingEntriesOrderParams = {
@@ -98,7 +99,8 @@ export async function migratePurchaseOrders({
   mapProducts,
   oldRetentionCodeMap,
   newRetentionIdMap,
-  mapCostExpenses
+  mapCostExpenses,
+  storeMap
 }: MigratePurchaseOrdersParams): Promise<{ purchaseOrderIdMap: Record<number, number>; purchaseOrderAuditIdMap: Record<number, number> }> {
   try {
     console.log("Migrando pedidos de compra...");
@@ -248,7 +250,8 @@ export async function migratePurchaseOrders({
           productDetails,
           mapProducts,
           branchMap,
-          idFirstBranch
+          idFirstBranch,
+          storeMap
         );
 
         return [
@@ -415,7 +418,8 @@ function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
   branchMap: Record<number, number>,
-  idFirstBranch: number | null
+  idFirstBranch: number | null,
+  storeMap: Record<number, number>
 ) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {

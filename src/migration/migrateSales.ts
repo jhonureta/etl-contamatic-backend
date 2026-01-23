@@ -10,7 +10,8 @@ export async function migrateSales(
     mapProducts: any,
     mapRetentions: any,
     oldRetentionCodeMap: any,
-    newRetentionIdMap: any
+    newRetentionIdMap: any,
+    storeMap: any
 ): Promise<{ mapSales: Record<number, number>; mapAuditSales: Record<number, number> }> {
     console.log("Migrando ventas...");
 
@@ -168,7 +169,7 @@ FROM
             }));
             return {
                 idProducto: parseInt(mapProducts[producto.idProducto]) || null,
-                idBodega: parseInt(branchMap[producto.idBodega]) || null,
+                idBodega: parseInt(storeMap[producto.idBodega]) || null,
                 codigo: producto.codigo,
                 nombre: producto.nombre,
                 stock: parseInt(producto.stock) || 0,
