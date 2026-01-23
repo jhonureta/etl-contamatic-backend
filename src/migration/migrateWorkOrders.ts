@@ -8,6 +8,7 @@ export async function migrateWorkOrders({
   mapClients,
   mapProducts,
   branchMap,
+  storeMap
 }) {
   try {
     console.log("Migrando ordenes de trabajos");
@@ -153,7 +154,8 @@ export async function migrateWorkOrders({
           productDetails,
           mapProducts,
           branchMap,
-          idFirstBranch
+          idFirstBranch,
+          storeMap
         );
 
         return [
@@ -324,15 +326,16 @@ function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
   branchMap: Record<number, number>,
-  idFirstBranch: number | null
+  idFirstBranch: number | null,
+  storeMap: Record<number, number>
 ) {
   let branchId = null;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
     if (index === 0 && item.idBodega) {
-      branchId = branchMap[item.idBodega] || idFirstBranch; // Cambiar null por id de primera bodega
+      branchId = storeMap[item.idBodega] || idFirstBranch; // Cambiar null por id de primera bodega
     }
     const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = branchMap[item.idBodega] || idFirstBranch;
+    const idBodega = storeMap[item.idBodega] || idFirstBranch;
     return {
       idProducto,
       idBodega,

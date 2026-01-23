@@ -11,7 +11,8 @@ interface MigrateShippingGuideParams {
   branchMap: Record<number, number>;
   userNameIdMap: Map<string, UserIdentity>;
   clientNameIdMap: Map<string, ClientIdentity>;
-  vehicleIdMap: Record<number, number>
+  vehicleIdMap: Record<number, number>,
+  storeMap: Record<number, number>;
 }
 
 export async function migrateShippingGuide({
@@ -23,7 +24,8 @@ export async function migrateShippingGuide({
   branchMap,
   userNameIdMap,
   clientNameIdMap,
-  vehicleIdMap
+  vehicleIdMap,
+  storeMap
 }: MigrateShippingGuideParams) {
   try {
     const [shippingGuide]: any[] = await legacyConn.query(`
@@ -154,7 +156,7 @@ export async function migrateShippingGuide({
     const shippingGuideIdMap: Record<number, number> = {};
     const shippingGuideAuditIdMap: Record<number, number> = {};
 
-    const [ [defaultUser], [defaultCustomer] ] = await Promise.all([
+    const [[defaultUser], [defaultCustomer]] = await Promise.all([
       findFirstDefaultUser({ conn, companyId: newCompanyId }),
       findFirstDefaultCustomer({ conn, companyId: newCompanyId })
     ]);
@@ -211,7 +213,8 @@ export async function migrateShippingGuide({
           productDetails,
           mapProducts,
           branchMap,
-          idFirstBranch
+          idFirstBranch,
+          storeMap
         );
 
         const detailedShippingGuide = generateDetailShippingGuide(
@@ -400,11 +403,12 @@ function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
   branchMap: Record<number, number>,
-  idFirstBranch: number | null
+  idFirstBranch: number | null,
+  storeMap: Record<number, number>
 ) {
   const detailTransformed = inputDetail.map((item: any) => {
     const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = branchMap[item.idBodega] || idFirstBranch;
+    const idBodega = storeMap[item.idBodega] || idFirstBranch;
     return {
       idProducto,
       idBodega,

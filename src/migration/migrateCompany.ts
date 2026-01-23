@@ -35,6 +35,7 @@ import { migrateDataMovements } from './migrateDetailAdvances';
 import { migrateBankCashTransactions } from './migrateBankCashTransactions';
 import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
 import { migrateDataMovementsRetentionsHolds } from './migrateCardHolds';
+import { migratingPhysicalTakeOff } from './migratePhysicalOutlets';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -131,7 +132,8 @@ export async function migrateCompany(codEmp: number) {
       e.FK_COD_COUNT,
       e.FECHA_CREACION,
       e.EST_EMP.toUpperCase() ?? 'ACTIVO',
-      e.CONTADOR ?? 1
+      e.CONTADOR ?? 1,
+      vacio
     ]
 
     await conn.beginTransaction();
@@ -148,7 +150,7 @@ export async function migrateCompany(codEmp: number) {
      SELECCION_COSTEO, EDIT_VENDEDOR, DESCUENTO_AUTOMATICO, TIPEMP_EMP, 
      JSON_ESTAB, LEGEND_EMP, TIT_LEGEND_EMP, ITEMS_AUT, CLAVRUC_EMP, 
      SEC_EXTR_EMP, DATOS_EXTR_EMP, ACT_DESCRIPCION, IMP_LOGO, IMP_SURC_EMP, COLOR_LEYENDA, 
-     FK_COD_COUNT, FECCREACION_EMP, EST_EMP, CONTADOR)
+     FK_COD_COUNT, FECCREACION_EMP, EST_EMP, CONTADOR,DIRMAT_EMP)
     VALUES (?, ?, ?, ?, ?, ?, ?,
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
@@ -156,7 +158,7 @@ export async function migrateCompany(codEmp: number) {
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
-       ?, ?, ?, ?, ?, ?
+       ?, ?, ?, ?, ?, ?,?
     )
     `,
       resultInsert
@@ -341,7 +343,7 @@ export async function migrateCompany(codEmp: number) {
       throw new Error(`Error al migrar plan de empresa =${codEmp}`);
     }
     console.log(` -> Plan de la empresa migrado correctamente`);
-    const branchMap = await migrateBranchesForCompany(
+    const { branchMap, storeMap } = await migrateBranchesForCompany(
       legacyConn,
       conn,
       newCompanyId
@@ -471,7 +473,7 @@ export async function migrateCompany(codEmp: number) {
     const { mapSales, mapAuditSales } = await migrateSales(
       legacyConn,
       conn,
-      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions, oldRetentionCodeMap, newRetentionIdMap);
+      newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions, oldRetentionCodeMap, newRetentionIdMap, storeMap);
 
     //MIGRACION DE CONCILIACION BANCARIA
 
@@ -531,7 +533,8 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapClients,
       mapProducts,
-      branchMap
+      branchMap,
+      storeMap
     })
 
     //== Migrar ordenes de trabajos ===/
@@ -542,7 +545,8 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapClients,
       mapProducts,
-      branchMap
+      branchMap,
+      storeMap
     })
 
     //== Migrar vehiculos ===/
@@ -562,7 +566,8 @@ export async function migrateCompany(codEmp: number) {
       branchMap,
       userNameIdMap,
       clientNameIdMap,
-      vehicleIdMap
+      vehicleIdMap,
+      storeMap
     })
 
 
@@ -577,7 +582,8 @@ export async function migrateCompany(codEmp: number) {
       mapProducts,
       oldRetentionCodeMap,
       newRetentionIdMap,
-      mapCostExpenses: costExpenseIdMapping
+      mapCostExpenses: costExpenseIdMapping,
+      storeMap
     })
 
     //== Migrar movimientos de pedidos  ===/
@@ -609,7 +615,8 @@ export async function migrateCompany(codEmp: number) {
       mapProducts,
       oldRetentionCodeMap,
       newRetentionIdMap,
-      mapCostExpenses: costExpenseIdMapping
+      mapCostExpenses: costExpenseIdMapping,
+      storeMap
     });
 
     //== Migrar anticipos de proveedores ===/
@@ -690,6 +697,7 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
+      storeMap
     );
     //== Migrar anticipos clientes ===/
     const migrateCustomeradvances = await migrateDataMovements(
@@ -769,6 +777,17 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
     )
+
+    const mapPhysical = await migratingPhysicalTakeOff(
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+      mapPeriodo
+    )
+    console.log(mapPhysical);
 
     await conn.rollback();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);

@@ -13,6 +13,7 @@ type MigratePurchasesParams = {
 	oldRetentionCodeMap: Map<string, RetentionCodeValue>;
 	newRetentionIdMap: Record<number, number>;
 	mapCostExpenses: Record<number, number | null>;
+	storeMap: Record<number, number>;
 };
 
 type ResultSet = [RowDataPacket[] | RowDataPacket[][] | ResultSetHeader, FieldPacket[]];
@@ -120,7 +121,8 @@ export async function migratePurchasesAndLiquidations({
 	mapProducts,
 	oldRetentionCodeMap,
 	newRetentionIdMap,
-	mapCostExpenses
+	mapCostExpenses,
+	storeMap
 }: MigratePurchasesParams): Promise<{ purchaseLiquidationIdMap: Record<number, number>; purchaseLiquidationAuditIdMap: Record<number, number> }> {
 
 	const resultPurchasesQuery: ResultSet = await legacyConn.query(`
@@ -300,7 +302,8 @@ export async function migratePurchasesAndLiquidations({
 				purchaseType,
 				inputDetail: previusDetailProd,
 				mapCostExpenses,
-				mapProducts
+				mapProducts,
+				storeMap
 			});
 
 			const previusDetailRet = toJSONArray(p.DOCUMENT_REL_DETAIL);

@@ -225,7 +225,9 @@ WHERE
     } catch (error) {
         throw error;
     }
-} export async function migrateAccountingEntriesRetentions(
+}
+
+export async function migrateAccountingEntriesRetentions(
     legacyConn: any,
     conn: any,
     newCompanyId: number,

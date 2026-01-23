@@ -396,8 +396,7 @@ export async function migrateDetailedAccountingEntries(
         'MOVIMIENTO-INGRESO',
         'MOVIMIENTO-EGRESO',
         'TRANSFERENCIA-INGRESO',
-        'TRANSFERENCIA-EGRESO'
-    )
+        'TRANSFERENCIA-EGRESO')
             ORDER BY
                 cod_asiento
             DESC;

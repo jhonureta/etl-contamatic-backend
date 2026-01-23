@@ -41,14 +41,15 @@ export async function migrateCreditNote(
     mapProducts: any,
     oldProductCodeMap: any,
     mapAuditSales: any,
-    bankMap,
-    boxMap,
-    mapConciliation,
-    mapObligationsCustomers,
-    mapPeriodo,
-    mapProject,
-    mapCenterCost,
-    mapAccounts,
+    bankMap: Record<number, number | null>,
+    boxMap: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
+    mapObligationsCustomers: Record<number, number | null>,
+    mapPeriodo: Record<number, number | null>,
+    mapProject: Record<number, number | null>,
+    mapCenterCost: Record<number, number | null>,
+    mapAccounts: Record<number, number | null>,
+    storeMap: Record<number, number>
 ): Promise<{ mapCreditNote: Record<number, number>; mapAuditCreditNote: Record<number, number> }> {
     console.log("Migrando notas de credito...");
 
@@ -225,7 +226,7 @@ DESC;`);
                 if (t.TIP_DOC_REL == 'factura') {
                     idSucursal = branchMap[listElectronica[t.PUNTO_EMISION_DOC]];
                 }
-                const productosNormalizados = productos.map(p => normalizarProducto(p, mapProducts, branchMap, oldProductCodeMap, idSucursal));
+                const productosNormalizados = productos.map(p => normalizarProducto(p, mapProducts, branchMap, oldProductCodeMap, idSucursal, storeMap));
 
                 const auditId = mapAuditCreditNote[t.COD_TRANS];
                 const vendedor = userMap[t.FK_USER_VEND];
