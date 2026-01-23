@@ -785,7 +785,10 @@ export async function migrateCompany(codEmp: number) {
       storeMap,
       userMap,
       mapProducts,
-      mapPeriodo
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
     )
     console.log(mapPhysical);
 
