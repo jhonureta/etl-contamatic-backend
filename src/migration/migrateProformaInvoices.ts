@@ -8,7 +8,8 @@ export async function migrateProformaInvoices({
   mapClients,
   mapProducts,
   branchMap,
-  storeMap
+  storeMap,
+  idFirstBranch
 }) {
   try {
     console.log("Migrando proformas...");
@@ -102,24 +103,6 @@ export async function migrateProformaInvoices({
       return { proformaIdMap, proformaAuditIdMap };
     }
 
-    const branchSequenseQuery: string = `
-	SELECT
-			COD_SURC,
-			SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
-			SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
-			SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
-	FROM
-			sucursales;`;
-
-    const [sequentialBranches] = await legacyConn.query(branchSequenseQuery, [
-      newCompanyId,
-    ]);
-
-    let idFirstBranch: number | null = null;
-    if (sequentialBranches && sequentialBranches.length > 0) {
-      idFirstBranch = Number(sequentialBranches[0].COD_SURC);
-    }
-
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     const BATCH_SIZE = 1000;
@@ -150,10 +133,9 @@ export async function migrateProformaInvoices({
         const auditId = firstInsertedAuditId + index;
         proformaAuditIdMap[proforma.COD_TRANS] = auditId;
 
-        const { detailTransformed, branchId } = transformProductDetail(
+        const { detailTransformed, branchId  } = transformProductDetail(
           productDetails,
           mapProducts,
-          branchMap,
           idFirstBranch,
           storeMap
         );
@@ -321,15 +303,14 @@ export async function migrateProformaInvoices({
 function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
-  branchMap: Record<number, number>,
-  idFirstBranch: number | null,
-  storeMap: Record<number, number>
+  idFirstBranch: number | null, // id de la primera bodega, en caso no exista
+  storeMap: Record<number, number> // mapa de bodegas
 ) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
    
-    const idProducto = mapProducts[item.idProducto] || '';
-    const mappedBodega = branchMap?.[item?.idBodega];
+    const idProducto = mapProducts[item?.idProducto] || '';
+    const mappedBodega = storeMap[item?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;
     const idBodega = mappedBodega || idFirstBranch;
     return {

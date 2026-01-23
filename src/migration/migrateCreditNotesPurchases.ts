@@ -28,7 +28,9 @@ export async function migrateCreditNotesPurchases({
   mapPeriodo,
   mapProject,
   mapCenterCost,
-  mapAccounts
+  mapAccounts,
+  storeMap,
+  idFirstBranch
 }): Promise<{ creditNotesPurchasesIdMap: Record<number, number>; creditNotesPurchasesAuditIdMap: Record<number, number> }> {
   try {
     console.log("Migrando notas de credito de compras...");
@@ -161,11 +163,6 @@ export async function migrateCreditNotesPurchases({
     const resultSequentialQuery = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
     const [sequentialBranches]: any[] = resultSequentialQuery as Array<any>;
 
-    let idFirstBranch: number | null = null;
-    if (sequentialBranches.length > 0) {
-      idFirstBranch = sequentialBranches[0].COD_SURC;
-    }
-
     const electronicSequences = new Map<string, number>();
     sequentialBranches.forEach((branch: BranchSequentialData, index: number) => {
       electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
@@ -205,7 +202,7 @@ export async function migrateCreditNotesPurchases({
         const { detailTransformed, branchId: branchIdProduct } = restructureCreditNoteDetail({
           inputDetail: previusDetailProd,
           mapProducts,
-          branchMap,
+          storeMap,
           idFirstBranch,
           creditNoteType: t.TIP_DET_DOC,
           oldProductCodeMap
@@ -213,7 +210,8 @@ export async function migrateCreditNotesPurchases({
 
         let branchId: number = branchIdProduct;
         if (electronicSequences.has(t.PUNTO_EMI_NOTCOM)) {
-          branchId = electronicSequences.get(t.PUNTO_EMI_NOTCOM);
+          let oldBranchId = electronicSequences.get(t.PUNTO_EMI_NOTCOM);
+          branchId = branchMap[oldBranchId] || idFirstBranch;
         }
 
         const vendedor = userMap[t.FK_USER_VEND];
@@ -421,7 +419,7 @@ export async function migrateMovementeAdvancesNote(
   mapCreditNote: Record<number, number | null>,
   mapAuditCreditNote: Record<number, number | null>
 ): Promise<{ mapNoteMovements: Record<number, number> }> {
-  console.log("Migrando notas de credito en compras...");
+  console.log("Migrando movimientos notas de credito en compras...");
   const mapNoteMovements: Record<number, number> = {};
   const [movements] = await legacyConn.query(`
     SELECT
@@ -667,7 +665,7 @@ export async function migrateMovementeAdvancesNote(
         audit: mapNoteMovements[o.COD_TRAC]
       });
     });
-    console.log(` -> Batch migrado: ${batch.length} notas de credito por anticipos.`);
+    console.log(` -> Batch migrado: ${batch.length} notas de credito`);
 
   }
 
@@ -730,7 +728,7 @@ export async function migrateRetentionsCredit(
 
 ): Promise<{ mapNoteMovementsFull: Record<number, number> }> {
   try {
-    console.log("Migrando notas por credito...");
+    console.log("Migrando movimientos de notas de credito compras anticipo...");
     const mapNoteMovementsFull: Record<number, number> = { ...mapNoteMovements };
 
     const [rows] = await legacyConn.query(`
@@ -906,18 +904,18 @@ export async function migrateRetentionsCredit(
 
     const BATCH_SIZE = 1000;
 
-    const movementSequenceQuery = await conn.query(`SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS SECU_MOVI FROM movements WHERE MODULO = 'NCVENTA' AND FK_COD_EMP = ?`,
-			[newCompanyId]
-		);
-		const [movementData] = movementSequenceQuery as Array<any>;
-		let secuenciaMovimiento = movementData[0]?.SECU_MOVI ?? 1;
+    const movementSequenceQuery = await conn.query(`SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS SECU_MOVI FROM movements WHERE MODULO = 'NCCOMPRA' AND FK_COD_EMP = ?`,
+      [newCompanyId]
+    );
+    const [movementData] = movementSequenceQuery as Array<any>;
+    let secuenciaMovimiento = movementData[0]?.SECU_MOVI ?? 1;
 
 
     for (let i = 0; i < creditNotes.length; i += BATCH_SIZE) {
       const batchCreditNotes = creditNotes.slice(i, i + BATCH_SIZE);
 
       const values = batchCreditNotes.map((o: any, index: number) => {
-        console.log(`transformando y normalizando movimientos de NC a credito en compras ${o.NUM_TRANS}`);
+        console.log(`transformando y normalizando movimientos de NC a credito en compras anticipo ${o.NUM_TRANS}`);
         // Lógica de Negocio
         let idPlanCuenta = null;
         const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
@@ -976,7 +974,7 @@ export async function migrateRetentionsCredit(
       batchCreditNotes.forEach(o => {
         mapNoteMovementsFull[o.COD_TRAC] = currentMovId++;
       });
-      console.log(` -> Batch migrado: ${batchCreditNotes.length} retenciones de ventas por credito.`);
+      console.log(` -> Batch migrado: ${batchCreditNotes.length} movimientos de NC COMPRA  anticipos`);
     }
     return { mapNoteMovementsFull };
   } catch (error) {
@@ -995,7 +993,7 @@ export async function migratePaymentDetails(
   mapDetailObligationsAplicate: Record<number, number>
 }> {
 
-  console.log("🚀 Migrando movimientos  por retenciones");
+  console.log("🚀 Migrando detalle de cuentas de NC DE COMPRAS");
   const mapDetailObligationsAplicate: Record<number, number> = {};
 
   try {
@@ -1026,17 +1024,13 @@ export async function migratePaymentDetails(
           ;
   `);
 
-
-    if (!rows.length) return { mapDetailObligationsAplicate };
+    if (rows.length === 0) return { mapDetailObligationsAplicate };
 
     const BATCH_SIZE = 500;
 
-
-    //oldDetailAcountCodeMap
-    console.log(oldDetailAcountCodeMap);
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const movementValues = batch.map((o, index) => {
+      const movementValues = batch.map((o, index: number) => {
         const idCuenta = mapObligationsCustomers[o.fk_cod_cuenta];
 
 
@@ -1064,7 +1058,7 @@ export async function migratePaymentDetails(
           o.nuevo_saldo
         ];
       });
-      console.log(movementValues);
+
       const [resMov]: any = await conn.query(
         `INSERT INTO account_detail (
                   FK_COD_CUENTA, FK_ID_MOVI, FECHA_REG, IMPORTE, SALDO, NEW_SALDO
@@ -1078,7 +1072,7 @@ export async function migratePaymentDetails(
       });
     }
 
-    console.log("✅ Migración completada de pagos en retenciones");
+    console.log("✅ Migración completada de detalle de cuentas notas de credito");
     return { mapDetailObligationsAplicate };
 
   } catch (err) {
@@ -1097,73 +1091,62 @@ export async function migrateAccountingEntriesCustomerObligations(
 ): Promise<{
   mapEntryAccount: Record<number, number>
 }> {
-
-  /* legacyConn,
-    conn,
-    newCompanyId,
-    mapNoteMovementsFull,
-    mapPeriodo,
-    mapAuditCreditNote */
-
-  console.log("🚀 Migrando encabezado de asiento contables retenciones..........");
-  try {//IMPORTE_GD
+  try {
+    console.log("🚀 Migrando encabezado de asiento contables nota de credito en compras");
     const mapEntryAccount: Record<number, number> = {};
-    const [rows]: any[] = await legacyConn.query(`SELECT
-  cod_asiento,
-  fecha_asiento AS FECHA_ASI,
-  descripcion_asiento AS DESCRIP_ASI,
-  numero_asiento AS NUM_ASI,
-  'NOTA CREDITO DEVOLUCION VENTA' AS ORG_ASI,
-  debe_asiento AS TDEBE_ASI,
-  haber_asiento AS THABER_ASI,
- 
-  numero_asiento,
+    const [rows]: any[] = await legacyConn.query(`
+      SELECT
+          cod_asiento,
+          fecha_asiento AS FECHA_ASI,
+          descripcion_asiento AS DESCRIP_ASI,
+          numero_asiento AS NUM_ASI,
+          'NOTA CREDITO DEVOLUCION COMPRA' AS ORG_ASI,
+          debe_asiento AS TDEBE_ASI,
+          haber_asiento AS THABER_ASI,
+          numero_asiento,
+          CASE WHEN transacciones.tipo_nota = 'descuento' THEN 'NC-COM-DEV' ELSE 'NC-COM-DESC'
+      END AS TIP_ASI,
+      fk_cod_periodo AS FK_PERIODO,
+      fecha_registro_asiento AS FECHA_REG,
+      fecha_update_asiento AS FECHA_ACT,
+      json_asi AS JSON_ASI,
+      res_asiento AS RES_ASI,
+      ben_asiento AS BEN_ASI,
+      NULL AS FK_AUDIT,
+      NULL AS FK_COD_EMP,
+      contabilidad_asientos.FK_CODTRAC,
+      transacciones.COD_TRAC,
+      CAST(
+          REGEXP_REPLACE(
+              RIGHT(numero_asiento, 9),
+              '[^0-9]',
+              ''
+          ) AS UNSIGNED
+      ) AS SEC_ASI,
+      cod_origen,
+      NULL AS FK_MOV
+      FROM
+          contabilidad_asientos
+      INNER JOIN transacciones ON transacciones.COD_TRAC = contabilidad_asientos.FK_CODTRAC
+      WHERE
+          TIP_TRAC IN(
+              'nota-compra',
+              'nota-compra-devuelto'
+          );` );
 
-case WHEN transacciones.tipo_nota='descuento' then 'NC-VEN-DEV' ELSE 'NC-VEN-DESC' END
-  AS TIP_ASI,
-  fk_cod_periodo AS FK_PERIODO,
-  fecha_registro_asiento AS FECHA_REG,
-  fecha_update_asiento AS FECHA_ACT,
-  json_asi AS JSON_ASI,
-  res_asiento AS RES_ASI,
-  ben_asiento AS BEN_ASI,
-  NULL AS FK_AUDIT,
-  NULL AS FK_COD_EMP,
-  contabilidad_asientos.FK_CODTRAC,
-  transacciones.COD_TRAC,
-  CAST(
-      REGEXP_REPLACE(
-          RIGHT(numero_asiento, 9),
-          '[^0-9]',
-          ''
-      ) AS UNSIGNED
-  ) AS SEC_ASI,
-  cod_origen,
-  NULL AS FK_MOV
-FROM
-  contabilidad_asientos
-INNER JOIN transacciones ON transacciones.COD_TRAC = contabilidad_asientos.FK_CODTRAC
-WHERE
-  TIP_TRAC IN('nota');` );
-
-    if (!rows.length) {
+    if (rows.length === 0) {
       return { mapEntryAccount };
     }
 
-
     const BATCH_SIZE = 1000;
-
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const insertValues: any[] = [];
 
-      for (const o of batch) {
-        /*  const idTrn = mapSales[o.FK_MOVTRAC] */
-        const periodoId = mapPeriodo[o.FK_PERIODO]
+      const insertValues: any[] = batch.map(o => {
+        const periodoId = mapPeriodo[o.FK_PERIODO];
         const idAuditTr = mapAuditCreditNote[o.COD_TRAC];
         const idMovimiento = mapNoteMovementsFull[o.COD_TRAC];
-
-        insertValues.push([
+        return [
           o.FECHA_ASI,
           o.DESCRIP_ASI,
           o.NUM_ASI,
@@ -1182,37 +1165,38 @@ WHERE
           o.SEC_ASI,
           null,
           idMovimiento
-        ]);
+        ];
+      });
 
-
-      }
-
-      const [res]: any = await conn.query(`INSERT INTO accounting_movements(
-                  FECHA_ASI,
-                  DESCRIP_ASI,
-                  NUM_ASI,
-                  ORG_ASI,
-                  TDEBE_ASI,
-                  THABER_ASI,
-                  TIP_ASI,
-                  FK_PERIODO,
-                  FECHA_REG,
-                  FECHA_ACT,
-                  JSON_ASI,
-                  RES_ASI,
-                  BEN_ASI,
-                  FK_AUDIT,
-                  FK_COD_EMP,
-                  SEC_ASI,
-                  FK_MOVTRAC,
-                  FK_MOV) VALUES ?`, [insertValues]);
+      const [res]: any = await conn.query(`
+        INSERT INTO accounting_movements(
+            FECHA_ASI,
+            DESCRIP_ASI,
+            NUM_ASI,
+            ORG_ASI,
+            TDEBE_ASI,
+            THABER_ASI,
+            TIP_ASI,
+            FK_PERIODO,
+            FECHA_REG,
+            FECHA_ACT,
+            JSON_ASI,
+            RES_ASI,
+            BEN_ASI,
+            FK_AUDIT,
+            FK_COD_EMP,
+            SEC_ASI,
+            FK_MOVTRAC,
+            FK_MOV
+        )
+        VALUES ?`, [insertValues]);
 
       let newId = res.insertId;
       for (const o of batch) {
         mapEntryAccount[o.cod_asiento] = newId++;
       }
     }
-    console.log("✅ Migración asiento contable retencion completada correctamente");
+    console.log("✅ Migración asiento contable completada correctamente");
     return { mapEntryAccount };
   } catch (err) {
     console.error("❌ Error en migración de asiento contable:", err);
@@ -1230,31 +1214,36 @@ export async function migrateDetailedAccountingEntriesCustomerObligations(
   mapEntryAccount: Record<number, number | null>
 ): Promise<{ mapAccountDetail: Record<number, number> }> {
   console.log("🚀 Cuentas contables");
-  console.log("🚀 Iniciando migración de detalles de asientos contables retenciones..........");
+  console.log("🚀 Iniciando migración de detalles de asientos contables compra..........");
 
   const mapAccountDetail: Record<number, number> = {};
 
-  const [rows]: any[] = await legacyConn.query(`SELECT
-  d.cod_detalle_asiento,
-          contabilidad_asientos.fecha_asiento,
-          contabilidad_asientos.cod_asiento AS FK_COD_ASIENTO,
-          d.debe_detalle_asiento AS DEBE_DET,
-          d.haber_detalle_asiento AS HABER_DET,
-          d.fk_cod_plan AS FK_CTAC_PLAN,
-          d.fkProyectoCosto AS FK_COD_PROJECT,
-          d.fkCentroCosto AS FK_COD_COST
-FROM
-  contabilidad_asientos
-  
-INNER JOIN transacciones ON transacciones.COD_TRAC = contabilidad_asientos.FK_CODTRAC
-INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = contabilidad_asientos.cod_asiento
-WHERE
-   TIP_TRAC IN('nota');`);
+  const [rows]: any[] = await legacyConn.query(`
+    SELECT
+        d.cod_detalle_asiento,
+        contabilidad_asientos.fecha_asiento,
+        contabilidad_asientos.cod_asiento AS FK_COD_ASIENTO,
+        d.debe_detalle_asiento AS DEBE_DET,
+        d.haber_detalle_asiento AS HABER_DET,
+        d.fk_cod_plan AS FK_CTAC_PLAN,
+        d.fkProyectoCosto AS FK_COD_PROJECT,
+        d.fkCentroCosto AS FK_COD_COST
+    FROM
+        contabilidad_asientos
+    INNER JOIN transacciones ON transacciones.COD_TRAC = contabilidad_asientos.FK_CODTRAC
+    INNER JOIN contabilidad_detalle_asiento d ON
+        d.fk_cod_asiento = contabilidad_asientos.cod_asiento
+    WHERE
+        TIP_TRAC IN(
+            'nota-compra',
+            'nota-compra-devuelto'
+        );
+  `);
 
-  if (!rows.length) {
+  if (rows.length === 0) {
     console.log("⚠️ No hay registros para migrar");
     return { mapAccountDetail };
-  } //console.log(rows);
+  }
 
   const BATCH_SIZE = 1000;
   console.log(`📦 Total registros a migrar: ${rows.length}`);
@@ -1350,6 +1339,6 @@ WHERE
     }
   }
 
-  console.log("🎉 Migración de detalles contables completada");
+  console.log("🎉 Migración de detalles de asiento contables completada");
   return { mapAccountDetail };
 }

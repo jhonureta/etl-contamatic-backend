@@ -3,20 +3,20 @@ import {  codigoIvaPorcentaje, toInteger, toNumber } from "./purchaseHelpers";
 export function restructureCreditNoteDetail({
   inputDetail,
   mapProducts,
-  branchMap,
+  storeMap,
   idFirstBranch,
   creditNoteType,
   oldProductCodeMap
 }) {
   if (creditNoteType === 'descuento') {
-    return transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapProducts, branchMap, idFirstBranch);
+    return transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapProducts, storeMap, idFirstBranch);
   }
 
-  return transformReturnedCreditNoteDetail(inputDetail, mapProducts, branchMap, idFirstBranch);
+  return transformReturnedCreditNoteDetail(inputDetail, mapProducts, storeMap, idFirstBranch);
 
 }
 
-function transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapProducts, branchMap, idFirstBranch) {
+function transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapProducts, storeMap, idFirstBranch) {
   const isOldDiscount = idOldDiscountDetail(inputDetail);
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((product: any, index: number) => {
@@ -40,8 +40,8 @@ function transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapPr
       codigoImpuesto = codigoIvaPorcentaje?.[String(impuesto)] ?? 0;
       nombreImpuesto = String(impuesto);
     } else {
-      idProducto = mapProducts?.[product?.idProducto] ?? "";
-      idBodega = branchMap?.[product?.idBodega] ?? "";
+      idProducto = mapProducts[product?.idProducto] ?? "";
+      idBodega = storeMap[product?.idBodega] ?? "";
       codigoImpuesto = toInteger(product?.codigoimpuesto ?? 0, 0);
       nombreImpuesto = String(product?.nombreImpuesto ?? "");
     }
@@ -79,12 +79,12 @@ function transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapPr
   return { detailTransformed, branchId };
 }
 
-function transformReturnedCreditNoteDetail(inputDetail, mapProducts, branchMap, idFirstBranch) {
+function transformReturnedCreditNoteDetail(inputDetail, mapProducts, storeMap, idFirstBranch) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((product: any, index: number) => {
     let idProducto = mapProducts[product.idProducto] ?? "";
 
-    const mappedBodega = branchMap?.[product?.idBodega];
+    const mappedBodega = storeMap[product?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;
     const idBodega = mappedBodega || idFirstBranch;
     

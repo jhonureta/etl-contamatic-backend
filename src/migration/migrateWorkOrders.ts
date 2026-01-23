@@ -7,8 +7,8 @@ export async function migrateWorkOrders({
   userMap,
   mapClients,
   mapProducts,
-  branchMap,
-  storeMap
+  storeMap,
+  idFirstBranch
 }) {
   try {
     console.log("Migrando ordenes de trabajos");
@@ -102,23 +102,6 @@ export async function migrateWorkOrders({
     if (workOrders.length === 0) {
       return { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap };
     }
-    const branchSequenseQuery: string = `
-    SELECT
-        COD_SURC,
-        SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
-        SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
-        SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
-    FROM
-        sucursales;`;
-
-    const [sequentialBranches] = await legacyConn.query(branchSequenseQuery, [
-      newCompanyId,
-    ]);
-
-    let idFirstBranch: number | null = null;
-    if (sequentialBranches && sequentialBranches.length > 0) {
-      idFirstBranch = Number(sequentialBranches[0].COD_SURC);
-    }
 
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
@@ -153,7 +136,6 @@ export async function migrateWorkOrders({
         const { detailTransformed, branchId } = transformProductDetail(
           productDetails,
           mapProducts,
-          branchMap,
           idFirstBranch,
           storeMap
         );
@@ -325,15 +307,14 @@ export async function migrateWorkOrders({
 function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
-  branchMap: Record<number, number>,
   idFirstBranch: number | null,
   storeMap: Record<number, number>
 ) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
 
-    const idProducto = mapProducts[item.idProducto] || null;
-    const mappedBodega = branchMap?.[item?.idBodega];
+    const idProducto = mapProducts[item?.idProducto] || "";
+    const mappedBodega = storeMap[item?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;
     const idBodega = mappedBodega || idFirstBranch;
     return {

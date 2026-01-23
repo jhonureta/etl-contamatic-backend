@@ -344,7 +344,7 @@ export async function migrateCompany(codEmp: number) {
       throw new Error(`Error al migrar plan de empresa =${codEmp}`);
     }
     console.log(` -> Plan de la empresa migrado correctamente`);
-    const { branchMap, storeMap } = await migrateBranchesForCompany(
+    const { branchMap, storeMap, idFirstBranch } = await migrateBranchesForCompany(
       legacyConn,
       conn,
       newCompanyId
@@ -535,7 +535,8 @@ export async function migrateCompany(codEmp: number) {
       mapClients,
       mapProducts,
       branchMap,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
     //== Migrar ordenes de trabajos ===/
@@ -546,8 +547,8 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapClients,
       mapProducts,
-      branchMap,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
     //== Migrar vehiculos ===/
@@ -568,7 +569,8 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap,
       clientNameIdMap,
       vehicleIdMap,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
 
@@ -584,7 +586,8 @@ export async function migrateCompany(codEmp: number) {
       oldRetentionCodeMap,
       newRetentionIdMap,
       mapCostExpenses: costExpenseIdMapping,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
     //== Migrar movimientos de pedidos  ===/
@@ -617,7 +620,8 @@ export async function migrateCompany(codEmp: number) {
       oldRetentionCodeMap,
       newRetentionIdMap,
       mapCostExpenses: costExpenseIdMapping,
-      storeMap
+      storeMap,
+      idFirstBranch
     });
 
     //== Migrar anticipos de proveedores ===/
@@ -681,6 +685,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
+      idFirstBranch,
+      storeMap
     })
 
     //== Migrar movimientos de retenciones en ventas ===/

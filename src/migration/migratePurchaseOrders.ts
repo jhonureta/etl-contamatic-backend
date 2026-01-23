@@ -16,6 +16,7 @@ type MigratePurchaseOrdersParams = {
   newRetentionIdMap: Record<number, number>;
   mapCostExpenses: Record<number, number>;
   storeMap: Record<number, number>;
+  idFirstBranch: number
 }
 
 type MigrateMovementsParams = {
@@ -69,26 +70,6 @@ type MigrateAccountingEntriesPurchaseOrderDetailParams = {
   accountingEntryOrderIdMap: Record<number, number>;
 }
 
-type MigratePurchaseOrderObligationDetailParams = Omit<MigrateMovementsParams, 'purchaseOrderAuditIdMap' | 'mapSuppliers'> & {
-  orderObligationIdMap: Record<number, number>;
-}
-
-type MigrateDetailsOrderObligationsParams = {
-  legacyConn: Connection;
-  conn: Connection;
-  orderObligationIdMap: Record<number, number>;
-  movementIdMap: Record<number, number>;
-}
-
-type MigrateAccountingEntriesOrderParams = {
-  legacyConn: Connection;
-  conn: Connection;
-  newCompanyId: number;
-  movementIdMap: Record<number, number>;
-  mapPeriodo: Record<number, number>;
-  movementAuditIdMap: Record<number, number>;
-}
-
 export async function migratePurchaseOrders({
   legacyConn,
   conn,
@@ -97,10 +78,8 @@ export async function migratePurchaseOrders({
   userMap,
   mapSuppliers,
   mapProducts,
-  oldRetentionCodeMap,
-  newRetentionIdMap,
-  mapCostExpenses,
-  storeMap
+  storeMap,
+  idFirstBranch
 }: MigratePurchaseOrdersParams): Promise<{ purchaseOrderIdMap: Record<number, number>; purchaseOrderAuditIdMap: Record<number, number> }> {
   try {
     console.log("Migrando pedidos de compra...");
@@ -196,23 +175,6 @@ export async function migratePurchaseOrders({
       return { purchaseOrderIdMap, purchaseOrderAuditIdMap };
     }
 
-    const branchSequenseQuery: string = `
-    SELECT
-        COD_SURC,
-        SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
-        SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
-        SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
-    FROM
-        sucursales;`;
-
-    const resultSequentialQuery: ResultSet = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
-    const [sequentialBranches]: any[] = resultSequentialQuery as Array<any>;
-
-    let idFirstBranch: number | null = null;
-    if (sequentialBranches.length > 0) {
-      idFirstBranch = sequentialBranches[0].COD_SURC;
-    }
-
     const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
     const BATCH_SIZE: number = 1000;
 
@@ -249,7 +211,6 @@ export async function migratePurchaseOrders({
         const { detailTransformed, branchId } = transformProductDetail(
           productDetails,
           mapProducts,
-          branchMap,
           idFirstBranch,
           storeMap
         );
@@ -417,15 +378,14 @@ export async function migratePurchaseOrders({
 function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
-  branchMap: Record<number, number>,
   idFirstBranch: number | null,
   storeMap: Record<number, number>
 ) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
-    const idProducto = mapProducts[item?.idProducto] ?? "";
+    const idProducto = mapProducts[item?.idProducto] || "";
 
-    const mappedBodega = branchMap?.[item?.idBodega];
+    const mappedBodega = storeMap[item?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;
     const idBodega = mappedBodega || idFirstBranch;
     return {

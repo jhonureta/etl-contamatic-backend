@@ -14,6 +14,7 @@ type MigratePurchasesParams = {
 	newRetentionIdMap: Record<number, number>;
 	mapCostExpenses: Record<number, number | null>;
 	storeMap: Record<number, number>;
+	idFirstBranch: number
 };
 
 type ResultSet = [RowDataPacket[] | RowDataPacket[][] | ResultSetHeader, FieldPacket[]];
@@ -122,7 +123,8 @@ export async function migratePurchasesAndLiquidations({
 	oldRetentionCodeMap,
 	newRetentionIdMap,
 	mapCostExpenses,
-	storeMap
+	storeMap,
+	idFirstBranch
 }: MigratePurchasesParams): Promise<{ purchaseLiquidationIdMap: Record<number, number>; purchaseLiquidationAuditIdMap: Record<number, number> }> {
 
 	const purchaseLiquidationIdMap: Record<number, number> = {};
@@ -250,11 +252,6 @@ export async function migratePurchasesAndLiquidations({
 	const resultSequentialQuery: ResultSet = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
 	const [sequentialBranches]: any[] = resultSequentialQuery as Array<any>;
 
-	let idFirstBranch: number | null = null;
-	if (sequentialBranches.length > 0) {
-		idFirstBranch = sequentialBranches[0].COD_SURC;
-	}
-
 	const electronicSequences = new Map<string, number>();
 	sequentialBranches.forEach((branch: BranchSequentialData, index: number) => {
 		electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
@@ -316,7 +313,8 @@ export async function migratePurchasesAndLiquidations({
 
 			let branchId: number = idFirstBranch;
 			if (electronicSequences.has(p.PUNTO_EMISION_REC)) {
-				branchId = electronicSequences.get(p.PUNTO_EMISION_REC);
+				const oldBranchId = electronicSequences.get(p.PUNTO_EMISION_REC);
+				branchId = branchMap[oldBranchId] || idFirstBranch;
 			}
 			const paymentMethod = toJSONArray(p.JSON_METODO);
 			return [
