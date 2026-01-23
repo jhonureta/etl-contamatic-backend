@@ -1,6 +1,14 @@
+import { restructureCreditNoteDetail } from "./creditNoteHelpers";
 import { upsertTotaledEntry } from "./migrationTools";
 import { normalizarProducto } from "./normalizador";
+import { findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
 
+interface BranchSequentialData {
+  COD_SURC: number;
+  ELECTRONICA: string;
+  FISICA: string;
+  COMPINGRESO: string;
+}
 
 export async function migrateCreditNotesPurchases({
   legacyConn,
@@ -11,6 +19,7 @@ export async function migrateCreditNotesPurchases({
   mapSuppliers,
   mapProducts,
   oldProductCodeMap,
+  purchaseLiquidationIdMap,
   purchaseLiquidationAuditIdMap,
   bankMap,
   boxMap,
@@ -21,12 +30,13 @@ export async function migrateCreditNotesPurchases({
   mapCenterCost,
   mapAccounts
 }): Promise<{ creditNotesPurchasesIdMap: Record<number, number>; creditNotesPurchasesAuditIdMap: Record<number, number> }> {
-  console.log("Migrando notas de credito...");
-
-  const [rows] = await legacyConn.query(`
+  try {
+    console.log("Migrando notas de credito...");
+    const creditNotesPurchasesIdMap: Record<number, number> = {};
+    const creditNotesPurchasesAuditIdMap: Record<number, number> = {};
+    const [rows] = await legacyConn.query(`
     SELECT
         tf.COD_TRAC AS COD_TRANS,
-        tf.numeroNotaProve AS NUM_TRANS,
         CONCAT(
             SUBSTRING(tf.numeroNotaProve, 1, 3),
             '-',
@@ -35,7 +45,7 @@ export async function migrateCreditNotesPurchases({
         SUBSTR(tf.numeroNotaProve, 7) AS SECUENCIA_DOC,
         SUBSTR(tf.secuencialFacturaRet, 7) AS SECUENCIA_REL_DOC,
         tf.claveNotaProve AS CLAVE_TRANS,
-        tn.claveFactura AS CLAVE_REL_TRANS,
+        tn.claveFacturaRet AS CLAVE_REL_TRANS,
         CASE WHEN tf.tipo_nota = 'descuento' THEN 'descuento' ELSE 'devolucion'
     END AS TIP_DET_DOC,
     YEAR(tf.FEC_TRAC) AS FEC_PERIODO_TRAC,
@@ -43,12 +53,11 @@ export async function migrateCreditNotesPurchases({
     tf.FEC_TRAC AS FEC_TRAC,
     tn.FEC_TRAC AS FEC_REL_TRAC,
     tf.FEC_MERC_TRAC AS FEC_MERC_TRAC,
-    CASE WHEN tf.METPAG_TRAC = 'MULTIPLES' THEN tf.METPAG_TRAC ELSE tf.METPAG_TRAC
-    END AS MET_PAG_TRAC,
+    tf.METPAG_TRAC AS MET_PAG_TRAC,
     tf.OBS_TRAC,
     tf.FK_COD_USU AS FK_USER,
     tf.FK_COD_USU AS FK_USER_VEND,
-    tf.FK_COD_CLI AS FK_PERSON,
+    tf.FK_COD_PROVE AS FK_PERSON,
     tf.estado AS ESTADO,
     'activo' AS ESTADO_REL,
     tf.documentoAnulado AS RUTA_DOC_ANULADO,
@@ -72,8 +81,9 @@ export async function migrateCreditNotesPurchases({
     tf.OTRA_PER,
     '04' AS COD_COMPROBANTE,
     '01' AS COD_COMPROBANTE_REL,
-    NULL AS COD_DOCSUS_TRIB,
+    tn.DOCSUCCOM_TRAC AS COD_DOCSUS_TRIB,
     NULL AS FK_COD_EMP,
+    NULL AS COD_ASIENTO,
     tf.firmado AS FRIMADO,
     tf.enviado AS ENVIADO,
     tf.autorizado AS AUTORIZADO,
@@ -87,13 +97,27 @@ export async function migrateCreditNotesPurchases({
     'nota-compra' TIP_TRAC,
     tf.fecha AS FECHA_REG,
     tf.DET_TRAC AS DOCUMENT_DETAIL,
-    NULL AS PUNTO_EMISION_REC,
+    CONCAT(
+        SUBSTRING(tf.secuencialFacturaRet, 1, 3),
+        '-',
+        SUBSTRING(tf.secuencialFacturaRet, 4, 3)
+    ) AS PUNTO_EMISION_REC,
+    tf.COD_TRAC_FACT AS FK_DOC_REL,
     tf.fechaAnulacion AS FECHA_ANULACION,
     'electronica' AS TIP_DOC,
     NULL AS SRI_PAY_CODE,
     tf.IP_CLIENTE AS CLIENT_IP,
     NULL AS FK_AUDIT_REL,
-    tf.NUMFACNOT_TRAC AS NUM_REL_DOC,
+    CONCAT(
+        SUBSTRING(tf.numeroNotaProve, 1, 3), '-',
+        SUBSTRING(tf.numeroNotaProve, 4, 3), '-',
+        SUBSTRING(tf.numeroNotaProve, 7)
+    ) AS NUM_TRANS,
+    CONCAT(
+        SUBSTRING(tf.secuencialFacturaRet, 1, 3), '-',
+        SUBSTRING(tf.secuencialFacturaRet, 4, 3), '-',
+        SUBSTRING(tf.secuencialFacturaRet, 7)
+    ) AS NUM_REL_DOC,
     tf.serial_producto AS DIV_PAY_YEAR,
     tf.cabecera_compra AS DOCUMENT_REL_DETAIL,
     tf.RESPU_SRI AS RESP_SRI,
@@ -103,7 +127,9 @@ export async function migrateCreditNotesPurchases({
     tf.INFO_ADIC AS ITEMS_PROF,
     tf.OBS_AUXILIAR AS OBS_AUXILIAR,
     tf.OBS_ORD AS OBS_ORDEN,
-    tf.COD_TRAC_FACT
+    tf.COD_TRAC_FACT,
+    tf.NUM_TRACNOTCOM,
+    SUBSTRING(tf.NUM_TRACNOTCOM, 1, 7) AS PUNTO_EMI_NOTCOM
     FROM
         transacciones tf
     INNER JOIN transacciones tn ON
@@ -115,110 +141,88 @@ export async function migrateCreditNotesPurchases({
         )
     ORDER BY
         tf.COD_TRAC
-    DESC; 
-`);
-  const creditNotesPurchases = rows as any[];
+    DESC;
+  `);
+    const creditNotesPurchases = rows as any[];
 
-  if (!creditNotesPurchases.length) {
-    throw new Error(" -> No hay notas de credito para migrar.");
-  }
+    if (creditNotesPurchases.length === 0) {
+      return { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap };
+    }
 
-  //Ultima secuencia de auditoria
-  const secuenciaSucursal = `SELECT
-  COD_SURC,
-  SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
-  SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
-  SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
-  FROM
-  sucursales;`;
-  const [dataSucursal] = await legacyConn.query(secuenciaSucursal, [newCompanyId]);
+    const branchSequenseQuery: string = `
+	SELECT
+			COD_SURC,
+			SUBSTRING(secuencial, 1, 7) AS ELECTRONICA,
+			SUBSTRING(secuencialFisica, 1, 7) AS FISICA,
+			SUBSTRING(SURC_SEC_COMPINGR, 1, 7) AS COMPINGRESO
+	FROM
+			sucursales;`;
 
-  const listElectronica = [];
-  const listFisica = [];
-  const listComprobante = [];
+    const resultSequentialQuery = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
+    const [sequentialBranches]: any[] = resultSequentialQuery as Array<any>;
 
-  for (let x = 0; x < dataSucursal.length; x++) {
+    let idFirstBranch: number | null = null;
+    if (sequentialBranches.length > 0) {
+      idFirstBranch = sequentialBranches[0].COD_SURC;
+    }
 
-    listElectronica[dataSucursal[x].ELECTRONICA] = dataSucursal[x].COD_SURC;
-    listFisica[dataSucursal[x].FISICA] = dataSucursal[x].COD_SURC;
-    listComprobante[dataSucursal[x].COMPINGRESO] = dataSucursal[x].COD_SURC;
-  }
+    const electronicSequences = new Map<string, number>();
+    sequentialBranches.forEach((branch: BranchSequentialData, index: number) => {
+      electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
+    });
 
-  const secuencia_query = `SELECT IFNULL(MAX(CODIGO_AUT+0)+1,1) as codigoAuditoria FROM audit WHERE FK_COD_EMP=?;`;
-  const [dataSecuencia] = await conn.query(secuencia_query, [newCompanyId]);
-  let codigoAuditoria = dataSecuencia[0]['codigoAuditoria'];
+    const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
 
+    const BATCH_SIZE = 1000;
 
-  const BATCH_SIZE = 1000;
-  const creditNotesPurchasesIdMap: Record<number, number> = {};
-  const creditNotesPurchasesAuditIdMap: Record<number, number> = {};
-  const mapSalesNoteBound: Record<number, number> = {};
+    for (let i = 0; i < creditNotesPurchases.length; i += BATCH_SIZE) {
+      const batchCreditNotes = creditNotesPurchases.slice(i, i + BATCH_SIZE);
 
-  for (let i = 0; i < creditNotesPurchases.length; i += BATCH_SIZE) {
-    const batch = creditNotesPurchases.slice(i, i + BATCH_SIZE);
-    try {
-      // Inicio de transacción por batch: agrupar audit + insert customers
+      const auditValues = batchCreditNotes.map((purchase: any, index: number) => {
+        const auditIdIsert = auditId + index;
+        return [
+          auditIdIsert,
+          "NCCOMPRA",
+          newCompanyId
+        ]
+      });
 
-      // Preparar inserción en lote para la tabla `audit`
-      const auditValues: any[] = [];
-      for (let j = 0; j < batch.length; j++) {
-        auditValues.push([codigoAuditoria, 'NCVENTA', newCompanyId]);
-        codigoAuditoria++;
-      }
-
-      const [auditRes]: any = await conn.query(
+      const [resultCreateAudit] = await conn.query(
         `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
         [auditValues]
       );
 
-      // El insertId corresponde al primer id insertado; mapearlos por orden
-      let firstAuditInsertId = auditRes.insertId;
-      for (let j = 0; j < batch.length; j++) {
-        const codTrans = batch[j].COD_TRANS;
-        const auditId = firstAuditInsertId + j;
-        creditNotesPurchasesAuditIdMap[codTrans] = auditId;
-      }
+      const firstAuditId = resultCreateAudit.insertId;
 
-      // Preparar valores para INSERT en batch
-      const values = batch.map((t, index) => {
-        console.log(`transformando y normalizando ${t.NUM_TRACNOT}`);
-        let productos = t.DOCUMENT_DETAIL ?? [];
-        if (typeof t.DOCUMENT_DETAIL === 'string') {
-          try {
-            productos = JSON.parse(t.DOCUMENT_DETAIL);
-          } catch (e) {
-            console.error("Error al parsear JSON:", e);
-            return [];
-          }
-        }
-        let idSucursal = null;
+      const values = batchCreditNotes.map((t, index) => {
+        console.log(`transformando y normalizando ${t.NUM_TRANS}`);
 
-        if (t.TIP_DOC_REL == 'fisica') {
-          idSucursal = branchMap[listFisica[t.PUNTO_EMISION_DOC]];
-        }
-        if (t.TIP_DOC_REL == 'factura') {
-          idSucursal = branchMap[listElectronica[t.PUNTO_EMISION_DOC]];
-        }
-        const productosNormalizados = productos.map(p => normalizarProducto(p, mapProducts, branchMap, oldProductCodeMap, idSucursal));
+        const auditId = firstAuditId + index;
+        creditNotesPurchasesAuditIdMap[t.COD_TRANS] = auditId;
 
-        const auditId = creditNotesPurchasesAuditIdMap[t.COD_TRANS];
+        const previusDetailProd = toJSONArray(t.DOCUMENT_DETAIL);
+
+        const { detailTransformed, branchId: branchIdProduct } = restructureCreditNoteDetail({
+          inputDetail: previusDetailProd,
+          mapProducts,
+          branchMap,
+          idFirstBranch,
+          creditNoteType: t.TIP_DET_DOC,
+          oldProductCodeMap
+        });
+
+        let branchId: number = branchIdProduct;
+        if (electronicSequences.has(t.PUNTO_EMI_NOTCOM)) {
+          branchId = electronicSequences.get(t.PUNTO_EMI_NOTCOM);
+        }
+
         const vendedor = userMap[t.FK_USER_VEND];
         const creador = userMap[t.FK_USER];
         const cliente = mapSuppliers[t.FK_PERSON];
+        const relDocId = purchaseLiquidationIdMap[t.COD_TRAC_FACT];
+        const idAuditRelDoc = purchaseLiquidationAuditIdMap[t.COD_TRAC_FACT] || null;
 
-        t.FK_AUDIT_REL = purchaseLiquidationAuditIdMap[t.COD_TRAC_FACT] ?? null;
-
-        function safeJson(input: any) {
-          try {
-            if (typeof input === "string") {
-              JSON.parse(input);        // verificar validez
-              return input;
-            }
-            return JSON.stringify(input ?? {});
-          } catch {
-            return "{}"; // fallback JSON válido
-          }
-        }
+        const paymentMethod = toJSONArray(t.JSON_METODO);
 
         return [
           t.PUNTO_EMISION_DOC,
@@ -269,17 +273,18 @@ export async function migrateCreditNotesPurchases({
           t.FECHA_AUTORIZACION_REL,
           t.TIP_DOC_REL,
           t.DSTO_TRAC,
-          idSucursal,
+          branchId,
           auditId,
           t.TIP_TRAC,
           t.FECHA_REG,
-          JSON.stringify(productosNormalizados),
+          JSON.stringify(detailTransformed),
           t.PUNTO_EMISION_REC,
+          relDocId,
           t.FECHA_ANULACION,
           t.TIP_DOC,
           t.SRI_PAY_CODE,
           t.CLIENT_IP,
-          t.FK_AUDIT_REL,
+          idAuditRelDoc,
           t.NUM_TRANS,
           t.NUM_REL_DOC,
           t.DIV_PAY_YEAR,
@@ -287,120 +292,117 @@ export async function migrateCreditNotesPurchases({
           t.RESP_SRI,
           t.INFO_ADIC,
           t.DET_EXP_REEMBOLSO,
-          safeJson(t.JSON_METODO),
+          JSON.stringify(paymentMethod),
           t.ITEMS_PROF,
           t.OBS_AUXILIAR,
           t.OBS_ORDEN
         ];
       });
 
-      // Insertar clientes en batch
       const [res]: any = await conn.query(`
-              INSERT INTO transactions (PUNTO_EMISION_DOC,
-                  SECUENCIA_DOC,
-                  SECUENCIA_REL_DOC,
-                  CLAVE_TRANS,
-                  CLAVE_REL_TRANS,
-                  TIP_DET_DOC,
-                  FEC_PERIODO_TRAC,
-                  FEC_MES_TRAC,
-                  FEC_TRAC,
-                  FEC_REL_TRAC,
-                  FEC_MERC_TRAC,
-                  MET_PAG_TRAC,
-                  OBS_TRAC,
-                  FK_USER,
-                  FK_USER_VEND,
-                  FK_PERSON,
-                  ESTADO,
-                  ESTADO_REL,
-                  RUTA_DOC_ANULADO,
-                  SUB_BASE_5,
-                  SUB_BASE_8,
-                  SUB_BASE_12,
-                  SUB_BASE_13,
-                  SUB_BASE_14,
-                  SUB_BASE_15,
-                  SUB_12_TRAC,
-                  SUB_0_TRAC,
-                  SUB_N_OBJETO_TRAC,
-                  SUB_EXENTO_TRAC,
-                  SUB_TRAC,
-                  IVA_TRAC,
-                  TOT_TRAC,
-                  TOT_RET_TRAC,
-                  TOT_PAG_TRAC,
-                  PROPINA_TRAC,
-                  OTRA_PER,
-                  COD_COMPROBANTE,
-                  COD_COMPROBANTE_REL,
-                  COD_DOCSUS_TRIB,
-                  FK_COD_EMP,
-                  FRIMADO,
-                  ENVIADO,
-                  AUTORIZADO,
-                  ENVIADO_CLIEMAIL,
-                  FECHA_AUTORIZACION,
-                  FECHA_AUTORIZACION_REL,
-                  TIP_DOC_REL,
-                  DSTO_TRAC,
-                  FK_CODSUCURSAL,
-                  FK_AUDITTR,
-                  TIP_TRAC,
-                  FECHA_REG,
-                  DOCUMENT_DETAIL,
-                  PUNTO_EMISION_REC,
-                  FECHA_ANULACION,
-                  TIP_DOC,
-                  SRI_PAY_CODE,
-                  CLIENT_IP,
-                  FK_AUDIT_REL,
-                  NUM_TRANS,
-                  NUM_REL_DOC,
-                  DIV_PAY_YEAR,
-                  DOCUMENT_REL_DETAIL,
-                  RESP_SRI,
-                  INFO_ADIC,
-                  DET_EXP_REEMBOLSO,
-                  JSON_METODO,
-                  ITEMS_PROF,
-                  OBS_AUXILIAR,
-                  OBS_ORDEN
-              ) VALUES ?
-          `, [values]);
+        INSERT INTO transactions (PUNTO_EMISION_DOC,
+            SECUENCIA_DOC,
+            SECUENCIA_REL_DOC,
+            CLAVE_TRANS,
+            CLAVE_REL_TRANS,
+            TIP_DET_DOC,
+            FEC_PERIODO_TRAC,
+            FEC_MES_TRAC,
+            FEC_TRAC,
+            FEC_REL_TRAC,
+            FEC_MERC_TRAC,
+            MET_PAG_TRAC,
+            OBS_TRAC,
+            FK_USER,
+            FK_USER_VEND,
+            FK_PERSON,
+            ESTADO,
+            ESTADO_REL,
+            RUTA_DOC_ANULADO,
+            SUB_BASE_5,
+            SUB_BASE_8,
+            SUB_BASE_12,
+            SUB_BASE_13,
+            SUB_BASE_14,
+            SUB_BASE_15,
+            SUB_12_TRAC,
+            SUB_0_TRAC,
+            SUB_N_OBJETO_TRAC,
+            SUB_EXENTO_TRAC,
+            SUB_TRAC,
+            IVA_TRAC,
+            TOT_TRAC,
+            TOT_RET_TRAC,
+            TOT_PAG_TRAC,
+            PROPINA_TRAC,
+            OTRA_PER,
+            COD_COMPROBANTE,
+            COD_COMPROBANTE_REL,
+            COD_DOCSUS_TRIB,
+            FK_COD_EMP,
+            FRIMADO,
+            ENVIADO,
+            AUTORIZADO,
+            ENVIADO_CLIEMAIL,
+            FECHA_AUTORIZACION,
+            FECHA_AUTORIZACION_REL,
+            TIP_DOC_REL,
+            DSTO_TRAC,
+            FK_CODSUCURSAL,
+            FK_AUDITTR,
+            TIP_TRAC,
+            FECHA_REG,
+            DOCUMENT_DETAIL,
+            PUNTO_EMISION_REC,
+            FK_DOC_REL,
+            FECHA_ANULACION,
+            TIP_DOC,
+            SRI_PAY_CODE,
+            CLIENT_IP,
+            FK_AUDIT_REL,
+            NUM_TRANS,
+            NUM_REL_DOC,
+            DIV_PAY_YEAR,
+            DOCUMENT_REL_DETAIL,
+            RESP_SRI,
+            INFO_ADIC,
+            DET_EXP_REEMBOLSO,
+            JSON_METODO,
+            ITEMS_PROF,
+            OBS_AUXILIAR,
+            OBS_ORDEN
+        ) VALUES ?
+    `, [values]);
       // Mapear ventas
       let newId = res.insertId;
-      for (const s of batch) {
+      for (const s of batchCreditNotes) {
         creditNotesPurchasesIdMap[s.COD_TRANS] = newId++;
       }
-      console.log(` -> Batch migrado: ${batch.length} notas de credito`);
-    } catch (err) {
-
-      throw err;
+      console.log(` -> Batch migrado: ${batchCreditNotes.length} notas de credito`);
     }
 
-    /* return { mapCreditNote, mapAuditCreditNote }; */
+    const { mapNoteMovements } = await migrateMovementeAdvancesNote(
+      legacyConn,
+      conn,
+      newCompanyId,
+      userMap,
+      bankMap,
+      boxMap,
+      mapConciliation,
+      purchaseLiquidationObligationIdMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      creditNotesPurchasesIdMap,
+      creditNotesPurchasesAuditIdMap
+    )
+
+    return { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap };
+  } catch (error) {
+    console.error('Error al migrar notas de credito:', error);
+    throw error;
   }
-
-  const { mapNoteMovements } = await migrateMovementeAdvancesNote(
-    legacyConn,
-    conn,
-    newCompanyId,
-    userMap,
-    bankMap,
-    boxMap,
-    mapConciliation,
-    purchaseLiquidationObligationIdMap,
-    mapPeriodo,
-    mapProject,
-    mapCenterCost,
-    mapAccounts,
-    creditNotesPurchasesIdMap,
-    creditNotesPurchasesAuditIdMap
-  )
-
-
-  return { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap };
 }
 
 export async function migrateMovementeAdvancesNote(
@@ -419,187 +421,230 @@ export async function migrateMovementeAdvancesNote(
   mapCreditNote: Record<number, number | null>,
   mapAuditCreditNote: Record<number, number | null>
 ): Promise<{ mapNoteMovements: Record<number, number> }> {
-  console.log("Migrando notas de credito en ventas...");
+  console.log("Migrando notas de credito en compras...");
+  const mapNoteMovements: Record<number, number> = {};
+  const [movements] = await legacyConn.query(`
+    SELECT
+        COD_TRAC,
+        CONCAT(
+            SUBSTRING(
+                transacciones.numeroNotaProve,
+                1,
+                3
+            ),
+            '-',
+            SUBSTRING(
+                transacciones.numeroNotaProve,
+                4,
+                3
+            ),
+            '-',
+            SUBSTRING(
+                transacciones.numeroNotaProve,
+                7
+            )
+        ) AS NUM_TRANS,
+        COD_TRAC AS FK_COD_TRAN,
+        m.FK_COD_BANCO_MOVI AS FKBANCO,
+        m.FK_CONCILIADO AS FK_CONCILIADO,
+        IFNULL(
+            m.FK_USER_EMP_MOVI,
+            transacciones.FK_COD_USU
+        ) AS FK_USER,
+        IFNULL(
+            m.FECHA_MOVI,
+            transacciones.fecha
+        ) AS FECHA_MOVI,
+        IFNULL(
+            FECHA_MANUAL,
+            transacciones.FEC_TRAC
+        ) AS FECHA_MANUAL,
+        CASE WHEN COALESCE(ID_DET_ANT, '') <> '' THEN 'CREDITO' WHEN m.TIP_MOVI IS NULL THEN 'CREDITO' ELSE m.TIP_MOVI
+    END AS TIP_MOVI,
+    IFNULL(
+        m.ORIGEN_MOVI,
+        'NOTA CREDITO COMPRA'
+    ) AS ORIGEN_MOVI,
+    'CREDITO' AS TIPO_MOVI,
+    IFNULL(CONCEP_MOVI, OBS_DET_ANT) AS REF_MOVI,
+    CONCAT(
+        SUBSTRING(
+            transacciones.numeroNotaProve,
+            1,
+            3
+        ),
+        '-',
+        SUBSTRING(
+            transacciones.numeroNotaProve,
+            4,
+            3
+        ),
+        '-',
+        SUBSTRING(
+            transacciones.numeroNotaProve,
+            7
+        )
+    ) AS CONCEP_MOVI,
+    NULL AS NUM_VOUCHER,
+    NULL AS NUM_LOTE,
+    IFNULL(CAUSA_MOVI, 'EGRESO') AS CAUSA_MOVI,
+    'NCCOMPRA' AS MODULO,
+    NULL AS SECU_MOVI,
+    IFNULL(m.IMPOR_MOVI, TOTPAG_TRAC) AS IMPOR_MOVI,
+    CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 1
+    END AS ESTADO_MOVI,
+    IFNULL(
+        m.PER_BENE_MOVI,
+        proveedores.NOM_PROV
+    ) AS PER_BENE_MOVI,
+    NULL AS FK_COD_EMP,
+    m.FK_CONCILIADO,
+    m.CONCILIADO,
+    FK_COD_CAJAS_MOVI AS IDCAJA,
+    IFNULL(
+        transacciones.OBS_TRAC,
+        m.CONCEP_MOVI
+    ) AS OBS_MOVI,
+    IFNULL(m.IMPOR_MOVI, TOTPAG_TRAC) AS IMPOR_MOVITOTAL,
+    NULL AS FK_ASIENTO,
+    NULL AS FK_AUDITMV,
+    NULL AS FK_ARQUEO,
+    NULL AS ID_TARJETA,
+    NULL AS RECIBO_CAJA,
+    NULL AS FK_CTAM_PLAN,
+    NULL AS NUMERO_UNIDAD,
+    NULL AS JSON_PAGOS,
+    SUBSTRING(secuencialFacturaRet, 9, 9) AS SECUENCIA_REL_DOC,
+    transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
+    YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
+    MONTH(FEC_TRAC) AS FEC_MES_TRAC,
+    FEC_TRAC AS FEC_TRAC,
+    fechaFacturaRet AS FEC_REL_TRAC,
+    FEC_MERC_TRAC AS FEC_MERC_TRAC,
+    METPAG_TRAC,
+    cabecera_compra AS DOCUMENT_REL_DETAIL,
+    OBS_TRAC,
+    FK_USU_CAJA AS FK_USER_VEND,
+    FK_COD_PROVE AS FK_PERSON,
+    estado_compra AS ESTADO_REL,
+    SUB_TRAC AS SUB_TRAC,
+    IVA_TRAC AS IVA_TRAC,
+    SUB0_TRAC,
+    SUB12_TRAC,
+    TOTRET_TRAC AS TOT_RET_TRAC,
+    TOTPAG_TRAC AS TOT_PAG_TRAC,
+    NULL AS FECHA_AUTORIZACION_REL,
+    NULL AS TIP_DOC_REL,
+    NULL AS FK_AUDITTR,
+    fecha AS FECHA_REG,
+    NULL AS PUNTO_EMISION_REC,
+    fechaAnulacion AS FECHA_ANULACION,
+    NULL AS FK_AUDIT_REL,
+    CONCAT(
+        SUBSTRING(
+            transacciones.numeroNotaProve,
+            1,
+            3
+        ),
+        '-',
+        SUBSTRING(
+            transacciones.numeroNotaProve,
+            4,
+            3
+        ),
+        '-',
+        SUBSTRING(
+            transacciones.numeroNotaProve,
+            7
+        )
+    ) AS NUM_REL_DOC,
+    detalle_anticipos.ID_DET_ANT,
+    SECU_DET_ANT,
+    FDP_DET_ANT,
+    OBS_DET_ANT,
+    IMPOR_DET_ANT,
+    m.ID_MOVI,
+    detalle_anticipos.ID_DET_ANT,
+    transacciones.COD_TRAC_FACT
+    FROM
+        transacciones
+    LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
+    LEFT JOIN proveedores ON transacciones.FK_COD_PROVE = proveedores.ID_PROV
+    LEFT JOIN movimientos m ON
+        m.FK_TRAC_MOVI = transacciones.COD_TRAC
+    WHERE
+        transacciones.TIP_TRAC IN(
+            'nota-compra',
+            'nota-compra-devuelto'
+        ) AND(
+            detalle_anticipos.ID_DET_ANT IS NULL OR detalle_anticipos.ID_DET_ANT = ''
+        ) AND(
+            m.ID_MOVI IS NULL OR m.ID_MOVI = ''
+        )
+    ORDER BY
+        COD_TRAC
+    DESC
+        ;
+  `);
 
-  const [rows] = await legacyConn.query(`SELECT
-  COD_TRAC,
-  NUM_TRACNOT,
-  COD_TRAC AS FK_COD_TRAN,
-  m.FK_COD_BANCO_MOVI AS FKBANCO,
-  m.FK_CONCILIADO AS FK_CONCILIADO,
-  IFNULL(
-      m.FK_USER_EMP_MOVI,
-      transacciones.FK_COD_USU
-  ) AS FK_USER,
-  IFNULL(
-      m.FECHA_MOVI,
-      transacciones.fecha
-  ) AS FECHA_MOVI,
-  IFNULL(
-      FECHA_MANUAL,
-      transacciones.FEC_TRAC
-  ) AS FECHA_MANUAL,
-  CASE WHEN COALESCE(ID_DET_ANT, '') <> '' THEN 'CREDITO' WHEN m.TIP_MOVI IS NULL THEN 'CREDITO' ELSE m.TIP_MOVI
-END AS TIP_MOVI,
-IFNULL(
-  m.ORIGEN_MOVI,
-  'NOTA CREDITO VENTA'
-) AS ORIGEN_MOVI,
-'CREDITO' AS TIPO_MOVI,
-IFNULL(CONCEP_MOVI, OBS_DET_ANT) AS REF_MOVI,
-IFNULL(
-  transacciones.NUM_TRACNOT,
-  OBS_DET_ANT
-) AS CONCEP_MOVI,
-NULL AS NUM_VOUCHER,
-NULL AS NUM_LOTE,
-IFNULL(CAUSA_MOVI, 'INGRESO') AS CAUSA_MOVI,
-'NCVENTA' AS MODULO,
-NULL AS SECU_MOVI,
-IFNULL(
-  m.IMPOR_MOVI,
-  TOTPAG_TRAC
-) AS IMPOR_MOVI,
-CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 1
-END AS ESTADO_MOVI,
-IFNULL(
-  m.PER_BENE_MOVI,
-  clientes.NOM_CLI
-) AS PER_BENE_MOVI,
-NULL AS FK_COD_EMP,
-m.FK_CONCILIADO,
-m.CONCILIADO,
-FK_COD_CAJAS_MOVI AS IDCAJA,
-IFNULL(
-  transacciones.OBS_TRAC,
-  m.CONCEP_MOVI
-) AS OBS_MOVI,
-IFNULL(
-  m.IMPOR_MOVI,
-  TOTPAG_TRAC
-) AS IMPOR_MOVITOTAL,
-NULL AS FK_ASIENTO,
-NULL AS FK_AUDITMV,
-NULL AS FK_ARQUEO,
-NULL AS ID_TARJETA,
-NULL AS RECIBO_CAJA,
-NULL AS FK_CTAM_PLAN,
-NULL AS NUMERO_UNIDAD,
-NULL AS JSON_PAGOS,
-SUBSTRING(secuencialFacturaRet, 9, 9) AS SECUENCIA_REL_DOC,
-transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
-YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
-MONTH(FEC_TRAC) AS FEC_MES_TRAC,
-FEC_TRAC AS FEC_TRAC,
-fechaFacturaRet AS FEC_REL_TRAC,
-FEC_MERC_TRAC AS FEC_MERC_TRAC,
-METPAG_TRAC,
-cabecera_compra AS DOCUMENT_REL_DETAIL,
-OBS_TRAC,
-FK_USU_CAJA AS FK_USER_VEND,
-FK_COD_CLI AS FK_PERSON,
-estado_compra AS ESTADO_REL,
-SUB_TRAC AS SUB_TRAC,
-IVA_TRAC AS IVA_TRAC,
-SUB0_TRAC,
-SUB12_TRAC,
-TOTRET_TRAC AS TOT_RET_TRAC,
-TOTPAG_TRAC AS TOT_PAG_TRAC,
-NULL AS FECHA_AUTORIZACION_REL,
-CASE WHEN secuencialFacturaRet <> '' THEN 'retencion-venta' ELSE NULL
-END AS TIP_DOC_REL,
-NULL AS FK_AUDITTR,
-fecha AS FECHA_REG,
-NULL AS PUNTO_EMISION_REC,
-fechaAnulacion AS FECHA_ANULACION,
-NULL AS FK_AUDIT_REL,
-NUM_TRACNOT AS NUM_REL_DOC,
-detalle_anticipos.ID_DET_ANT,
-SECU_DET_ANT,
-FDP_DET_ANT,
-OBS_DET_ANT,
-IMPOR_DET_ANT,
-m.ID_MOVI,detalle_anticipos.ID_DET_ANT, transacciones.COD_TRAC_FACT
-FROM
-  transacciones
-LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
-LEFT JOIN clientes on clientes.COD_CLI = transacciones.FK_COD_CLI
-LEFT JOIN movimientos m ON
-  m.FK_TRAC_MOVI = transacciones.COD_TRAC
-WHERE
-  transacciones.TIP_TRAC IN('nota') AND (detalle_anticipos.ID_DET_ANT IS  NULL or detalle_anticipos.ID_DET_ANT = '') and  (m.ID_MOVI IS  NULL or m.ID_MOVI = '')
-
-ORDER BY
-  COD_TRAC
-DESC;`);
-
-  const ventas = rows as any[];
-  if (!ventas.length) {
-      throw new Error(" -> No hay notas de credito para migrar.");
+  if (movements.length === 0) {
+    return { mapNoteMovements };
   }
   const BATCH_SIZE = 1000;
-  let mapNoteMovements: Record<number, number> = {};
   const oldDetailAcountCodeMap = [];
 
-  const [[{ nextSecu }]]: any = await conn.query(
-      `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'NCVENTA' AND FK_COD_EMP = ?`,
-      [newCompanyId]
+  const movementSequenceQuery = await conn.query(`SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS SECU_MOVI FROM movements WHERE MODULO = 'NCCOMPRA' AND  FK_COD_EMP = ?`,
+    [newCompanyId]
   );
-  let secuenciaMovimiento = nextSecu;
+  const [movementData] = movementSequenceQuery as Array<any>;
+  let secuenciaMovimiento = movementData[0]?.SECU_MOVI ?? 1;
 
-  /* const mapNoteAuditSales: Record<number, number> = {}; */
-  for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
-      const batch = ventas.slice(i, i + BATCH_SIZE);
-      try {
-          // Preparar valores para INSERT en batch
-          const values = batch.map((o, index) => {
-              console.log(`transformando y normalizando movimientos nota de credito ${o.NUM_TRACNOT}`);
-              // Lógica de Negocio
-              let idPlanCuenta = null;
-              const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
-              o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
-              return [
-                  bankMap[o.FKBANCO] ?? null,
-                  mapCreditNote[o.COD_TRAC] ?? null,
-                  mapConciliation[o.FK_CONCILIADO] ?? null,
-                  userMap[o.FK_USER] ?? null,
-                  o.FECHA_MOVI,
-                  o.FECHA_MANUAL,
-                  o.TIP_MOVI,
-                  o.ORIGEN_MOVI,
-                  o.TIPO_MOVI,
-                  o.REF_MOVI,
-                  o.CONCEP_MOVI,
-                  o.NUM_VOUCHER,
-                  o.NUM_LOTE,
-                  o.CAUSA_MOVI,
-                  o.MODULO,
-                  secuenciaMovimiento++,
-                  o.IMPOR_MOVI,
-                  o.ESTADO_MOVI,
-                  o.PER_BENE_MOVI,
-                  o.CONCILIATED ?? null,
-                  newCompanyId,
-                  boxMap[o.IDCAJA] ?? null,
-                  o.OBS_MOVI,
-                  o.IMPOR_MOVITOTAL,
-                  null, // FK_ASIENTO
-                  currentAuditId,
-                  null, // FK_ARQUEO
-                  null,
-                  null, // RECIBO_CAJA
-                  idPlanCuenta,
-                  null, // NUM_UNIDAD
-                  '[]'  // JSON_PAGOS
-              ];
+  for (let i = 0; i < movements.length; i += BATCH_SIZE) {
+    const batch = movements.slice(i, i + BATCH_SIZE);
+    const values = batch.map((o: any, index: number) => {
+      console.log(`transformando y normalizando movimientos nota de credito ${o.NUM_TRANS}`);
+      let idPlanCuenta = null;
+      const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
+      o.REF_MOVI = `NOTA CREDITO COMPRA N°:${o.NUM_TRANS}`;
+      return [
+        bankMap[o.FKBANCO] ?? null,
+        mapCreditNote[o.COD_TRAC] ?? null,
+        mapConciliation[o.FK_CONCILIADO] ?? null,
+        userMap[o.FK_USER] ?? null,
+        o.FECHA_MOVI,
+        o.FECHA_MANUAL,
+        o.TIP_MOVI,
+        o.ORIGEN_MOVI,
+        o.TIPO_MOVI,
+        o.REF_MOVI,
+        o.CONCEP_MOVI,
+        o.NUM_VOUCHER,
+        o.NUM_LOTE,
+        o.CAUSA_MOVI,
+        o.MODULO,
+        secuenciaMovimiento++,
+        o.IMPOR_MOVI,
+        o.ESTADO_MOVI,
+        o.PER_BENE_MOVI,
+        o.CONCILIADO ?? null,
+        newCompanyId,
+        boxMap[o.IDCAJA] ?? null,
+        o.OBS_MOVI,
+        o.IMPOR_MOVITOTAL,
+        null, // FK_ASIENTO
+        currentAuditId,
+        null, // FK_ARQUEO
+        null,
+        null, // RECIBO_CAJA
+        idPlanCuenta,
+        null, // NUM_UNIDAD
+        '[]'  // JSON_PAGOS
+      ];
 
+    });
 
-
-          });
-          // Insertar clientes en batch
-          // --- PASO C: INSERTAR MOVIMIENTOS EN BATCH ---
-          const [resMov]: any = await conn.query(
-              `INSERT INTO movements (
+    const [resMov]: any = await conn.query(
+      `INSERT INTO movements (
                   FKBANCO, FK_COD_TRAN, FK_CONCILIADO, FK_USER, FECHA_MOVI, FECHA_MANUAL,
                   TIP_MOVI, ORIGEN_MOVI, TIPO_MOVI, REF_MOVI, CONCEP_MOVI, NUM_VOUCHER,
                   NUM_LOTE, CAUSA_MOVI, MODULO, SECU_MOVI, IMPOR_MOVI, ESTADO_MOVI,
@@ -607,68 +652,64 @@ DESC;`);
                   IMPOR_MOVITOTAL, FK_ASIENTO, FK_AUDITMV, FK_ARQUEO, ID_TARJETA,
                   RECIBO_CAJA, FK_CTAM_PLAN, NUMERO_UNIDAD, JSON_PAGOS
               ) VALUES ?`,
-              [values]
-          );
-
-          // Actualizar mapeo de movimientos
-          let currentMovId = resMov.insertId;
-          batch.forEach(o => {
-              mapNoteMovements[o.COD_TRAC] = currentMovId++;
-              oldDetailAcountCodeMap.push({
-                  idFactura: o.COD_TRAC_FACT,
-                  importe: o.IMPOR_MOVI,
-                  fecha: o.FECHA_MANUAL,
-                  idTrn: o.COD_TRAC,
-                  audit: mapNoteMovements[o.COD_TRAC]
-              });
-          });
-          console.log(` -> Batch migrado: ${batch.length} notas de credito por anticipos.`);
+      [values]
+    );
 
 
-      } catch (err) {
-          throw err;
-      }
+    let currentMovId = resMov.insertId;
+    batch.forEach(o => {
+      mapNoteMovements[o.COD_TRAC] = currentMovId++;
+      oldDetailAcountCodeMap.push({
+        idFactura: o.COD_TRAC_FACT,
+        importe: o.IMPOR_MOVI,
+        fecha: o.FECHA_MANUAL,
+        idTrn: o.COD_TRAC,
+        audit: mapNoteMovements[o.COD_TRAC]
+      });
+    });
+    console.log(` -> Batch migrado: ${batch.length} notas de credito por anticipos.`);
+
   }
 
 
   const { mapNoteMovementsFull } = await migrateRetentionsCredit(
-      legacyConn,
-      conn,
-      newCompanyId,
-      userMap,
-      bankMap,
-      boxMap,
-      mapConciliation,
-      mapCreditNote,
-      mapAuditCreditNote,
-      mapNoteMovements
+    legacyConn,
+    conn,
+    newCompanyId,
+    userMap,
+    bankMap,
+    boxMap,
+    mapConciliation,
+    mapCreditNote,
+    mapAuditCreditNote,
+    mapNoteMovements
   );
 
   const mapObligations = await migratePaymentDetails(
-      legacyConn,
-      conn,
-      mapObligationsCustomers,
-      mapNoteMovementsFull,
-      oldDetailAcountCodeMap
+    legacyConn,
+    conn,
+    mapObligationsCustomers,
+    mapNoteMovementsFull,
+    oldDetailAcountCodeMap
   );
 
   const mapEntryAccount = await migrateAccountingEntriesCustomerObligations(
-      legacyConn,
-      conn,
-      newCompanyId,
-      mapNoteMovementsFull,
-      mapPeriodo,
-      mapAuditCreditNote
+    legacyConn,
+    conn,
+    newCompanyId,
+    mapNoteMovementsFull,
+    mapPeriodo,
+    mapAuditCreditNote
   );
 
   const mapEntryDetailAccount = await migrateDetailedAccountingEntriesCustomerObligations(
-      legacyConn,
-      conn,
-      newCompanyId,
-      mapProject,
-      mapCenterCost,
-      mapAccounts,
-      mapEntryAccount.mapEntryAccount
+    legacyConn,
+    conn,
+    newCompanyId,
+    mapProject,
+    mapCenterCost,
+    mapAccounts,
+    mapEntryAccount.mapEntryAccount
   )
 
 
@@ -689,191 +730,210 @@ export async function migrateRetentionsCredit(
 
 ): Promise<{ mapNoteMovementsFull: Record<number, number> }> {
 
-
   console.log("Migrando notas por credito...");
-  /*  const mapRetMovements: Record<number, number> = {}; */
-  const [rows] = await legacyConn.query(`SELECT
-  COD_TRAC,
-  NUM_TRACNOT,
-  COD_TRAC AS FK_COD_TRAN,
-  m.FK_COD_BANCO_MOVI AS FKBANCO,
-  m.FK_CONCILIADO AS FK_CONCILIADO,
+  const mapNoteMovementsFull: Record<number, number> = { ...mapNoteMovements };
+  const [rows] = await legacyConn.query(`
+    SELECT
+      COD_TRAC,
+      CONCAT(
+          SUBSTRING(
+              transacciones.numeroNotaProve,
+              1,
+              3
+          ),
+          '-',
+          SUBSTRING(
+              transacciones.numeroNotaProve,
+              4,
+              3
+          ),
+          '-',
+          SUBSTRING(
+              transacciones.numeroNotaProve,
+              7
+          )
+      ) AS NUM_TRANS,
+      COD_TRAC AS FK_COD_TRAN,
+      m.FK_COD_BANCO_MOVI AS FKBANCO,
+      m.FK_CONCILIADO AS FK_CONCILIADO,
+      IFNULL(
+          m.FK_USER_EMP_MOVI,
+          transacciones.FK_COD_USU
+      ) AS FK_USER,
+      IFNULL(
+          m.FECHA_MOVI,
+          transacciones.fecha
+      ) AS FECHA_MOVI,
+      IFNULL(
+          FECHA_MANUAL,
+          transacciones.FEC_TRAC
+      ) AS FECHA_MANUAL,
+      'ANTICIPO' AS TIP_MOVI,
+      IFNULL(
+          m.ORIGEN_MOVI,
+          'NOTA CREDITO COMPRA'
+      ) AS ORIGEN_MOVI,
+      'ANTICIPO' AS TIPO_MOVI,
+      IFNULL(CONCEP_MOVI, OBS_DET_ANT) AS REF_MOVI,
+      IFNULL(
+          transacciones.NUM_TRACNOT,
+          OBS_DET_ANT
+      ) AS CONCEP_MOVI,
+      NULL AS NUM_VOUCHER,
+      NULL AS NUM_LOTE,
+      IFNULL(CAUSA_MOVI, 'EGRESO') AS CAUSA_MOVI,
+      'NCCOMPRA' AS MODULO,
+      detalle_anticipos.SECU_DET_ANT AS SECU_MOVI,
+      IFNULL(m.IMPOR_MOVI, TOTPAG_TRAC) AS IMPOR_MOVI,
+      CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 1
+  END AS ESTADO_MOVI,
   IFNULL(
-      m.FK_USER_EMP_MOVI,
-      transacciones.FK_COD_USU
-  ) AS FK_USER,
+      m.PER_BENE_MOVI,
+      proveedores.NOM_PROV
+  ) AS PER_BENE_MOVI,
+  NULL AS FK_COD_EMP,
+  m.FK_CONCILIADO,
+  m.CONCILIADO,
+  FK_COD_CAJAS_MOVI AS IDCAJA,
   IFNULL(
-      m.FECHA_MOVI,
-      transacciones.fecha
-  ) AS FECHA_MOVI,
-  IFNULL(
-      FECHA_MANUAL,
-      transacciones.FEC_TRAC
-  ) AS FECHA_MANUAL,
- 'ANTICIPO' AS  TIP_MOVI,
-IFNULL(
-  m.ORIGEN_MOVI,
-  'NOTA CREDITO VENTA'
-) AS ORIGEN_MOVI,
-'ANTICIPO' AS TIPO_MOVI,
-IFNULL(CONCEP_MOVI, OBS_DET_ANT) AS REF_MOVI,
-IFNULL(
-  transacciones.NUM_TRACNOT,
-  OBS_DET_ANT
-) AS CONCEP_MOVI,
-NULL AS NUM_VOUCHER,
-NULL AS NUM_LOTE,
-IFNULL(CAUSA_MOVI, 'INGRESO') AS CAUSA_MOVI,
-'NCVENTA' AS MODULO,
-detalle_anticipos.SECU_DET_ANT AS SECU_MOVI,
-IFNULL(
-  m.IMPOR_MOVI,
-  TOTPAG_TRAC
-) AS IMPOR_MOVI,
-CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 1
-END AS ESTADO_MOVI,
-IFNULL(
-  m.PER_BENE_MOVI,
-  clientes.NOM_CLI
-) AS PER_BENE_MOVI,
-NULL AS FK_COD_EMP,
-m.FK_CONCILIADO,
-m.CONCILIADO,
-FK_COD_CAJAS_MOVI AS IDCAJA,
-IFNULL(
-  transacciones.OBS_TRAC,
-  m.CONCEP_MOVI
-) AS OBS_MOVI,
-IFNULL(
-  m.IMPOR_MOVI,
-  TOTPAG_TRAC
-) AS IMPOR_MOVITOTAL,
-NULL AS FK_ASIENTO,
-NULL AS FK_AUDITMV,
-NULL AS FK_ARQUEO,
-NULL AS ID_TARJETA,
-NULL AS RECIBO_CAJA,
-NULL AS FK_CTAM_PLAN,
-NULL AS NUMERO_UNIDAD,
-NULL AS JSON_PAGOS,
-SUBSTRING(NUM_TRACNOT, 9, 9) AS SECUENCIA_REL_DOC,
-transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
-YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
-MONTH(FEC_TRAC) AS FEC_MES_TRAC,
-FEC_TRAC AS FEC_TRAC,
-fechaFacturaRet AS FEC_REL_TRAC,
-FEC_MERC_TRAC AS FEC_MERC_TRAC,
-METPAG_TRAC,
-cabecera_compra AS DOCUMENT_REL_DETAIL,
-OBS_TRAC,
-FK_USU_CAJA AS FK_USER_VEND,
-FK_COD_CLI AS FK_PERSON,
-estado_compra AS ESTADO_REL,
-SUB_TRAC AS SUB_TRAC,
-IVA_TRAC AS IVA_TRAC,
-SUB0_TRAC,
-SUB12_TRAC,
-TOTRET_TRAC AS TOT_RET_TRAC,
-TOTPAG_TRAC AS TOT_PAG_TRAC,
-NULL AS FECHA_AUTORIZACION_REL,
-NULL AS TIP_DOC_REL,
-NULL AS FK_AUDITTR,
-fecha AS FECHA_REG,
-NULL AS PUNTO_EMISION_REC,
-fechaAnulacion AS FECHA_ANULACION,
-NULL AS FK_AUDIT_REL,
-NUM_TRACNOT AS NUM_REL_DOC,
-detalle_anticipos.ID_DET_ANT,
-SECU_DET_ANT,
-FDP_DET_ANT,
-OBS_DET_ANT,
-IMPOR_DET_ANT,
-m.ID_MOVI,detalle_anticipos.ID_DET_ANT
-FROM
-  transacciones
-LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
-LEFT JOIN clientes on clientes.COD_CLI = transacciones.FK_COD_CLI
-LEFT JOIN movimientos m ON  m.FK_TRAC_MOVI = transacciones.COD_TRAC
-WHERE
-  transacciones.TIP_TRAC IN('nota') AND
-    ( (detalle_anticipos.ID_DET_ANT IS NOT NULL AND detalle_anticipos.ID_DET_ANT <> '')
-           OR (m.ID_MOVI IS NOT NULL AND m.ID_MOVI  <> '')
-        )
-ORDER BY
-  COD_TRAC
-DESC;`);
-
-  // AND (detalle_anticipos.ID_DET_ANT IS  NULL or detalle_anticipos.ID_DET_ANT = '') and  (m.ID_MOVI    IS  NULL or m.ID_MOVI = '')
+      transacciones.OBS_TRAC,
+      m.CONCEP_MOVI
+  ) AS OBS_MOVI,
+  IFNULL(m.IMPOR_MOVI, TOTPAG_TRAC) AS IMPOR_MOVITOTAL,
+  NULL AS FK_ASIENTO,
+  NULL AS FK_AUDITMV,
+  NULL AS FK_ARQUEO,
+  NULL AS ID_TARJETA,
+  NULL AS RECIBO_CAJA,
+  NULL AS FK_CTAM_PLAN,
+  NULL AS NUMERO_UNIDAD,
+  NULL AS JSON_PAGOS,
+  SUBSTR(secuencialFacturaRet, 7) AS SECUENCIA_REL_DOC,
+  transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
+  YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
+  MONTH(FEC_TRAC) AS FEC_MES_TRAC,
+  FEC_TRAC AS FEC_TRAC,
+  fechaFacturaRet AS FEC_REL_TRAC,
+  FEC_MERC_TRAC AS FEC_MERC_TRAC,
+  METPAG_TRAC,
+  cabecera_compra AS DOCUMENT_REL_DETAIL,
+  OBS_TRAC,
+  FK_USU_CAJA AS FK_USER_VEND,
+  FK_COD_PROVE AS FK_PERSON,
+  estado_compra AS ESTADO_REL,
+  SUB_TRAC AS SUB_TRAC,
+  IVA_TRAC AS IVA_TRAC,
+  SUB0_TRAC,
+  SUB12_TRAC,
+  TOTRET_TRAC AS TOT_RET_TRAC,
+  TOTPAG_TRAC AS TOT_PAG_TRAC,
+  NULL AS FECHA_AUTORIZACION_REL,
+  NULL AS TIP_DOC_REL,
+  NULL AS FK_AUDITTR,
+  fecha AS FECHA_REG,
+  NULL AS PUNTO_EMISION_REC,
+  fechaAnulacion AS FECHA_ANULACION,
+  NULL AS FK_AUDIT_REL,
+  CONCAT(
+      SUBSTRING(secuencialFacturaRet, 1, 3),
+      '-',
+      SUBSTRING(secuencialFacturaRet, 4, 3),
+      '-',
+      SUBSTRING(secuencialFacturaRet, 7)
+  ) AS NUM_REL_DOC,
+  detalle_anticipos.ID_DET_ANT,
+  SECU_DET_ANT,
+  FDP_DET_ANT,
+  OBS_DET_ANT,
+  IMPOR_DET_ANT,
+  m.ID_MOVI,
+  detalle_anticipos.ID_DET_ANT
+  FROM
+      transacciones
+  LEFT JOIN detalle_anticipos ON detalle_anticipos.FK_COD_TRAC = transacciones.COD_TRAC
+  LEFT JOIN proveedores ON transacciones.FK_COD_PROVE = proveedores.ID_PROV
+  LEFT JOIN movimientos m ON
+      m.FK_TRAC_MOVI = transacciones.COD_TRAC
+  WHERE
+      transacciones.TIP_TRAC IN(
+          'nota-compra',
+          'nota-compra-devuelto'
+      ) AND(
+          (
+              detalle_anticipos.ID_DET_ANT IS NOT NULL AND detalle_anticipos.ID_DET_ANT <> ''
+          ) OR(
+              m.ID_MOVI IS NOT NULL AND m.ID_MOVI <> ''
+          )
+      )
+  ORDER BY
+      COD_TRAC
+  DESC;`);
 
   const ventas = rows as any[];
-
   if (!ventas.length) {
-      throw new Error(" -> No hay retenciones para migrar.");
+    return { mapNoteMovementsFull };
   }
-  /* const mapNoteMovementsFull= mapNoteMovements; */
-  const mapNoteMovementsFull: Record<number, number> = { ...mapNoteMovements };
 
-  const BATCH_SIZE = 1000;
-
+  const BATCH_SIZE = 1000; //TODO: empezar a verificar desde aqui
 
   const [[{ nextSecu }]]: any = await conn.query(
-      `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'NCVENTA' AND FK_COD_EMP = ?`,
-      [newCompanyId]
+    `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'NCVENTA' AND FK_COD_EMP = ?`,
+    [newCompanyId]
   );
   let secuenciaMovimiento = nextSecu;
 
   for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
-      const batch = ventas.slice(i, i + BATCH_SIZE);
-      try {
+    const batch = ventas.slice(i, i + BATCH_SIZE);
+    try {
 
-          // Preparar valores para INSERT en batch
-          const values = batch.map((o, index) => {
-              console.log(`transformando y normalizando movImientos de NC a credito ${o.NUM_TRACNOT}`);
-              // Lógica de Negocio
-              let idPlanCuenta = null;
-              const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
-              o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
+      // Preparar valores para INSERT en batch
+      const values = batch.map((o, index) => {
+        console.log(`transformando y normalizando movImientos de NC a credito ${o.NUM_TRACNOT}`);
+        // Lógica de Negocio
+        let idPlanCuenta = null;
+        const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
+        o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
 
-              return [
-                  bankMap[o.FKBANCO] ?? null,
-                  mapCreditNote[o.COD_TRAC] ?? null,
-                  mapConciliation[o.FK_CONCILIADO] ?? null,
-                  userMap[o.FK_USER] ?? null,
-                  o.FECHA_MOVI,
-                  o.FECHA_MANUAL,
-                  o.TIP_MOVI,
-                  o.ORIGEN_MOVI,
-                  o.TIPO_MOVI,
-                  o.REF_MOVI,
-                  o.CONCEP_MOVI,
-                  o.NUM_VOUCHER,
-                  o.NUM_LOTE,
-                  o.CAUSA_MOVI,
-                  o.MODULO,
-                  secuenciaMovimiento++,
-                  o.IMPOR_MOVI,
-                  o.ESTADO_MOVI,
-                  o.PER_BENE_MOVI,
-                  o.CONCILIATED ?? null,
-                  newCompanyId,
-                  boxMap[o.IDCAJA] ?? null,
-                  o.OBS_MOVI,
-                  o.IMPOR_MOVITOTAL,
-                  null, // FK_ASIENTO
-                  currentAuditId,
-                  null, // FK_ARQUEO
-                  null,
-                  null, // RECIBO_CAJA
-                  idPlanCuenta,
-                  null, // NUM_UNIDAD
-                  '[]'  // JSON_PAGOS
-              ];
+        return [
+          bankMap[o.FKBANCO] ?? null,
+          mapCreditNote[o.COD_TRAC] ?? null,
+          mapConciliation[o.FK_CONCILIADO] ?? null,
+          userMap[o.FK_USER] ?? null,
+          o.FECHA_MOVI,
+          o.FECHA_MANUAL,
+          o.TIP_MOVI,
+          o.ORIGEN_MOVI,
+          o.TIPO_MOVI,
+          o.REF_MOVI,
+          o.CONCEP_MOVI,
+          o.NUM_VOUCHER,
+          o.NUM_LOTE,
+          o.CAUSA_MOVI,
+          o.MODULO,
+          secuenciaMovimiento++,
+          o.IMPOR_MOVI,
+          o.ESTADO_MOVI,
+          o.PER_BENE_MOVI,
+          o.CONCILIATED ?? null,
+          newCompanyId,
+          boxMap[o.IDCAJA] ?? null,
+          o.OBS_MOVI,
+          o.IMPOR_MOVITOTAL,
+          null, // FK_ASIENTO
+          currentAuditId,
+          null, // FK_ARQUEO
+          null,
+          null, // RECIBO_CAJA
+          idPlanCuenta,
+          null, // NUM_UNIDAD
+          '[]'  // JSON_PAGOS
+        ];
 
-          });
-          // Insertar clientes en batch
-          // --- PASO C: INSERTAR MOVIMIENTOS EN BATCH ---
-          const [resMov]: any = await conn.query(
-              `INSERT INTO movements (
+      });
+      // Insertar clientes en batch
+      // --- PASO C: INSERTAR MOVIMIENTOS EN BATCH ---
+      const [resMov]: any = await conn.query(
+        `INSERT INTO movements (
                   FKBANCO, FK_COD_TRAN, FK_CONCILIADO, FK_USER, FECHA_MOVI, FECHA_MANUAL,
                   TIP_MOVI, ORIGEN_MOVI, TIPO_MOVI, REF_MOVI, CONCEP_MOVI, NUM_VOUCHER,
                   NUM_LOTE, CAUSA_MOVI, MODULO, SECU_MOVI, IMPOR_MOVI, ESTADO_MOVI,
@@ -881,20 +941,20 @@ DESC;`);
                   IMPOR_MOVITOTAL, FK_ASIENTO, FK_AUDITMV, FK_ARQUEO, ID_TARJETA,
                   RECIBO_CAJA, FK_CTAM_PLAN, NUMERO_UNIDAD, JSON_PAGOS
               ) VALUES ?`,
-              [values]
-          );
+        [values]
+      );
 
-          // Actualizar mapeo de movimientos
-          let currentMovId = resMov.insertId;
-          batch.forEach(o => {
-              mapNoteMovementsFull[o.COD_TRAC] = currentMovId++;
-          });
-          console.log(` -> Batch migrado: ${batch.length} retenciones de ventas por credito.`);
+      // Actualizar mapeo de movimientos
+      let currentMovId = resMov.insertId;
+      batch.forEach(o => {
+        mapNoteMovementsFull[o.COD_TRAC] = currentMovId++;
+      });
+      console.log(` -> Batch migrado: ${batch.length} retenciones de ventas por credito.`);
 
-      } catch (err) {
+    } catch (err) {
 
-          throw err;
-      }
+      throw err;
+    }
   }
   return { mapNoteMovementsFull };
 }
@@ -915,7 +975,7 @@ export async function migratePaymentDetails(
 
   try {
 
-      const [rows]: any[] = await legacyConn.query(`SELECT
+    const [rows]: any[] = await legacyConn.query(`SELECT
                                                           detalles_cuentas.fk_cod_cuenta,
                                                           detalles_cuentas.FK_COD_GD,
                                                           detalles_cuentas.fecha,
@@ -939,63 +999,63 @@ export async function migratePaymentDetails(
                                                       DESC;`);
 
 
-      if (!rows.length) return { mapDetailObligationsAplicate };
+    if (!rows.length) return { mapDetailObligationsAplicate };
 
-      const BATCH_SIZE = 500; console.log(mapNoteMovementsFull);
-
-
-      //oldDetailAcountCodeMap
-      console.log(oldDetailAcountCodeMap);
-      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-          const batch = rows.slice(i, i + BATCH_SIZE);
-          const movementValues = batch.map((o, index) => {
-              const idCuenta = mapObligationsCustomers[o.fk_cod_cuenta];
+    const BATCH_SIZE = 500; console.log(mapNoteMovementsFull);
 
 
-              let idFactNote = null;
-              for (let i = 0; i < oldDetailAcountCodeMap.length; i++) {
+    //oldDetailAcountCodeMap
+    console.log(oldDetailAcountCodeMap);
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const movementValues = batch.map((o, index) => {
+        const idCuenta = mapObligationsCustomers[o.fk_cod_cuenta];
 
-                  const importeOld = Number(oldDetailAcountCodeMap[i].importe).toFixed(2);
-                  const importeNew = Number(o.importe).toFixed(2);
-                  console.log(Number(oldDetailAcountCodeMap[i].idFactura), Number(o.COD_TRAC), importeOld, importeNew);
-                  if (Number(oldDetailAcountCodeMap[i].idFactura) === Number(o.COD_TRAC) && importeOld === importeNew) {
 
-                      idFactNote = oldDetailAcountCodeMap[i].idTrn;
-                      break;
-                  }
+        let idFactNote = null;
+        for (let i = 0; i < oldDetailAcountCodeMap.length; i++) {
 
-              }
-              const idMovimiento = idFactNote != null ? mapNoteMovementsFull[idFactNote] : null;
+          const importeOld = Number(oldDetailAcountCodeMap[i].importe).toFixed(2);
+          const importeNew = Number(o.importe).toFixed(2);
+          console.log(Number(oldDetailAcountCodeMap[i].idFactura), Number(o.COD_TRAC), importeOld, importeNew);
+          if (Number(oldDetailAcountCodeMap[i].idFactura) === Number(o.COD_TRAC) && importeOld === importeNew) {
 
-              return [
-                  idCuenta,
-                  idMovimiento,
-                  o.fecha,
-                  o.importe,
-                  o.saldo,
-                  o.nuevo_saldo
-              ];
-          });
-          console.log(movementValues);
-          const [resMov]: any = await conn.query(
-              `INSERT INTO account_detail (
+            idFactNote = oldDetailAcountCodeMap[i].idTrn;
+            break;
+          }
+
+        }
+        const idMovimiento = idFactNote != null ? mapNoteMovementsFull[idFactNote] : null;
+
+        return [
+          idCuenta,
+          idMovimiento,
+          o.fecha,
+          o.importe,
+          o.saldo,
+          o.nuevo_saldo
+        ];
+      });
+      console.log(movementValues);
+      const [resMov]: any = await conn.query(
+        `INSERT INTO account_detail (
                   FK_COD_CUENTA, FK_ID_MOVI, FECHA_REG, IMPORTE, SALDO, NEW_SALDO
               ) VALUES ?`,
-              [movementValues]
-          );
+        [movementValues]
+      );
 
-          let currentMovId = resMov.insertId;
-          batch.forEach(o => {
-              mapDetailObligationsAplicate[o.fk_cod_cuenta] = currentMovId++;
-          });
-      }
+      let currentMovId = resMov.insertId;
+      batch.forEach(o => {
+        mapDetailObligationsAplicate[o.fk_cod_cuenta] = currentMovId++;
+      });
+    }
 
-      console.log("✅ Migración completada de pagos en retenciones");
-      return { mapDetailObligationsAplicate };
+    console.log("✅ Migración completada de pagos en retenciones");
+    return { mapDetailObligationsAplicate };
 
   } catch (err) {
-      console.error("❌ Error:", err);
-      throw err;
+    console.error("❌ Error:", err);
+    throw err;
   }
 }
 
@@ -1019,8 +1079,8 @@ export async function migrateAccountingEntriesCustomerObligations(
 
   console.log("🚀 Migrando encabezado de asiento contables retenciones..........");
   try {//IMPORTE_GD
-      const mapEntryAccount: Record<number, number> = {};
-      const [rows]: any[] = await legacyConn.query(`SELECT
+    const mapEntryAccount: Record<number, number> = {};
+    const [rows]: any[] = await legacyConn.query(`SELECT
   cod_asiento,
   fecha_asiento AS FECHA_ASI,
   descripcion_asiento AS DESCRIP_ASI,
@@ -1058,48 +1118,48 @@ INNER JOIN transacciones ON transacciones.COD_TRAC = contabilidad_asientos.FK_CO
 WHERE
   TIP_TRAC IN('nota');` );
 
-      if (!rows.length) {
-          return { mapEntryAccount };
+    if (!rows.length) {
+      return { mapEntryAccount };
+    }
+
+
+    const BATCH_SIZE = 1000;
+
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const insertValues: any[] = [];
+
+      for (const o of batch) {
+        /*  const idTrn = mapSales[o.FK_MOVTRAC] */
+        const periodoId = mapPeriodo[o.FK_PERIODO]
+        const idAuditTr = mapAuditCreditNote[o.COD_TRAC];
+        const idMovimiento = mapNoteMovementsFull[o.COD_TRAC];
+
+        insertValues.push([
+          o.FECHA_ASI,
+          o.DESCRIP_ASI,
+          o.NUM_ASI,
+          o.ORG_ASI,
+          o.TDEBE_ASI,
+          o.THABER_ASI,
+          o.TIP_ASI,
+          periodoId,
+          o.FECHA_REG,
+          o.FECHA_ACT,
+          o.JSON_ASI,
+          o.RES_ASI,
+          o.BEN_ASI,
+          idAuditTr,
+          newCompanyId,
+          o.SEC_ASI,
+          null,
+          idMovimiento
+        ]);
+
+
       }
 
-
-      const BATCH_SIZE = 1000;
-
-      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-          const batch = rows.slice(i, i + BATCH_SIZE);
-          const insertValues: any[] = [];
-
-          for (const o of batch) {
-              /*  const idTrn = mapSales[o.FK_MOVTRAC] */
-              const periodoId = mapPeriodo[o.FK_PERIODO]
-              const idAuditTr = mapAuditCreditNote[o.COD_TRAC];
-              const idMovimiento = mapNoteMovementsFull[o.COD_TRAC];
-
-              insertValues.push([
-                  o.FECHA_ASI,
-                  o.DESCRIP_ASI,
-                  o.NUM_ASI,
-                  o.ORG_ASI,
-                  o.TDEBE_ASI,
-                  o.THABER_ASI,
-                  o.TIP_ASI,
-                  periodoId,
-                  o.FECHA_REG,
-                  o.FECHA_ACT,
-                  o.JSON_ASI,
-                  o.RES_ASI,
-                  o.BEN_ASI,
-                  idAuditTr,
-                  newCompanyId,
-                  o.SEC_ASI,
-                  null,
-                  idMovimiento
-              ]);
-
-
-          }
-
-          const [res]: any = await conn.query(`INSERT INTO accounting_movements(
+      const [res]: any = await conn.query(`INSERT INTO accounting_movements(
                   FECHA_ASI,
                   DESCRIP_ASI,
                   NUM_ASI,
@@ -1119,16 +1179,16 @@ WHERE
                   FK_MOVTRAC,
                   FK_MOV) VALUES ?`, [insertValues]);
 
-          let newId = res.insertId;
-          for (const o of batch) {
-              mapEntryAccount[o.cod_asiento] = newId++;
-          }
+      let newId = res.insertId;
+      for (const o of batch) {
+        mapEntryAccount[o.cod_asiento] = newId++;
       }
-      console.log("✅ Migración asiento contable retencion completada correctamente");
-      return { mapEntryAccount };
+    }
+    console.log("✅ Migración asiento contable retencion completada correctamente");
+    return { mapEntryAccount };
   } catch (err) {
-      console.error("❌ Error en migración de asiento contable:", err);
-      throw err;
+    console.error("❌ Error en migración de asiento contable:", err);
+    throw err;
   }
 }
 
@@ -1164,8 +1224,8 @@ WHERE
    TIP_TRAC IN('nota');`);
 
   if (!rows.length) {
-      console.log("⚠️ No hay registros para migrar");
-      return { mapAccountDetail };
+    console.log("⚠️ No hay registros para migrar");
+    return { mapAccountDetail };
   } //console.log(rows);
 
   const BATCH_SIZE = 1000;
@@ -1174,60 +1234,60 @@ WHERE
   let totalHaber = 0;
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE);
-      console.log(`➡️ Procesando batch ${i / BATCH_SIZE + 1}`);
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    console.log(`➡️ Procesando batch ${i / BATCH_SIZE + 1}`);
 
-      try {
-          const insertValues: any[] = [];
-          const totalsMap = new Map<string, any>();
+    try {
+      const insertValues: any[] = [];
+      const totalsMap = new Map<string, any>();
 
-          for (const o of batch) {
-              const idPlan = mapAccounts[o.FK_CTAC_PLAN];
-              const idProyecto = mapProject[o.FK_COD_PROJECT] ?? null;
-              const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
-              const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO] ?? null;
+      for (const o of batch) {
+        const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+        const idProyecto = mapProject[o.FK_COD_PROJECT] ?? null;
+        const idCentroCosto = mapCenterCost[o.FK_COD_COST] ?? null;
+        const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO] ?? null;
 
-              if (!idPlan || !idCodAsiento) continue;
+        if (!idPlan || !idCodAsiento) continue;
 
-              const debe = Number(o.DEBE_DET) || 0;
-              const haber = Number(o.HABER_DET) || 0;
+        const debe = Number(o.DEBE_DET) || 0;
+        const haber = Number(o.HABER_DET) || 0;
 
-              insertValues.push([
-                  idCodAsiento,
-                  debe,
-                  haber,
-                  idPlan,
-                  idProyecto,
-                  idCentroCosto
-              ]);
+        insertValues.push([
+          idCodAsiento,
+          debe,
+          haber,
+          idPlan,
+          idProyecto,
+          idCentroCosto
+        ]);
 
-              const key = `${newCompanyId}-${idPlan}-${o.fecha_asiento}`;
-              if (!totalsMap.has(key)) {
-                  totalsMap.set(key, {
-                      id_plan: idPlan,
-                      fecha: o.fecha_asiento,
-                      debe: 0,
-                      haber: 0,
-                      total: 0,
-                      operacion: "suma"
-                  });
-              }
+        const key = `${newCompanyId}-${idPlan}-${o.fecha_asiento}`;
+        if (!totalsMap.has(key)) {
+          totalsMap.set(key, {
+            id_plan: idPlan,
+            fecha: o.fecha_asiento,
+            debe: 0,
+            haber: 0,
+            total: 0,
+            operacion: "suma"
+          });
+        }
 
-              const acc = totalsMap.get(key);
-              acc.debe += debe;
-              acc.haber += haber;
-              acc.total++;
+        const acc = totalsMap.get(key);
+        acc.debe += debe;
+        acc.haber += haber;
+        acc.total++;
 
-              totalHaber += haber;
-              totalDebe += debe;
-          }
+        totalHaber += haber;
+        totalDebe += debe;
+      }
 
-          if (!insertValues.length) {
-              console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
-              continue;
-          }
+      if (!insertValues.length) {
+        console.warn(`⚠️ Batch ${i / BATCH_SIZE + 1} sin registros válidos`);
+        continue;
+      }
 
-          const [res]: any = await conn.query(`
+      const [res]: any = await conn.query(`
               INSERT INTO accounting_movements_det (
                   FK_COD_ASIENTO,
                   DEBE_DET,
@@ -1238,28 +1298,28 @@ WHERE
               ) VALUES ?
           `, [insertValues]);
 
-          let newId = res.insertId;
+      let newId = res.insertId;
 
-          for (const o of batch) {
-              const idPlan = mapAccounts[o.FK_CTAC_PLAN];
-              console.log(`➡️ Procesando detalle de asiento  ${idPlan}`);
-              const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
+      for (const o of batch) {
+        const idPlan = mapAccounts[o.FK_CTAC_PLAN];
+        console.log(`➡️ Procesando detalle de asiento  ${idPlan}`);
+        const idCodAsiento = mapEntryAccount[o.FK_COD_ASIENTO];
 
-              if (!idPlan || !idCodAsiento) continue;
+        if (!idPlan || !idCodAsiento) continue;
 
-              mapAccountDetail[o.cod_detalle_asiento] = newId++;
-          }
-
-          for (const t of totalsMap.values()) {
-              await upsertTotaledEntry(conn, t, newCompanyId);
-          }
-
-          console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
-
-      } catch (err) {
-          console.error("❌ Error en batch:", err);
-          throw err;
+        mapAccountDetail[o.cod_detalle_asiento] = newId++;
       }
+
+      for (const t of totalsMap.values()) {
+        await upsertTotaledEntry(conn, t, newCompanyId);
+      }
+
+      console.log(`✅ Batch ${i / BATCH_SIZE + 1} procesado`);
+
+    } catch (err) {
+      console.error("❌ Error en batch:", err);
+      throw err;
+    }
   }
 
   console.log("🎉 Migración de detalles contables completada");

@@ -102,7 +102,8 @@ export async function migratePurchaseOrders({
 }: MigratePurchaseOrdersParams): Promise<{ purchaseOrderIdMap: Record<number, number>; purchaseOrderAuditIdMap: Record<number, number> }> {
   try {
     console.log("Migrando pedidos de compra...");
-
+    const purchaseOrderIdMap: Record<number, number> = {};
+    const purchaseOrderAuditIdMap: Record<number, number> = {};
     const resultOrdersQuery: ResultSet = await legacyConn.query(`
       SELECT
           COD_TRAC AS COD_TRANS,
@@ -190,7 +191,7 @@ export async function migratePurchaseOrders({
 
     const [purchaseOrders]: any[] = resultOrdersQuery as Array<any>;
     if (purchaseOrders.length === 0) {
-      throw new Error(" -> No existen registros de pedidos de compra para migrar");
+      return { purchaseOrderIdMap, purchaseOrderAuditIdMap };
     }
 
     const branchSequenseQuery: string = `
@@ -212,8 +213,6 @@ export async function migratePurchaseOrders({
 
     const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
     const BATCH_SIZE: number = 1000;
-    const purchaseOrderIdMap: Record<number, number> = {};
-    const purchaseOrderAuditIdMap: Record<number, number> = {};
 
     for (let i = 0; i < purchaseOrders.length; i += BATCH_SIZE) {
       const batchOrders = purchaseOrders.slice(i, i + BATCH_SIZE);
@@ -418,13 +417,13 @@ function transformProductDetail(
   branchMap: Record<number, number>,
   idFirstBranch: number | null
 ) {
-  let branchId = null;
+  let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
-    if (index === 0 && item.idBodega) {
-      branchId = branchMap[item.idBodega] || idFirstBranch; // Cambiar null por id de primera bodega
-    }
-    const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = branchMap[item.idBodega] || idFirstBranch;
+    const idProducto = mapProducts[item?.idProducto] ?? "";
+
+    const mappedBodega = branchMap?.[item?.idBodega];
+    if (index === 0 && mappedBodega) branchId = mappedBodega;
+    const idBodega = mappedBodega || idFirstBranch;
     return {
       idProducto,
       idBodega,
@@ -720,7 +719,7 @@ async function migrateOrderMovements({
     const [cardData]: any[] = cardQuery as Array<any>;
     const cardId = cardData[0].ID_TARJETA ?? null;
 
-    const movementSequenceQuery = await conn.query(`SELECT MAX(SECU_MOVI)+1 AS SECU_MOVI FROM movements WHERE MODULO = 'COMPRAS' AND  FK_COD_EMP = ?`,
+    const movementSequenceQuery = await conn.query(`SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS SECU_MOVI FROM movements WHERE MODULO = 'COMPRAS' AND  FK_COD_EMP = ?`,
       [newCompanyId]
     );
     const [movementData] = movementSequenceQuery as Array<any>;

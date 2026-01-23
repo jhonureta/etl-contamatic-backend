@@ -11,7 +11,10 @@ export async function migrateWorkOrders({
 }) {
   try {
     console.log("Migrando ordenes de trabajos");
-
+    const workOrderIdMap: Record<number, number> = {};
+    const workOrderAuditIdMap: Record<number, number> = {};
+    const workOrderSecuencieMap: Record<number, number> = {};
+    
     const [workOrders]: any[] = await legacyConn.query(`
       SELECT
           COD_TRAC AS COD_TRANS,
@@ -96,7 +99,7 @@ export async function migrateWorkOrders({
     `);
 
     if (workOrders.length === 0) {
-      throw new Error("No hay ordenes de trabajos para migrar.");
+      return { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap };
     }
     const branchSequenseQuery: string = `
     SELECT
@@ -119,9 +122,6 @@ export async function migrateWorkOrders({
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     const BATCH_SIZE = 1000;
-    const workOrderIdMap: Record<number, number> = {};
-    const workOrderAuditIdMap: Record<number, number> = {};
-    const workOrderSecuencieMap: Record<number, number> = {};
     for (let i = 0; i < workOrders.length; i += BATCH_SIZE) {
 
       const batch = workOrders.slice(i, i + BATCH_SIZE);
@@ -326,13 +326,13 @@ function transformProductDetail(
   branchMap: Record<number, number>,
   idFirstBranch: number | null
 ) {
-  let branchId = null;
+  let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
-    if (index === 0 && item.idBodega) {
-      branchId = branchMap[item.idBodega] || idFirstBranch; // Cambiar null por id de primera bodega
-    }
+
     const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = branchMap[item.idBodega] || idFirstBranch;
+    const mappedBodega = branchMap?.[item?.idBodega];
+    if (index === 0 && mappedBodega) branchId = mappedBodega;
+    const idBodega = mappedBodega || idFirstBranch;
     return {
       idProducto,
       idBodega,

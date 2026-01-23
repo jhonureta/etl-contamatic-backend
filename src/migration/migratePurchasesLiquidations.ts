@@ -123,6 +123,9 @@ export async function migratePurchasesAndLiquidations({
 	mapCostExpenses
 }: MigratePurchasesParams): Promise<{ purchaseLiquidationIdMap: Record<number, number>; purchaseLiquidationAuditIdMap: Record<number, number> }> {
 
+	const purchaseLiquidationIdMap: Record<number, number> = {};
+	const purchaseLiquidationAuditIdMap: Record<number, number> = {};
+
 	const resultPurchasesQuery: ResultSet = await legacyConn.query(`
 		SELECT
 				COD_TRAC AS COD_TRANS,
@@ -230,7 +233,7 @@ export async function migratePurchasesAndLiquidations({
 	`);
 	const [purchases]: any[] = resultPurchasesQuery as Array<any>;
 	if (purchases.length === 0) {
-		throw new Error(" -> No existen registros de compras para migrar");
+		return { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap };
 	}
 
 	const branchSequenseQuery: string = `
@@ -258,8 +261,6 @@ export async function migratePurchasesAndLiquidations({
 	const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
 
 	const BATCH_SIZE: number = 1000;
-	const purchaseLiquidationIdMap: Record<number, number> = {};
-	const purchaseLiquidationAuditIdMap: Record<number, number> = {};
 
 	for (let i = 0; i < purchases.length; i += BATCH_SIZE) {
 
@@ -1667,8 +1668,8 @@ export async function migratePurchaseObligationDetail({
 					modulo = "RETENCION-VENTA";
 				} else if (obl.forma === "NOTA DE CREDITO") {
 					tipMovi = tipoMovi = "CREDITO";
-					modulo = "NCVENTA";
-					origen = "NOTA CREDITO VENTA";
+					modulo = "NCCOMPRA";
+					origen = "NOTA CREDITO COMPRA";
 				}
 
 				const importMovi = Math.abs(obl.IMPOR_MOVI);

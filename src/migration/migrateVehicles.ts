@@ -22,7 +22,7 @@ export async function migrateVehicles({
           vehiculo;
     `);
     if (vehicles.length === 0) {
-      throw new Error(" -> No hay vehiculos para migrar.");
+      return { vehicleIdMap };
     }
     console.log(` -> Vehiculos totales a procesar: ${vehicles.length}.`);
     const vehicleValues = vehicles.map((v) => [

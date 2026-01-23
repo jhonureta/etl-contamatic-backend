@@ -11,6 +11,9 @@ export async function migrateProformaInvoices({
 }) {
   try {
     console.log("Migrando proformas...");
+    const proformaIdMap: Record<number, number> = {};
+    const proformaAuditIdMap: Record<number, number> = {};
+
     const [proformas]: any[] = await legacyConn.query(`
     SELECT 
         COD_TRAC AS COD_TRANS,
@@ -95,7 +98,7 @@ export async function migrateProformaInvoices({
     `);
 
     if (proformas.length === 0) {
-      throw new Error("No hay proformas para migrar.");
+      return { proformaIdMap, proformaAuditIdMap };
     }
 
     const branchSequenseQuery: string = `
@@ -119,8 +122,6 @@ export async function migrateProformaInvoices({
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     const BATCH_SIZE = 1000;
-    const proformaIdMap: Record<number, number> = {};
-    const proformaAuditIdMap: Record<number, number> = {};
 
     for (let i = 0; i < proformas.length; i += BATCH_SIZE) {
       const batch = proformas.slice(i, i + BATCH_SIZE);
@@ -321,13 +322,13 @@ function transformProductDetail(
   branchMap: Record<number, number>,
   idFirstBranch: number | null
 ) {
-  let branchId = null;
+  let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
-    if (index === 0 && item.idBodega) {
-      branchId = branchMap[item.idBodega] || idFirstBranch; // Cambiar null por id de primera bodega
-    }
-    const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = branchMap[item.idBodega] || idFirstBranch;
+   
+    const idProducto = mapProducts[item.idProducto] || '';
+    const mappedBodega = branchMap?.[item?.idBodega];
+    if (index === 0 && mappedBodega) branchId = mappedBodega;
+    const idBodega = mappedBodega || idFirstBranch;
     return {
       idProducto,
       idBodega,

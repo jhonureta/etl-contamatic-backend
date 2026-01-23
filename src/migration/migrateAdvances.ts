@@ -49,6 +49,7 @@ export async function migrateSupplierAdvances(
     mapSuppliers: any
 ): Promise<{ supplierAdvanceIdMap: Record<number, number> }> {
     console.log("Migrando totales de anticipos de proveedores...");
+    const supplierAdvanceIdMap: Record<number, number> = {};
     const [rows] = await legacyConn.query(`
         SELECT
             ID_ANT,
@@ -67,10 +68,9 @@ export async function migrateSupplierAdvances(
     const anticiposClientes = rows as any[];
 
     if (!anticiposClientes.length) {
-        throw new Error(" -> No hay anticipos de proveedores para migrar.");
+        return { supplierAdvanceIdMap };
     }
     const BATCH_SIZE = 1000;
-    const supplierAdvanceIdMap: Record<number, number> = {};
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 

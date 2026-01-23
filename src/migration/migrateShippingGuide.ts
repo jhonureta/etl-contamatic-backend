@@ -26,6 +26,8 @@ export async function migrateShippingGuide({
   vehicleIdMap
 }: MigrateShippingGuideParams) {
   try {
+    const shippingGuideIdMap: Record<number, number> = {};
+    const shippingGuideAuditIdMap: Record<number, number> = {};
     const [shippingGuide]: any[] = await legacyConn.query(`
       SELECT
           g.COD_GUIAR AS COD_TRANS,
@@ -127,7 +129,7 @@ export async function migrateShippingGuide({
           ;
     `);
     if (shippingGuide.length === 0) {
-      throw new Error(" -> No hay guías de envío para migrar.");
+      return { shippingGuideIdMap, shippingGuideAuditIdMap };
     }
     const branchSequenseQuery: string = `
     SELECT
@@ -151,8 +153,7 @@ export async function migrateShippingGuide({
     });
 
     const BATCH_SIZE = 1000;
-    const shippingGuideIdMap: Record<number, number> = {};
-    const shippingGuideAuditIdMap: Record<number, number> = {};
+
 
     const [ [defaultUser], [defaultCustomer] ] = await Promise.all([
       findFirstDefaultUser({ conn, companyId: newCompanyId }),
@@ -403,7 +404,7 @@ function transformProductDetail(
   idFirstBranch: number | null
 ) {
   const detailTransformed = inputDetail.map((item: any) => {
-    const idProducto = mapProducts[item.idProducto] || null;
+    const idProducto = mapProducts[item.idProducto] || "";
     const idBodega = branchMap[item.idBodega] || idFirstBranch;
     return {
       idProducto,

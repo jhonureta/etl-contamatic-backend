@@ -663,6 +663,7 @@ export async function migrateCompany(codEmp: number) {
       mapSuppliers,
       mapProducts,
       oldProductCodeMap,
+      purchaseLiquidationIdMap,
       purchaseLiquidationAuditIdMap,
       bankMap,
       boxMap,
