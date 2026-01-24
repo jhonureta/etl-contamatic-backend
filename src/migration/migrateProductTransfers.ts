@@ -143,7 +143,7 @@ export async function migrateProductTransfers(
                 newCompanyId,
                 auditId
             ];
-        }); console.log(values);
+        });
         try {
             const [res]: any = await conn.query(`
                 INSERT INTO transfers( TRNF_NUM, TRNF_OBS, FK_USER, TRNF_RESP, TRNF_FEC, TRNF_FEC_APRO, TRNF_FEC_ANU, TRNF_EST, TRNF_DET, TRNF_NUM_COM, TRNF_ID_COM, TRNF_TIP, TRNF_USE_APRO, TRNF_USE_ANU, FK_COD_EMPRESA, FK_AUDITRNF) VALUES ?`,

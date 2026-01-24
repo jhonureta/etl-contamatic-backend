@@ -979,8 +979,6 @@ export async function migratePaymentDetails(
         const BATCH_SIZE = 500;
 
 
-        //oldDetailAcountCodeMap
-        console.log(oldDetailAcountCodeMap);
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
             const batch = rows.slice(i, i + BATCH_SIZE);
             const movementValues = batch.map((o, index) => {
@@ -992,7 +990,6 @@ export async function migratePaymentDetails(
 
                     const importeOld = Number(oldDetailAcountCodeMap[i].importe).toFixed(2);
                     const importeNew = Number(o.importe).toFixed(2);
-                    console.log(Number(oldDetailAcountCodeMap[i].idFactura), Number(o.COD_TRAC), importeOld, importeNew);
                     if (Number(oldDetailAcountCodeMap[i].idFactura) === Number(o.COD_TRAC) && importeOld === importeNew) {
 
                         idFactNote = oldDetailAcountCodeMap[i].idTrn;
@@ -1011,7 +1008,7 @@ export async function migratePaymentDetails(
                     o.nuevo_saldo
                 ];
             });
-            console.log(movementValues);
+
             const [resMov]: any = await conn.query(
                 `INSERT INTO account_detail (
                     FK_COD_CUENTA, FK_ID_MOVI, FECHA_REG, IMPORTE, SALDO, NEW_SALDO

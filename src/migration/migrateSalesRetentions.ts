@@ -495,7 +495,7 @@ DESC;`);
                 const codTrans = batch[j].COD_TRAC;
                 const auditId = firstAuditInsertId + j;
                 mapRetAuditSales[codTrans] = auditId;
-            } //console.log(batch);
+            } 
             // Preparar valores para INSERT en batch
             const values = batch.map((t, index) => {
                 console.log(`transformando y normalizando ${t.NUM_TRANS}`);

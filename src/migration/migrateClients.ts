@@ -131,6 +131,16 @@ export async function migrateClientsForCompany(
                 CUST_CODE_CI_EXT = u.CUST_CODE_CI_EXT;
             }
 
+            u.CUST_TELF = u.CUST_TELF
+                ? String(u.CUST_TELF).split(/[-,/ ]+/)[0].replace(/\D/g, '').slice(0, 20)
+                : null;
+            u.CUST_TEL2 = u.CUST_TEL2
+                ? String(u.CUST_TEL2).split(/[-,/ ]+/)[0].replace(/\D/g, '').slice(0, 20)
+                : null;
+            u.CUST_TEL3 = u.CUST_TEL3
+                ? String(u.CUST_TEL3).split(/[-,/ ]+/)[0].replace(/\D/g, '').slice(0, 20)
+                : null;
+
             return [
                 newCompanyId,
                 u.CUST_TYPE,

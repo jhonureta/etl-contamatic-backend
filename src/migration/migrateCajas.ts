@@ -43,7 +43,7 @@ export async function migrateCajas(
             const detail = await createBoxDetailReg(conn, {
                 userId: firstUserId,
                 boxId: data.insertId,
-                statusDetail: caja.EST_CAJA
+                statusDetail: caja.EST_CAJA == 'ACTIVO' ? 1 : 0
             });
             if (detail.affectedRows != 1) {
                 throw new Error('Error al insertar el detalle de la caja');
@@ -82,7 +82,7 @@ async function createBoxReg(conn: any, boxdata: any) {
 
 async function createBoxDetailReg(conn: any, boxdata: any) {
     try {
-        
+
         const query = `INSERT INTO box_detail(FK_CODUSER, FK_BOX, ESTADO) VALUES (?,?,?);`;
         const [detail] = await conn.query(query, [
             boxdata.userId,

@@ -431,9 +431,7 @@ WHERE a.TIPO_ANT = 'CLIENTES';`);
             if (a.ORIGEN_ANT == 'ANT-ORDEN') {
                 idAuditoria = mapAuditAdvances[a.ID_DET_ANT];
                 idMov = movementIdAdvancesMap[a.ID_DET_ANT] || null;
-                console.log(`a.ORIGEN_ANT: ${a.ORIGEN_ANT}`);
-                console.log(`idAuditoria: ${idAuditoria}`);
-                console.log(`idMov: ${idMov}`);
+    
             }
 
             if (a.ORIGEN_ANT === 'ANT-ORDEN') {
@@ -444,7 +442,6 @@ WHERE a.TIPO_ANT = 'CLIENTES';`);
                 }
                 if (a.ORG_ORDEN === 'ANT-ORDEN-TRABAJO') {
                     a.FK_ID_ORDEN = workOrderSecuencieMap[a.SECUENCIA] || null;
-                    console.log(`transactionId: ${a.FK_ID_ORDEN}`);
                 }
             }
 

@@ -19,8 +19,8 @@ export async function migrateDataMovementsRetentionsHolds(
         const movementIdRetentionsMap: Record<number, number> = {};
         const mapAuditRetentions: Record<number, number> = {};
 
-        const [movements] = await legacyConn.query(`SELECT NULL AS
-    ID_MOVI,
+        const [movements] = await legacyConn.query(`SELECT 
+    retenciones_tarjeta.id as ID_MOVI,
     NULL AS FK_COD_CAJAS_MOVI,
     NULL AS FK_COD_BANCO_MOVI,
     'TARJETA' AS TIP_MOVI,
@@ -112,7 +112,7 @@ WHERE
                 let transactionId = null;
                 const userId = userMap[m.FK_USER];
                 const currentAuditId = firstAuditId + index;
-                mapAuditRetentions[m.FK_ANT_MOVI] = currentAuditId;
+                mapAuditRetentions[m.ID_MOVI] = currentAuditId;
                 const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
                 let idPlanCuenta = null;
 
@@ -193,14 +193,12 @@ WHERE
 
             let currentMovId = resMov.insertId;
             batchMovements.forEach(o => {
-                movementIdRetentionsMap[o.FK_ANT_MOVI] = currentMovId++;
+                movementIdRetentionsMap[o.ID_MOVI] = currentMovId++;
             });
 
 
         }
         console.log("✅ Migración  movimientos de tarjetas completada correctamente");
-
-
         const mapEntryAccount = await migrateAccountingEntriesRetentions(
             legacyConn,
             conn,
@@ -209,7 +207,6 @@ WHERE
             mapPeriodo,
             mapAuditRetentions
         );
-
         await migrateDetailedAccountingEntriesRetention(
             legacyConn,
             conn,

@@ -42,7 +42,7 @@ export async function migrateRetentions(
 
         // 2. Obtener retenciones del sistema legado
         const legacyQuery = `
-            SELECT 
+           SELECT 
                 id_Retencion AS id,
                 concepto_Retencion AS nombre_CG,
                 fk_cuenta_activo AS FK_COSTO_CUENTA,
@@ -52,7 +52,7 @@ export async function migrateRetentions(
                 codigo_Retencion AS codigoRetencion,
                 renta_iva AS tipoRetencion,
                 fecha_inicial AS fechaInicio,
-                fecha_vigencia AS fechaFin,
+                CASE WHEN  fecha_vigencia ='0000-00-00' THEN '2028-12-31' ELSE fecha_vigencia END AS fechaFin,
                 estado_actual_sri,
                 ultima_actualizacion
             FROM retenciones;
@@ -126,8 +126,6 @@ export async function migrateRetentions(
                         }
                     )
                 }
-
-                /*  console.log(`✔ Actualizada retención ${item.nombre_CG}`); */
             } else {
                 // Insertar retención completa
                 const { detail, tax } = await insertNewRetentionCodeMdl(conn, {
@@ -161,14 +159,15 @@ export async function migrateRetentions(
 // Insertar nueva retención
 // -----------------------------
 async function insertNewRetentionCodeMdl(conn: any, taxData: any) {
-    try {
+    try { 
         const [tax] = await conn.query(
             `INSERT INTO tax_codes(
-                NOMBRE_RETEN, PORC_RETEN, COD_RET, TIPO_RETEN,
+                NOMBRE_RETEN,DESC_RETEN, PORC_RETEN, COD_RET, TIPO_RETEN,
                 ESTADO_SRI, FECHA_INITSRI, FECHA_FINSRI,
                 FK_COD_EMP, FECHA_ACTUALIZACION
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
+                taxData.nombre_CG,
                 taxData.nombre_CG,
                 taxData.porcentaje,
                 taxData.codigoRetencion,

@@ -98,7 +98,7 @@ WHERE
         /*  const [movements] = rows; */
         if (movements.length === 0) {
             return { movementIdAdvancesMap };
-        } /* console.log(movements); */
+        }
         console.log(`Movimientos de anticipos... ${movements.length}`);
 
 
@@ -150,15 +150,11 @@ WHERE
                     idPlanCuenta = accountMap.get(codigoPlan) || null;
                 }
                 if (m.MODULO === 'ANT-ORDEN') {
-                    /*  console.log(workOrderSecuencieMap);
-                     console.log(m.ORG_ORDEN);
-                     console.log(m.CONCEP_MOVI); */
                     if (m.ORG_ORDEN === 'ANT-ORDEN-VENTA') {
                         transactionId = null;
                     }
                     if (m.ORG_ORDEN === 'ANT-ORDEN-TRABAJO') {
                         transactionId = workOrderSecuencieMap[m.CONCEP_MOVI] || null;
-                        /*  console.log(`transactionId: ${transactionId}`); */
                     }
                 }
 
@@ -384,8 +380,6 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
     const BATCH_SIZE = 1000;
     const mapAdvancesDetailCustomers: Record<string, number> = {};
 
-    console.log(supplierAdvanceIdMap);
-
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 
@@ -425,9 +419,7 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
             if (a.ORIGEN_ANT == 'ANT-ORDEN') {
                 idAuditoria = mapAuditAdvances[a.ID_DET_ANT];
                 idMov = movementIdAdvancesMap[a.ID_DET_ANT] || null;
-                console.log(`a.ORIGEN_ANT: ${a.ORIGEN_ANT}`);
-                console.log(`idAuditoria: ${idAuditoria}`);
-                console.log(`idMov: ${idMov}`);
+           
             }
 
             if (a.ORIGEN_ANT === 'ANT-ORDEN') {
@@ -438,7 +430,6 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
                 }
                 if (a.ORG_ORDEN === 'ANT-ORDEN-TRABAJO') {
                     a.FK_ID_ORDEN = workOrderSecuencieMap[a.SECUENCIA] || null;
-                    console.log(`transactionId: ${a.FK_ID_ORDEN}`);
                 }
             }
 

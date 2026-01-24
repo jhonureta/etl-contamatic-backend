@@ -26,7 +26,7 @@ export async function migrateChartAccounts(
     // 2️⃣ Extraer datos del origen
     // (Consulta optimizada para asegurar que solo trae lo necesario y es eficiente)
     const [rows] = await legacyConn.query(`
-        SELECT 
+        SELECT  DISTINCT
             cod_plan,
             codigo_plan,
             nombre_plan,
@@ -34,8 +34,7 @@ export async function migrateChartAccounts(
             grupo_plan,
             NIV_PLAN,
             TIP_FAM
-        FROM contabilidad_plan_v2
-        GROUP BY codigo_plan;
+        FROM contabilidad_plan_v2;
     `);
 
     const accounts = rows as any[];
@@ -46,7 +45,7 @@ export async function migrateChartAccounts(
     const BATCH_SIZE = 1000;
     const mapAccounts: Record<number, number> = {};
     const parentMap: Record<string, number> = {};
-    const updateData: { id: number, parentId: number, tipFam: string }[] = [];
+    const updateData: { idComapny: number, id: number, codigo_plan: string, nombre_plan: string, estado_plan: string, grupo_plan: string, nivel: number, parentId: number, tipFam: string }[] = [];
 
     // 3️⃣ Insertar cuentas por batch (Este paso ya es eficiente)
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
@@ -84,7 +83,7 @@ export async function migrateChartAccounts(
                 const parentId = parentMap[parentCode] || 0;
 
                 // Guardar la información necesaria para el UPDATE masivo
-                updateData.push({ id: accountId, parentId: parentId, tipFam: a.TIP_FAM });
+                updateData.push({ idComapny: newCompanyId, id: accountId, codigo_plan: parentCode, nombre_plan: a.nombre_plan, estado_plan: a.estado_plan, grupo_plan: a.grupo_plan, nivel: a.NIV_PLAN, parentId: parentId, tipFam: a.TIP_FAM });
 
                 newId++;
             }
@@ -99,17 +98,22 @@ export async function migrateChartAccounts(
 
 
     if (updateData.length > 0) {
-        const tempValues = updateData.map(d => [d.id, d.parentId, d.tipFam]);
-        console.log(tempValues);
-        const [updateRes] = await conn.query(
-            `INSERT INTO account_plan (ID_PLAN, FK_PAD_PLAN, TIPO_FAM_PLAN) 
+        try {
+            const tempValues = updateData.map(d => [d.idComapny, d.id, d.codigo_plan, d.nombre_plan, d.nombre_plan, d.estado_plan, d.grupo_plan, d.nivel, d.parentId, d.tipFam]);
+          /*   console.log(tempValues); */
+            const [updateRes] = await conn.query(
+                `INSERT INTO account_plan (FK_COD_EMP,ID_PLAN,CODIGO_PLAN,NOM_PLAN, DESC_PLAN,ESTADO_PLAN, GRUPO_PLAN,NIVEL_PLAN, FK_PAD_PLAN, TIPO_FAM_PLAN) 
              VALUES ? 
              ON DUPLICATE KEY UPDATE 
                 FK_PAD_PLAN = VALUES(FK_PAD_PLAN), 
                 TIPO_FAM_PLAN = VALUES(TIPO_FAM_PLAN)`,
-            [tempValues]
-        );
-        console.log(` -> Jerarquías actualizadas en una operación masiva: ${updateData.length} registros afectados.`);
+                [tempValues]
+            );
+            console.log(` -> Jerarquías actualizadas en una operación masiva: ${updateData.length} registros afectados.`);
+        } catch (error) {
+            console.error("Error al actualizar jerarquías:", error);
+        }
+
     }
 
     return mapAccounts;

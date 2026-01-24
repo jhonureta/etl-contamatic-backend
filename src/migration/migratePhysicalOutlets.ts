@@ -188,8 +188,6 @@ FROM
             const creador = userMap[c.crear_codigoUser];
             const historial = historialToArray(c.PHYS_HIST);
 
-            console.log(historial);
-
             const detalle = mapAuditDetPhysical[c.PHYS_NUM];
             return [
                 creador,
@@ -209,7 +207,7 @@ FROM
                 auditId,
                 c.PHYS_FEC_REG
             ];
-        }); /* console.log(values); */
+        });
         try {
             const [res]: any = await conn.query(`
                 INSERT INTO physical_taking(FK_USER, PHYS_NUM, PHYS_OBS, PHYS_RESP, PHYS_FEC, PHYS_FEC_ANU, PHYS_EST, PHYS_DET, TRNF_USE_ANU, PHYS_HIST, FK_COD_EMPRESA, FK_WH_ID, PHYS_ACCOUNT_ZERO, PHYS_ACCOUNT_DIFFZERO, PHYS_AUDIT, PHYS_FEC_REG) VALUES ?`,

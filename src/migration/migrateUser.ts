@@ -26,7 +26,6 @@ async function batchInsertUsers(
     try {
         console.log(` -> Iniciando inserción por lotes de ${filteredUsers.length} usuarios...`);
         const [res]: any = await conn.query(query, [batchValues]);
-        console.log(` -> ${filteredUsers.length} usuarios migrados en lote. InsertId inicial: ${res.insertId}. Tiempo: ${new Date().toISOString()}`);
         let firstInsertedId = res.insertId;
         for (let i = 0; i < filteredUsers.length; i++) {
             userMap[filteredUsers[i].COD_USUEMP] = firstInsertedId + i;
