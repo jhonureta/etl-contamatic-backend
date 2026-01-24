@@ -14,7 +14,7 @@ export async function migrateSuppliersForCompany(
                                     TIPIDE_PROV AS CUST_TIPCI,
                                     NULL AS CUST_CODE_CI,
                                     IDE_PROV AS CUST_CI,
-                                    NULL AS CUST_REL,
+                                    0 AS CUST_REL,
                                     NOM_PROV AS CUST_NOM,
                                     CASE WHEN NOMC_PROV IS NULL OR NOMC_PROV = '' THEN NOM_PROV ELSE NOMC_PROV
                                 END AS CUST_NOMCOM,

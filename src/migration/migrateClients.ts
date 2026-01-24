@@ -35,9 +35,20 @@ export async function migrateClientsForCompany(
                                     CASE WHEN ZON_CLI = '' THEN NULL ELSE ZON_CLI END AS CUST_ZON,
                                     CASE WHEN DIR_CLI = '' THEN NULL ELSE DIR_CLI END AS CUST_DIR,
                                     CASE WHEN DIR_CLI = '' THEN NULL ELSE DIR_CLI END AS CUST_DIR_MAT,
-                                    CASE WHEN TEL_CLI = '' THEN NULL ELSE TEL_CLI END AS CUST_TELF,
-                                    CASE WHEN TEL2_CLI = '' THEN NULL ELSE TEL2_CLI END AS CUST_TEL2,
-                                    CASE WHEN TEL3_CLI = '' THEN NULL ELSE TEL3_CLI END AS CUST_TEL3,
+                                    CASE 
+                                    WHEN TEL_CLI = '' THEN NULL 
+                                    ELSE REGEXP_REPLACE(TEL_CLI, '[^0-9]', '') 
+                                END AS CUST_TELF,
+
+                                CASE 
+                                    WHEN TEL2_CLI = '' THEN NULL 
+                                    ELSE REGEXP_REPLACE(TEL2_CLI, '[^0-9]', '') 
+                                END AS CUST_TEL2,
+
+                                CASE 
+                                    WHEN TEL3_CLI = '' THEN NULL 
+                                    ELSE REGEXP_REPLACE(TEL3_CLI, '[^0-9]', '') 
+                                END AS CUST_TEL3,
                                     CASE WHEN EMA_CLI = '' THEN NULL ELSE EMA_CLI END AS CUST_EMA,
                                     CASE WHEN EMA2_CLI = '' THEN NULL ELSE EMA2_CLI END AS CUST_EMA2,
                                     CASE WHEN EMA3_CLI = '' THEN NULL ELSE EMA3_CLI END AS CUST_EMA3,
@@ -177,7 +188,7 @@ export async function migrateClientsForCompany(
                     CUST_GRUP, CUST_VEND, CUST_INGR, CUST_COUNTRY_EXTR, CUST_EXTR, CUST_FECH_REG, CUST_NAME_EXT,
                     CUST_ADDR_EXT, CUST_CI_EXT, CUST_TIPCI_EXT, CUST_CODE_CI_EXT, CUST_FACT, CUST_CIVIL_EST, CUST_TELF_CODE) VALUES  ?`,
                 [values]
-            ); 
+            );
 
             let newId = res.insertId;
             for (const s of batch) {

@@ -65,7 +65,7 @@ export async function migrateCompany(codEmp: number) {
   try {
     const [rowsEmpresaLegacy] = await legacyConn.query(
       `SELECT *, 1 AS FK_COD_COUNT,'ACTIVO' AS EST_EMP, 'CORPNEWBEST' as CONF_FIRM_PROV, NOMFIRELEC_EMP as CONF_FIRM, CLAVFIRELEC_EMP as CONF_FIRM_PASS,  FECEMISION_FIR AS CONF_FIRM_EMI, FECVENCE_FIR AS CONF_FIRM_EXP,TIPAMB_EMP AS CONF_TIPAMB,
-            EMA_EMP AS CONF_EMAIL_DEFAULT, 1 AS CONF_DESC_VENTA, INVE_EMP as CONF_STOCK  , INVEN_DETALLADO as CONF_INVDET,SELECCION_COSTEO as CONF_COST, DESCUENTO_AUTOMATICO as CONF_DESCAUTO, eliminar_transaccion AS CONF_DELDOCS, pedir_clave as CONF_CLAVE, SELECCION_VENDEDOR as CONF_SELECT_VEND,SELECCION_FECHA as CONF_SELECT_FECHA,
+            EMA_EMP AS CONF_EMAIL_DEFAULT, 1 AS CONF_DESC_VENTA, INVE_EMP as CONF_STOCK  , INVEN_DETALLADO as CONF_INVDET,SELECCION_COSTEO as CONF_COST, DESCUENTO_AUTOMATICO as CONF_DESCAUTO, eliminar_transaccion AS CONF_DELDOCS,case when  pedir_clave ='' THEN NULL ELSE pedir_clave END as CONF_CLAVE, SELECCION_VENDEDOR as CONF_SELECT_VEND,SELECCION_FECHA as CONF_SELECT_FECHA,
             PBX_EMP as CONF_PRECIVA, IMP_SURC_EMP as CONF_INFOSUC,IMP_LOGO  AS CONF_LOGOTICK, PARAM_EMP , '#000000' AS CONF_COLOR_FORMT, 0 as CONF_COLOR_FOND , SEC_EXTR_EMP AS CONF_SECEXT, LEGEND_EMP AS CONF_LEYEND,  TIT_LEGEND_EMP AS CONF_TIT_LEYEND ,
             LEGEND_EMP as CONF_CONT_LEYEND,'#000000' as COLOR_LEYENDA, '#1b6898' as CONF_COLOR_LETR, DATOS_EXTR_EMP ,'[]' as CONF_ITEMS_ADIC, 0 AS CONF_TICKET_AUTOM, 2 AS CONF_BARCODE_NUM, 0 AS CONF_BARCODE_COLOR,  CIERRE_CAJA as CLOSING_BOX, 1 as CONF_TYPE_POINTSALES,NULL AS FECHA_CREACION FROM empresa limit 1`,
     );
@@ -117,7 +117,7 @@ export async function migrateCompany(codEmp: number) {
       e.SELECCION_COSTEO,
       e.EDIT_VENDEDOR,
       e.DESCUENTO_AUTOMATICO,
-      e.TIPEMP_EMP == 'prueba' ? 'pruebas' : 'produccion',
+
       '[]',
       e.LEGEND_EMP,
       e.TIT_LEGEND_EMP,
@@ -133,24 +133,44 @@ export async function migrateCompany(codEmp: number) {
       e.FECHA_CREACION,
       e.EST_EMP.toUpperCase() ?? 'ACTIVO',
       e.CONTADOR ?? 1,
-      vacio
+      vacio,
+      vacio,
+
     ]
 
     await conn.beginTransaction();
-
+    //TIPAMB_EMP
     const [resCompany]: any = await conn.query(
-      `INSERT INTO companies (CODGEN_EMP, RAZSOC_EMP,
-     RUC_EMP, NOMCOM_EMP, NOMFIN_EMP, CIUD_EMP, DIR_EMP, EMA_EMP,
-     TEL_EMP, TEL2_EMP, TEL3_EMP, CODART_EMP, CONT_EMP, CONTESP_EMP, 
-     LOGO_EMP, FK_COD_USU, IDENREPLEG_EMP, NOMREPLEG_EMP, IDENCONT_EMP, 
-     NOMCONT_EMP, TIPAMB_EMP, CODNUMACCES_EMP, secuencial, 
+      `INSERT INTO companies (
+      CODGEN_EMP, 
+      RAZSOC_EMP,
+     RUC_EMP, 
+     NOMCOM_EMP, 
+     NOMFIN_EMP, 
+     CIUD_EMP, 
+     DIR_EMP, 
+     EMA_EMP,
+     TEL_EMP, 
+     TEL2_EMP, 
+     TEL3_EMP, 
+     CODART_EMP, 
+     CONT_EMP, 
+     CONTESP_EMP, 
+     LOGO_EMP, 
+     FK_COD_USU, 
+     IDENREPLEG_EMP, 
+     NOMREPLEG_EMP, 
+     IDENCONT_EMP, 
+     NOMCONT_EMP, 
+     TIPAMB_EMP,
+      CODNUMACCES_EMP, secuencial, 
      estado_secuencial, SUB_EMP, INVE_EMP, regimen, resolucion, 
      eliminar_transaccion, pedir_clave, PARAM_EMP, DETTICKET_EMP, 
      JSON_IMPUESTO, INVEN_DETALLADO, SELECCION_VENDEDOR, SELECCION_FECHA, 
-     SELECCION_COSTEO, EDIT_VENDEDOR, DESCUENTO_AUTOMATICO, TIPEMP_EMP, 
+     SELECCION_COSTEO, EDIT_VENDEDOR, DESCUENTO_AUTOMATICO, 
      JSON_ESTAB, LEGEND_EMP, TIT_LEGEND_EMP, ITEMS_AUT, CLAVRUC_EMP, 
      SEC_EXTR_EMP, DATOS_EXTR_EMP, ACT_DESCRIPCION, IMP_LOGO, IMP_SURC_EMP, COLOR_LEYENDA, 
-     FK_COD_COUNT, FECCREACION_EMP, EST_EMP, CONTADOR,DIRMAT_EMP)
+     FK_COD_COUNT, FECCREACION_EMP, EST_EMP, CONTADOR,DIRMAT_EMP, WHATS_EMP)
     VALUES (?, ?, ?, ?, ?, ?, ?,
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
@@ -792,7 +812,7 @@ export async function migrateCompany(codEmp: number) {
     )
     console.log(mapPhysical);
 
-    await conn.rollback();
+    await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
