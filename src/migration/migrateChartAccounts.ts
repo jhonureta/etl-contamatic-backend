@@ -40,7 +40,7 @@ export async function migrateChartAccounts(
 
     const accounts = rows as any[];
     if (!accounts.length) {
-       throw new Error(" -> No hay plan de cuentas para migrar.");
+        throw new Error(" -> No hay plan de cuentas para migrar.");
     }
 
     const BATCH_SIZE = 1000;
@@ -100,6 +100,7 @@ export async function migrateChartAccounts(
 
     if (updateData.length > 0) {
         const tempValues = updateData.map(d => [d.id, d.parentId, d.tipFam]);
+        console.log(tempValues);
         const [updateRes] = await conn.query(
             `INSERT INTO account_plan (ID_PLAN, FK_PAD_PLAN, TIPO_FAM_PLAN) 
              VALUES ? 
@@ -115,7 +116,7 @@ export async function migrateChartAccounts(
 }
 
 
-async function detectarSecuenciaDuplicados( legacyConn: any) {
+async function detectarSecuenciaDuplicados(legacyConn: any) {
     const [duplicados] = await legacyConn.execute(`
         SELECT codigo_plan, fk_cod_empresa, COUNT(*) as cantidad 
         FROM contabilidad_plan_v2

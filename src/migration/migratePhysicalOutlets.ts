@@ -1,97 +1,5 @@
-/* SELECT
-    COD_TOM,
-    OBS_TOM AS PHYS_OBS,
-    COD_PRO,
-    PRE_COS,
-    ENT_TOM,
-    SAL_TOM,
-    fecha AS PHYS_FEC_REG,
-    SEC_TOM AS PHYS_NUM,
-    sucursal_toma AS FK_WH_ID,
-    RES_TOM AS PHYS_RESP,
-    FEC_TOM AS PHYS_FEC,
-    ABA_TOM,
-    STOACT_TOM,
-    JSON_HISTORIAL AS PHYS_HIST,
-  
-    NULL AS PHYS_DET,
-    NULL AS TRNF_USE_ANU,
-    NULL AS FK_COD_EMPRESA,
-    NULL AS PHYS_ACCOUNT_ZERO,
-    NULL AS PHYS_ACCOUNT_DIFFZERO,
-    NULL AS PHYS_AUDIT,
-    -- CREAR
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.crear.usuario'
-        )
-    ) AS crear_usuario,
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.crear.fechaHora'
-        )
-    ) AS crear_fecha,
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.crear.codigoUser'
-        )
-    ) AS crear_codigoUser,
-    -- EDITADO (primer elemento del array)
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.editados[0].usuario'
-        )
-    ) AS editado_usuario,
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.editados[0].fechaHora'
-        )
-    ) AS editado_fecha,
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.editados[0].codigoUser'
-        )
-    ) AS editado_codigoUser,
-    -- ANULAR
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.anular.usuario'
-        )
-    ) AS anular_usuario,
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.anular.fechaHora'
-        )
-    ) AS PHYS_FEC_ANU,
-    JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.anular.codigoUser'
-        )
-    ) AS anular_codigoUser,
-   CASE WHEN  JSON_UNQUOTE(
-        JSON_EXTRACT(
-            JSON_HISTORIAL,
-            '$.anular.codigoUser'
-        )
-    )IS NULL THEN 'ACTIVO' ELSE 'ANULADO' END AS PHYS_EST
-FROM
-    tomasfisica INNER JOIN contabilidad_asientos ON contabilidad_asientos.FK_CODTOM = tomasfisica.COD_TOM*/
 
 import { upsertTotaledEntry } from "./migrationTools";
-
-
-
-
-
 export async function migratingPhysicalTakeOff(
     legacyConn: any,
     conn: any,
@@ -100,6 +8,9 @@ export async function migratingPhysicalTakeOff(
     userMap: Record<number, number>,
     mapProducts: Record<number, number>,
     mapPeriodo: Record<number, number | null>,
+    mapProject: Record<number, number | null>,
+    mapCenterCost: Record<number, number | null>,
+    mapAccounts: Record<number, number | null>,
 ): Promise<Record<number, number>> {
     console.log("Migrando toma fisica...");
 
@@ -317,7 +228,7 @@ FROM
         }
     }
 
-    await migrateAccountingEntriesRetentions(
+    const mapEntryAccount = await migrateAccountingEntriesPhysicalTakeOff(
         legacyConn,
         conn,
         newCompanyId,
@@ -325,11 +236,22 @@ FROM
         mapAuditPhysical,
     )
 
+    const mapEntryDetailAccount = await migrateDetailedAccountingEntriesPhysicalTakeOff(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapProject,
+        mapCenterCost,
+        mapAccounts,
+        mapEntryAccount.mapEntryAccount
+    )
+
+
     return mapPhysical;
 }
 
 
-export async function migrateAccountingEntriesRetentions(
+export async function migrateAccountingEntriesPhysicalTakeOff(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
@@ -343,7 +265,7 @@ export async function migrateAccountingEntriesRetentions(
     console.log("🚀 Migrando encabezado de asiento contables toma fisica..........");
     try {//IMPORTE_GD
         const mapEntryAccount: Record<number, number> = {};
-        const [rows]: any[] = await legacyConn.query(`ELECT
+        const [rows]: any[] = await legacyConn.query(`SELECT
     cod_asiento,
     fecha_asiento AS FECHA_ASI,
     descripcion_asiento AS DESCRIP_ASI,
@@ -448,7 +370,7 @@ FROM
         throw err;
     }
 }
-export async function migrateDetailedAccountingEntriesRetention(
+export async function migrateDetailedAccountingEntriesPhysicalTakeOff(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
@@ -472,12 +394,10 @@ export async function migrateDetailedAccountingEntriesRetention(
     d.fkProyectoCosto AS FK_COD_PROJECT,
     d.fkCentroCosto AS FK_COD_COST
 FROM
-    retenciones_tarjeta
-INNER JOIN bancos_emisores_retencion ON bancos_emisores_retencion.ID_BAN_RET = retenciones_tarjeta.fk_banco_retenedor
-INNER JOIN contabilidad_asientos ON retenciones_tarjeta.id = contabilidad_asientos.cod_origen
-INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = contabilidad_asientos.cod_asiento
-WHERE
-    tipo_asiento = 'RET-TAR';`);
+    tomasfisica
+INNER JOIN contabilidad_asientos ON contabilidad_asientos.FK_CODTOM = tomasfisica.COD_TOM
+INNER JOIN contabilidad_detalle_asiento d ON
+    d.fk_cod_asiento = contabilidad_asientos.cod_asiento;`);
 
     if (!rows.length) {
         console.log("⚠️ No hay registros para migrar");
