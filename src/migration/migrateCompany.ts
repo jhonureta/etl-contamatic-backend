@@ -36,6 +36,7 @@ import { migrateBankCashTransactions } from './migrateBankCashTransactions';
 import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
 import { migrateDataMovementsRetentionsHolds } from './migrateCardHolds';
 import { migratingPhysicalTakeOff } from './migratePhysicalOutlets';
+import { migrateProductTransfers } from './migrateProductTransfers';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -810,7 +811,16 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
     )
-    console.log(mapPhysical);
+
+    const mapTransfers = await migrateProductTransfers(
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+      userNameIdMap
+    )
 
     await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);

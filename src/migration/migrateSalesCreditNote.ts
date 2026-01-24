@@ -976,7 +976,7 @@ export async function migratePaymentDetails(
 
         if (!rows.length) return { mapDetailObligationsAplicate };
 
-        const BATCH_SIZE = 500; console.log(mapNoteMovementsFull);
+        const BATCH_SIZE = 500;
 
 
         //oldDetailAcountCodeMap

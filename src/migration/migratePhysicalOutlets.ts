@@ -292,7 +292,7 @@ CAST(
         ''
     ) AS UNSIGNED
 ) AS SEC_ASI,
-cod_origen,
+REPLACE(cod_origen, ' (REVERSO POR EDICION)', '') as cod_origen,
 NULL AS FK_MOV,
 contabilidad_asientos.cod_origen AS FK_ANTDET
 FROM
@@ -301,10 +301,7 @@ FROM
         if (!rows.length) {
             return { mapEntryAccount };
         }
-
-
         const BATCH_SIZE = 1000;
-
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
             const batch = rows.slice(i, i + BATCH_SIZE);
             const insertValues: any[] = [];
@@ -313,7 +310,7 @@ FROM
                 const periodoId = mapPeriodo[o.FK_PERIODO]
                 const idAuditTr = mapAuditPhysical[o.cod_origen];
                 const idMovimiento = null;
-
+                console.log(o.cod_origen, idAuditTr);
                 insertValues.push([
                     o.FECHA_ASI,
                     o.DESCRIP_ASI,
@@ -336,7 +333,7 @@ FROM
                 ]);
 
 
-            }
+            } /* console.log(insertValues); */
 
             const [res]: any = await conn.query(`INSERT INTO accounting_movements(
                     FECHA_ASI,

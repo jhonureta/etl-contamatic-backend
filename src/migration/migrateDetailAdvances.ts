@@ -160,9 +160,7 @@ WHERE
                     idPlanCuenta = accountMap.get(codigoPlan) || null;
                 }
                 if (m.MODULO === 'ANT-ORDEN') {
-                    /*  console.log(workOrderSecuencieMap);
-                     console.log(m.ORG_ORDEN);
-                     console.log(m.CONCEP_MOVI); */
+
                     if (m.ORG_ORDEN === 'ANT-ORDEN-VENTA') {
                         transactionId = null;
                     }
