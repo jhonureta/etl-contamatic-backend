@@ -574,7 +574,7 @@ export async function migrateCompany(codEmp: number) {
       idFirstBranch
     })
 
-    await migrateSalesOrders({
+    const { salesOrderIdMap, salesOrderAuditIdMap } = await migrateSalesOrders({
       legacyConn,
       conn,
       newCompanyId,
@@ -700,7 +700,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation,
     })
 
-    await migrateCreditNotesPurchases({
+    const { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap } = await migrateCreditNotesPurchases({
       legacyConn,
       conn,
       newCompanyId,
@@ -863,7 +863,7 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap
     )
 
-    const {mapEntryAccount} = await migrateManualSeats(
+    const { mapEntryAccount } = await migrateManualSeats(
       legacyConn,
       conn,
       newCompanyId,
@@ -871,9 +871,32 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-    ); console.log(mapEntryAccount)
+    );
 
-    await conn.rollback();
+    //= Migracion de Inventario ==//
+    
+    //mapa de todos los comprobantes que ingresan a transacciones
+    const transactionIdMap = {
+      ...mapSales, // Ventas
+      ...salesOrderIdMap, // Ordenes de venta
+      ...purchaseOrderIdMap, // Pedidos
+      ...purchaseLiquidationIdMap, // Compras, liquidaciones,
+      ...creditNotesPurchasesIdMap, // Notas de credito en compras,
+      ...mapCreditNote // Notas de credito
+    };
+
+    const transactionIdToAuditIdMap = {
+      ...mapAuditSales, // Ventas
+      ...salesOrderAuditIdMap, // Ordenes de venta
+      ...purchaseOrderAuditIdMap, // Pedidos
+      ...purchaseLiquidationAuditIdMap, // Compras, liquidaciones,
+      ...creditNotesPurchasesAuditIdMap, // Notas de credito en compras
+      ...mapAuditCreditNote // Notas de credito
+    };
+
+
+
+    await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
