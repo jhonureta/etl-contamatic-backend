@@ -12,6 +12,8 @@ export async function migrateDataMovementsRetentionsHolds(
     mapProject: Record<number, number>,
     mapCenterCost: Record<number, number>,
     mapAccounts: Record<number, number>,
+    mapRetentions: Record<number, number>,
+    mapWithholdingBanks: Record<string, number>
 ): Promise<{ movementIdRetentionsMap: Record<number, number> }> {
     try {
         console.log(`Migrando movimientos de tarjetas`);
@@ -64,7 +66,16 @@ export async function migrateDataMovementsRetentionsHolds(
     NULL AS RECIBO_CAJA,
     NULL AS FK_CTAM_PLAN,
     NULL AS NUMERO_UNIDAD,
-    NULL ASFDP_DET_ANT
+    NULL ASFDP_DET_ANT,
+    subtotal_0 as SUB0_TRAC , 
+    subtotal_12 as SUB12_TRAC , 
+    iva as IVA_TRAC, 
+    total_retencion as TOTALRET_TRAC, 
+    neto_pagar as TOTALNETO_TARJETA, 
+    detalle_retencion AS TARJETA_DETAIL,
+    clave_acceso AS CLAVE_REL_TRANS, 
+    numero_documento AS NUM_REL_DOC,
+    bancos_emisores_retencion.RUC as BANCO_RETENEDOR_RUC
 FROM
     retenciones_tarjeta
 INNER JOIN bancos_emisores_retencion ON bancos_emisores_retencion.ID_BAN_RET = retenciones_tarjeta.fk_banco_retenedor
@@ -197,6 +208,37 @@ WHERE
             });
 
 
+            //agregar card holds
+            const valCards = batchMovements.forEach(o => {
+                const currentAuditId = mapAuditRetentions[o.ID_MOVI];
+                const retencionVentaNueva = adaptarEstructuraMultiple(mapRetentions, o.TARJETA_DETAIL);
+                const idMov = movementIdRetentionsMap[o.ID_MOVI];
+                const idBanRet = mapWithholdingBanks[o.BANCO_RETENEDOR_RUC] ?? null;
+
+                return [
+                    o.FECHA_MOVI,
+                    o.SUB12_TRAC,
+                    o.SUB0_TRAC,
+                    o.IVA_TRAC,
+                    o.TOTALRET_TRAC,
+                    o.TOTALNETO_TARJETA,
+                    JSON.stringify(retencionVentaNueva),
+                    cardId,
+                    idBanRet,
+                    null,
+                    currentAuditId,
+                    idMov,
+                    newCompanyId,
+                    o.NUM_REL_DOC,
+                    o.CLAVE_REL_TRANS
+                ];
+            });
+            const [resCardsHolds]: any = await conn.query(
+                `INSERT INTO card_holds(FECREG_RETENCION, SUBDIFERENTE_TARJETA, SUBCERO_TARJETA, IVA_TARJETA, TOTAL_TARJETA, TOTALNETO_TARJETA, TARJETA_DETAIL, 
+                FK_TARJETA, FK_BANKRET, FK_CODTRAN, FK_AUDITMV, FK_MOV, FK_COD_EMP, NUMERO_TARJETA, 
+                CLAVE_TARJETA) VALUES ?`,
+                [valCards]
+            );
         }
         console.log("✅ Migración  movimientos de tarjetas completada correctamente");
         const mapEntryAccount = await migrateAccountingEntriesRetentions(
@@ -223,6 +265,92 @@ WHERE
         throw error;
     }
 }
+
+
+
+
+function formatDecimal(value: any, decimals: number = 2): string {
+    const num = typeof value === 'number' ? value : parseFloat(value || 0);
+    return isNaN(num) ? '0.00' : num.toFixed(decimals);
+};
+
+function parseInteger(value: any): number | null {
+    const num = parseInt(value, 10);
+    return isNaN(num) ? null : num;
+};
+
+function adaptarEstructuraMultiple(mapRetentions, estructuraAntigua: any): any[] {
+    try {
+        // Parsear si es string JSON
+        let datos = estructuraAntigua;
+        if (typeof estructuraAntigua === 'string') {
+            try {
+                datos = JSON.parse(estructuraAntigua);
+            } catch (parseError) {
+                console.error('Error al parsear JSON de retencion:', parseError);
+                return [];
+            }
+        }
+
+        // Normalizar: si viene como array, tomar el primer elemento; si es objeto, usarlo directamente
+        const datosOriginales = Array.isArray(datos) ? datos[0] : datos;
+
+        if (!datosOriginales || typeof datosOriginales !== 'object') {
+            console.warn('Estructura de retención vacía o inválida');
+            return [];
+        }
+
+        // Mapear retenciones por renta (Retención en la Fuente)
+        const nuevasRetencionesRenta = (datosOriginales.listadoRetenciones || [])
+            .filter((ret: any) => ret && ret.renta) // Filtrar nulos/undefined y renta vacío
+            .map((ret: any) => ({
+                codigoRenta: ret.renta || null,
+                idRetRenta: mapRetentions[ret.idRetencionRenta],
+                nombreRenta: ret.nombreRetencionFuente || null,
+                porcentajeRenta: formatDecimal(ret.porcentaje),
+                subtotalBase0: formatDecimal(ret.subtotalBase0),
+                subtotalDiferente: formatDecimal(ret.subtotalDiferente),
+                valorRetenido: formatDecimal(ret.valorRetenido)
+            }));
+
+        // Mapear retenciones por IVA
+        const nuevasRetencionesIva = (datosOriginales.listadoRetencionesIva || [])
+            .filter((ret: any) => ret && ret.rentaIva)
+            .map((ret: any) => {
+                // Filtrar impuestos activos con tarifa > 0
+                const impuestosActivos = (ret.arraryImpuestos || [])
+                    .filter((imp: any) => imp && imp.impuestoActivoIva === 1 && parseFloat(imp.tarifa) > 0)
+                    .map((imp: any) => ({
+                        codigo: parseInteger(imp.codigo),
+                        tarifa: parseInteger(imp.tarifa),
+                        total: formatDecimal(imp.total)
+                    }));
+
+                return {
+                    codigoIva: ret.rentaIva || null,
+                    idRetIva: mapRetentions[ret.idRetencionIva],
+                    nombreIva: ret.nombreRetencionIva || null,
+                    porcentajeIva: formatDecimal(ret.porcentajeIva),
+                    subtotalDiferenteIva: formatDecimal(ret.subtotalDiferenteIva),
+                    valorRetenido: formatDecimal(ret.valorRetenidoIva),
+                    impuestos: impuestosActivos
+                };
+            });
+
+        return [
+            {
+                listadoRetenciones: nuevasRetencionesRenta,
+                listadoRetencionesIva: nuevasRetencionesIva
+            }
+        ];
+    } catch (error) {
+        console.error('Error en adaptarEstructuraMultiple:', error);
+        return [];
+    }
+};
+
+
+
 
 export async function migrateAccountingEntriesRetentions(
     legacyConn: any,

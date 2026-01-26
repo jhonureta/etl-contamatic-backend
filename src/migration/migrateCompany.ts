@@ -40,6 +40,7 @@ import { migratingPhysicalTakeOff } from './migratePhysicalOutlets';
 import { migrateSalesOrders } from './migrateSalesOrders';
 import { migrateProductTransfers } from './migrateProductTransfers';
 import { migrateManualSeats } from './migrateManualSeats';
+import { migrateWithholdingBanks } from './migratewithholdingBanks';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -468,6 +469,10 @@ export async function migrateCompany(codEmp: number) {
       conn,
       newCompanyId
     );
+    const {mapWithholdingBanks} = await migrateWithholdingBanks(
+      legacyConn,
+      conn
+    );
 
 
     const mapBrand = await migrateBrand(
@@ -822,6 +827,7 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
+
       workOrderSecuencieMap
     );
 
@@ -838,6 +844,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
+      mapRetentions,
+      mapWithholdingBanks
     )
 
     const mapPhysical = await migratingPhysicalTakeOff(
@@ -863,7 +871,7 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap
     )
 
-    const {mapEntryAccount} = await migrateManualSeats(
+    const { mapEntryAccount } = await migrateManualSeats(
       legacyConn,
       conn,
       newCompanyId,
