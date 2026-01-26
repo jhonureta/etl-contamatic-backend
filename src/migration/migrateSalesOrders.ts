@@ -1,3 +1,4 @@
+import { isValidJSONForDB } from "./migrationTools";
 import { findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
 
 export async function migrateSalesOrders({
@@ -137,6 +138,9 @@ export async function migrateSalesOrders({
           storeMap
         );
 
+        const infoAdi = isValidJSONForDB(workOrder.INFO_ADIC) ? workOrder.INFO_ADIC : null;
+        const itemsProf = isValidJSONForDB(workOrder.ITEMS_PROF) ? workOrder.ITEMS_PROF : null;
+
         return [
           workOrder.PUNTO_EMISION_DOC,
           workOrder.SECUENCIA_DOC,
@@ -201,10 +205,10 @@ export async function migrateSalesOrders({
           workOrder.DIV_PAY_YEAR,
           null,
           workOrder.RESP_SRI,
-          workOrder.INFO_ADIC,
+          infoAdi,
           workOrder.DET_EXP_REEMBOLSO,
           JSON.stringify(toJSONArray(workOrder.JSON_METODO)),
-          workOrder.ITEMS_PROF,
+          itemsProf,
           workOrder.OBS_AUXILIAR,
           workOrder.OBS_ORDEN,
         ];

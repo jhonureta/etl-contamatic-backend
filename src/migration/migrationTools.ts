@@ -202,3 +202,16 @@ export function chunk<T>(array: T[], size: number): T[][] {
     }
     return result;
 }
+
+export function isValidJSONForDB(str) {
+  if (typeof str !== 'string' || str.trim() === '') return false;
+  try {
+    const parsed = JSON.parse(str);
+    // Acepta: objeto {} o array []
+    if (Array.isArray(parsed)) return true;
+    if (parsed !== null && typeof parsed === 'object') return true;
+    return false; // rechaza: number, string, boolean
+  } catch {
+    return false;
+  }
+}

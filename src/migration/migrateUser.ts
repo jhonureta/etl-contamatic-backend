@@ -102,7 +102,7 @@ export async function migrateUsersForCompany(
     const userNameIdMap = new Map<string, UserIdentity>();
     for (const u of users) {
         const branchId = dataBaseIds.branchMap[u.idSucursal];
-        const userId = userMap[u.CCOD_USUEMP];
+        const userId = userMap[u.COD_USUEMP];
 
         const key = `${branchId}-${userId}`;
         if (!detailSet.has(key)) {
