@@ -13,21 +13,23 @@ interface MigrateShippingGuideParams {
   clientNameIdMap: Map<string, ClientIdentity>;
   vehicleIdMap: Record<number, number>,
   storeMap: Record<number, number>;
+  idFirstBranch: number;
 }
 
 export async function migrateShippingGuide({
   legacyConn,
   conn,
   newCompanyId,
-  mapClients,
   mapProducts,
   branchMap,
   userNameIdMap,
   clientNameIdMap,
-  vehicleIdMap,
-  storeMap
+  storeMap,
+  idFirstBranch
 }: MigrateShippingGuideParams) {
   try {
+    const shippingGuideIdMap: Record<number, number> = {};
+    const shippingGuideAuditIdMap: Record<number, number> = {};
     const [shippingGuide]: any[] = await legacyConn.query(`
       SELECT
           g.COD_GUIAR AS COD_TRANS,
@@ -129,7 +131,7 @@ export async function migrateShippingGuide({
           ;
     `);
     if (shippingGuide.length === 0) {
-      throw new Error(" -> No hay guías de envío para migrar.");
+      return { shippingGuideIdMap, shippingGuideAuditIdMap };
     }
     const branchSequenseQuery: string = `
     SELECT
@@ -142,19 +144,13 @@ export async function migrateShippingGuide({
 
     const [sequentialBranches]: any[] = await legacyConn.query(branchSequenseQuery, [newCompanyId]);
 
-    let idFirstBranch: number | null = null;
-    if (sequentialBranches && sequentialBranches.length > 0) {
-      idFirstBranch = Number(sequentialBranches[0].COD_SURC);
-    }
-
     const electronicSequences = new Map<string, number>();
     sequentialBranches.forEach((branch: any, index: number) => {
       electronicSequences.set(branch.ELECTRONICA, branch.COD_SURC);
     });
 
     const BATCH_SIZE = 1000;
-    const shippingGuideIdMap: Record<number, number> = {};
-    const shippingGuideAuditIdMap: Record<number, number> = {};
+
 
     const [[defaultUser], [defaultCustomer]] = await Promise.all([
       findFirstDefaultUser({ conn, companyId: newCompanyId }),
@@ -206,13 +202,13 @@ export async function migrateShippingGuide({
 
         let branchId: number = idFirstBranch;
         if (electronicSequences.has(shippingGuide.PUNTO_EMISION_DOC)) {
-          branchId = electronicSequences.get(shippingGuide.PUNTO_EMISION_DOC);
+          let oldBranchId = electronicSequences.get(shippingGuide.PUNTO_EMISION_DOC);
+          branchId = branchMap[oldBranchId] || idFirstBranch;
         }
 
         const detailTransformed = transformProductDetail(
           productDetails,
           mapProducts,
-          branchMap,
           idFirstBranch,
           storeMap
         );
@@ -402,13 +398,12 @@ export async function migrateShippingGuide({
 function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
-  branchMap: Record<number, number>,
   idFirstBranch: number | null,
   storeMap: Record<number, number>
 ) {
   const detailTransformed = inputDetail.map((item: any) => {
-    const idProducto = mapProducts[item.idProducto] || null;
-    const idBodega = storeMap[item.idBodega] || idFirstBranch;
+    const idProducto = mapProducts[item?.idProducto] || "";
+    const idBodega = storeMap[item?.idBodega] || idFirstBranch;
     return {
       idProducto,
       idBodega,

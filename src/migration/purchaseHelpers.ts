@@ -43,7 +43,7 @@ type FindFirstDefaultCustomerParams = {
   companyId: number
 }
 
-const codigoIvaPorcentaje: Record<string, number> = {
+export const codigoIvaPorcentaje: Record<string, number> = {
   '12': 2,
   '0': 0,
   '14': 3,
@@ -124,7 +124,7 @@ function transformProductsMerchandise(
     const cost = isOld ? toNumber(product.precioProducto) : toNumber(product.costoProducto);
     const manualPrice = isOld ? 1 : toInteger(mapProducts[product.preciomanual]);
     return {
-      idProducto: toInteger(mapProducts[product.idProducto]),
+      idProducto: mapProducts[product.idProducto] || '',
       idBodega,
       bodega: String(product.bodega ?? ''),
       codigo,

@@ -34,8 +34,10 @@ import { migratePurchaseOrderMovements, migratePurchaseOrders } from './migrateP
 import { migrateDataMovements } from './migrateDetailAdvances';
 import { migrateBankCashTransactions } from './migrateBankCashTransactions';
 import { migrateDataMovementsSuppliersAdvances } from './migrateSupplierAdvancePayments';
+import { migrateCreditNotesPurchases } from './migrateCreditNotesPurchases';
 import { migrateDataMovementsRetentionsHolds } from './migrateCardHolds';
 import { migratingPhysicalTakeOff } from './migratePhysicalOutlets';
+import { migrateSalesOrders } from './migrateSalesOrders';
 import { migrateProductTransfers } from './migrateProductTransfers';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
@@ -364,7 +366,7 @@ export async function migrateCompany(codEmp: number) {
       throw new Error(`Error al migrar plan de empresa =${codEmp}`);
     }
     console.log(` -> Plan de la empresa migrado correctamente`);
-    const { branchMap, storeMap } = await migrateBranchesForCompany(
+    const { branchMap, storeMap, idFirstBranch } = await migrateBranchesForCompany(
       legacyConn,
       conn,
       newCompanyId
@@ -555,7 +557,8 @@ export async function migrateCompany(codEmp: number) {
       mapClients,
       mapProducts,
       branchMap,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
     //== Migrar ordenes de trabajos ===/
@@ -566,8 +569,19 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       mapClients,
       mapProducts,
-      branchMap,
-      storeMap
+      storeMap,
+      idFirstBranch
+    })
+
+    await migrateSalesOrders({
+      legacyConn,
+      conn,
+      newCompanyId,
+      userMap,
+      mapClients,
+      mapProducts,
+      storeMap,
+      idFirstBranch
     })
 
     //== Migrar vehiculos ===/
@@ -588,7 +602,8 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap,
       clientNameIdMap,
       vehicleIdMap,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
 
@@ -604,7 +619,8 @@ export async function migrateCompany(codEmp: number) {
       oldRetentionCodeMap,
       newRetentionIdMap,
       mapCostExpenses: costExpenseIdMapping,
-      storeMap
+      storeMap,
+      idFirstBranch
     })
 
     //== Migrar movimientos de pedidos  ===/
@@ -637,7 +653,8 @@ export async function migrateCompany(codEmp: number) {
       oldRetentionCodeMap,
       newRetentionIdMap,
       mapCostExpenses: costExpenseIdMapping,
-      storeMap
+      storeMap,
+      idFirstBranch
     });
 
     //== Migrar anticipos de proveedores ===/
@@ -680,6 +697,29 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapConciliation,
+    })
+
+    await migrateCreditNotesPurchases({
+      legacyConn,
+      conn,
+      newCompanyId,
+      branchMap,
+      userMap,
+      mapSuppliers,
+      mapProducts,
+      oldProductCodeMap,
+      purchaseLiquidationIdMap,
+      purchaseLiquidationAuditIdMap,
+      bankMap,
+      boxMap,
+      mapConciliation,
+      purchaseLiquidationObligationIdMap,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      idFirstBranch,
+      storeMap
     })
 
     //== Migrar movimientos de retenciones en ventas ===/

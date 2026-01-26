@@ -4,7 +4,7 @@ export async function migrateBranchesForCompany(
   legacyConn: any,
   conn: any,
   newCompanyId: number
-): Promise<{ branchMap: Record<number, number>; storeMap: Record<number, number> }> {
+): Promise<{ branchMap: Record<number, number>; storeMap: Record<number, number>, idFirstBranch: number }> {
   console.log("Migrando sucursales...");
 
   const [rows] = await legacyConn.query(`SELECT
@@ -44,6 +44,7 @@ LEFT JOIN bodegas ON bodegas.FK_COD_SURCBOD = sucursales.COD_SURC;`);
   const BATCH_SIZE = 1000;
   const branchMap: Record<number, number> = {};
   const storeMap: Record<number, number> = {};
+  let idFirstBranch: number | null = null; 
   for (let i = 0; i < sucursales.length; i += BATCH_SIZE) {
     const batch = sucursales.slice(i, i + BATCH_SIZE);
 
@@ -98,6 +99,7 @@ LEFT JOIN bodegas ON bodegas.FK_COD_SURCBOD = sucursales.COD_SURC;`);
       );
 
       let newId = res.insertId;
+      idFirstBranch = Number(newId);
       for (const s of batch) {
         branchMap[s.COD_SURC] = newId;
         storeMap[s.COD_BOD] = newId;
@@ -111,5 +113,5 @@ LEFT JOIN bodegas ON bodegas.FK_COD_SURCBOD = sucursales.COD_SURC;`);
     }
   }
 
-  return { branchMap, storeMap };
+  return { branchMap, storeMap, idFirstBranch };
 }

@@ -1,6 +1,6 @@
 import { findNextAuditCode, toJSONArray, toNumber } from "./purchaseHelpers";
 
-export async function migrateWorkOrders({
+export async function migrateSalesOrders({
   legacyConn,
   conn,
   newCompanyId,
@@ -9,14 +9,14 @@ export async function migrateWorkOrders({
   mapProducts,
   storeMap,
   idFirstBranch
-}) {
+}): Promise<{ salesOrderIdMap: Record<number, number>, salesOrderAuditIdMap: Record<number, number> }> {
+
   try {
-    console.log("Migrando ordenes de trabajos");
-    const workOrderIdMap: Record<number, number> = {};
-    const workOrderAuditIdMap: Record<number, number> = {};
-    const workOrderSecuencieMap: Record<number, number> = {};
-    
-    const [workOrders]: any[] = await legacyConn.query(`
+    console.log("Migrando ordenes de trabajo...");
+    const salesOrderIdMap: Record<number, number> = {};
+    const salesOrderAuditIdMap: Record<number, number> = {};
+
+    const [salesOrders]: any[] = await legacyConn.query(`
       SELECT
           COD_TRAC AS COD_TRANS,
           NULL AS PUNTO_EMISION_DOC,
@@ -69,7 +69,7 @@ export async function migrateWorkOrders({
           DES_TRAC AS DSTO_TRAC,
           NULL AS FK_CODSUCURSAL,
           NULL AS FK_AUDITTR,
-          'orden' AS TIP_TRAC,
+          'orden-venta' AS TIP_TRAC,
           fecha AS FECHA_REG,
           DET_TRAC AS DOCUMENT_DETAIL,
           NULL AS PUNTO_EMISION_REC,
@@ -92,27 +92,26 @@ export async function migrateWorkOrders({
       FROM
           transacciones
       WHERE
-          transacciones.TIP_TRAC = 'orden'
+          transacciones.TIP_TRAC = 'orden-venta'
       ORDER BY
           COD_TRAC
       DESC
-          ;      
+          ;
     `);
 
-    if (workOrders.length === 0) {
-      return { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap };
+    if (salesOrders.length === 0) {
+      return { salesOrderIdMap, salesOrderAuditIdMap };
     }
 
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     const BATCH_SIZE = 1000;
-    for (let i = 0; i < workOrders.length; i += BATCH_SIZE) {
-
-      const batch = workOrders.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < salesOrders.length; i += BATCH_SIZE) {
+      const batch = salesOrders.slice(i, i + BATCH_SIZE);
 
       const auditValues = batch.map(() => [
         nextAudit++,
-        "ORDEN",
+        "ORDEN-VENTA",
         newCompanyId,
       ]);
 
@@ -120,9 +119,7 @@ export async function migrateWorkOrders({
         `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
         [auditValues]
       );
-
       const firstInsertedAuditId = resultCreateAudit.insertId;
-
       const workOrderValues = batch.map((workOrder, index: number) => {
         console.log(`transformando y normalizando ORDEN DE TRABAJO ${workOrder.NUM_TRANS}`);
         const productDetails = toJSONArray(workOrder.DOCUMENT_DETAIL);
@@ -131,7 +128,7 @@ export async function migrateWorkOrders({
         const clientId = mapClients[workOrder.FK_PERSON];
 
         const auditId = firstInsertedAuditId + index;
-        workOrderAuditIdMap[workOrder.COD_TRANS] = auditId;
+        salesOrderAuditIdMap[workOrder.COD_TRANS] = auditId;
 
         const { detailTransformed, branchId } = transformProductDetail(
           productDetails,
@@ -213,7 +210,7 @@ export async function migrateWorkOrders({
         ];
       });
 
-      const [resultCreateWorkOrders]: any = await conn.query(`
+      const [resultCreateSalesOrders]: any = await conn.query(`
         INSERT INTO transactions(
             PUNTO_EMISION_DOC,
             SECUENCIA_DOC,
@@ -288,22 +285,20 @@ export async function migrateWorkOrders({
         VALUES ?
       `, [workOrderValues]);
 
-      let nextId = resultCreateWorkOrders.insertId;
+      let nextId = resultCreateSalesOrders.insertId;
       batch.forEach(({ COD_TRANS, NUM_TRANS }) => {
         let secNext = nextId++;
-        workOrderIdMap[COD_TRANS] = secNext;
-        workOrderSecuencieMap[NUM_TRANS] = secNext;
+        salesOrderIdMap[COD_TRANS] = secNext;
       });
-      console.log(` -> Batch migrado: ${batch.length} ordenes de trabajos`);
+      console.log(` -> Batch migrado: ${batch.length} ordenes de venta`);
     }
 
-    return { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap };
+    return { salesOrderIdMap, salesOrderAuditIdMap};
   } catch (error) {
-    console.error("Error al migrar ordenes de trabajos:", error);
+    console.error("Error al migrar ordenes de venta:", error);
     throw error;
   }
 }
-
 function transformProductDetail(
   inputDetail: any,
   mapProducts: Record<number, number>,
@@ -317,6 +312,7 @@ function transformProductDetail(
     const mappedBodega = storeMap[item?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;
     const idBodega = mappedBodega || idFirstBranch;
+   
     return {
       idProducto,
       idBodega,
