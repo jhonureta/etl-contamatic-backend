@@ -39,6 +39,7 @@ import { migrateDataMovementsRetentionsHolds } from './migrateCardHolds';
 import { migratingPhysicalTakeOff } from './migratePhysicalOutlets';
 import { migrateSalesOrders } from './migrateSalesOrders';
 import { migrateProductTransfers } from './migrateProductTransfers';
+import { migrateManualSeats } from './migrateManualSeats';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -862,7 +863,17 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap
     )
 
-    await conn.commit();
+    const {mapEntryAccount} = await migrateManualSeats(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+    ); console.log(mapEntryAccount)
+
+    await conn.rollback();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
@@ -888,7 +899,7 @@ export async function migrateCompany(codEmp: number) {
     console.log("OBLIGACIONES MIGRADAS:", Object.keys(mapObligationsCustomers.mapObligationsCustomers).length);
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
     console.log("ANTICIPOS CLIENTES:", Object.keys(mapAdvancesCustomers).length);
-
+    console.log("MIGRACION DE ASIENTOS MANUALES:", Object.keys(mapEntryAccount).length);
 
     return newCompanyId;
   } catch (error) {
