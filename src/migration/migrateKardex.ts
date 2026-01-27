@@ -67,16 +67,26 @@ export async function migrateKardex({
     for (let i = 0; i < kardexInventory.length; i += BATCH_SIZE) {
       const batch = kardexInventory.slice(i, i + BATCH_SIZE);
 
-      const kardexValues = batch.flatMap((kardex: any) => {
+      const kardexValues = batch.flatMap((kardex: any, index: number) => {
 
         const productId = mapProducts[kardex.FK_PROD_ID];
         const userId = userMap[kardex.FK_USER_ID];
         const warehouseId = storeMap[kardex.FK_WH_ID];
         const transactionId = transactionIdMap[kardex.FK_DOC_ID];
 
-        const keyGeneral = `G`;
-        const keyBodega = `W`;
-        
+        let keyGeneral = '';
+        let keyBodega = '';
+
+        if (kardex.KDX_TYPEDOC === 'VENTA' ||
+          kardex.KDX_TYPEDOC === 'COMPRA' ||
+          kardex.KDX_TYPEDOC === 'NOTA CREDITO COMPRA') {
+          keyGeneral = `G${index}`;
+          keyBodega = `W${index}`;
+        } else if (kardex.KDX_TYPEDOC === 'TOMA FISICA') {
+          keyGeneral = '';
+          keyBodega = '';
+        }
+
         // Mapeo de kardex para doble registro como lo tiene el sistema actual
         return [
           [
