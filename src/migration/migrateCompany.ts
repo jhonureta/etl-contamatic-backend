@@ -469,12 +469,13 @@ export async function migrateCompany(codEmp: number) {
       conn,
       newCompanyId
     );
-    const {mapWithholdingBanks} = await migrateWithholdingBanks(
+    const { mapWithholdingBanks } = await migrateWithholdingBanks(
       legacyConn,
       conn
     );
 
-
+    /*  await conn.rollback();
+     return; */
     const mapBrand = await migrateBrand(
       legacyConn,
       conn,
@@ -827,7 +828,6 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-
       workOrderSecuencieMap
     );
 
@@ -845,7 +845,8 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapRetentions,
-      mapWithholdingBanks
+      mapWithholdingBanks,
+      oldRetentionCodeMap
     )
 
     const mapPhysical = await migratingPhysicalTakeOff(
@@ -879,9 +880,9 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-    ); console.log(mapEntryAccount)
+    );
 
-    await conn.rollback();
+    await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
