@@ -1,3 +1,5 @@
+import { findFirstDefaultUser } from "./purchaseHelpers";
+
 export async function migrateCajas(
     legacyConn: any,
     conn: any,
@@ -20,6 +22,13 @@ export async function migrateCajas(
 
         console.log(` -> Batch migrado: ${cajasMigradas.length} cajas`);
 
+        const [defaultUser] = await findFirstDefaultUser({ conn, companyId: newCompanyId });
+
+        let defaultUserId = null;
+        if (defaultUser) {
+            defaultUserId = defaultUser.COD_USUEMP;
+        }
+
         // 3️⃣ Iterar cajas migradas
         for (const caja of cajasMigradas as any[]) {
             const planCountId = mapAccounts[caja.FK_CTA_PLAN] ?? null;
@@ -39,7 +48,11 @@ export async function migrateCajas(
             }
 
             // Insertar detalle solo si hay usuarios
-            const firstUserId = userMap[caja.FK_COD_USU];
+            const firstUserId = userMap[caja.FK_COD_USU] ?? defaultUserId;
+
+            console.log(userMap, caja.FK_COD_USU, defaultUserId);
+
+
             const detail = await createBoxDetailReg(conn, {
                 userId: firstUserId,
                 boxId: data.insertId,

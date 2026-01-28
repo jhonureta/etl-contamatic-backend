@@ -88,14 +88,14 @@ export async function migrateDocRetentions(
         });
 
         const [res]: any = await conn.query(
-            `INSERT INTO docRetentions (COD_RET, D_ISSUE_RET, D_AUTHORIZATION_RET, TYPE_ISSUE_RET, DOC_RELATION_RET, TYPE_INVOICE_RET, CODE_DOC_RET, SERIE_RET, TRANSMITTER_RUC_RET, RAZSOC_EMP_RET, IDENT_RECEIVER_RET, ACCESS_KEY_RET, N_AUTHORIZATION_RET, TOTAL_AMOUNT_RET, STATE_RET, STATE_FILE_RET, FK_COD_EMP, FK_AUDIT) VALUES ?`,
+            `INSERT INTO retention_sri (COD_RET, D_ISSUE_RET, D_AUTHORIZATION_RET, TYPE_ISSUE_RET, DOC_RELATION_RET, TYPE_INVOICE_RET, CODE_DOC_RET, SERIE_RET, TRANSMITTER_RUC_RET, RAZSOC_EMP_RET, IDENT_RECEIVER_RET, ACCESS_KEY_RET, N_AUTHORIZATION_RET, TOTAL_AMOUNT_RET, STATE_RET, STATE_FILE_RET, FK_COD_EMP, FK_AUDIT) VALUES ?`,
             [values]
         );
 
         let newId = res.insertId;
 
         for (const b of batch) {
-            mapRetentionsSri[b.ID_PROJECT] = newId;
+            mapRetentionsSri[b.cod_retsri] = newId;
             newId++;
         }
 

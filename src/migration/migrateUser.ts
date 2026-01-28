@@ -113,7 +113,7 @@ export async function migrateUsersForCompany(
             id: userId,
             ci: u.IDE_USUEMP
         });
-    }
+    } console.log(detailValues);
 
     if (detailValues.length > 0) {
         await conn.query(

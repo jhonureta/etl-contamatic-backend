@@ -88,10 +88,7 @@ export async function migrateProductTransfers(
             }));
     }
 
-    const [[defaultUser]] = await Promise.all([
-        findFirstDefaultUser({ conn, companyId: newCompanyId }),
-
-    ]);
+    const [defaultUser] = await findFirstDefaultUser({ conn, companyId: newCompanyId });
 
     let defaultUserId = null;
     if (defaultUser) {

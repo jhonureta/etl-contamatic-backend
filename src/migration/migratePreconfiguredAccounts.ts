@@ -124,8 +124,7 @@ export async function migratePreconfiguredAccounts(
     const processCuenta = async ({ detalle, codigo, parameterIds, newCompanyId }, conn) => {
         const cuentaData = await consultarCuentaCodigoContable(codigo, newCompanyId, conn);
         if (!cuentaData.length) {
-            throw new Error(`Cuenta contable no encontrada: ${codigo}`);
-
+            return 1;
         }
         console.log(`Cuenta contable pre procesando: ${codigo}`);
         const codIdPlan = cuentaData[0].ID_PLAN;

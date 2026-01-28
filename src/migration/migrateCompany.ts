@@ -42,6 +42,7 @@ import { migrateProductTransfers } from './migrateProductTransfers';
 import { migrateManualSeats } from './migrateManualSeats';
 import { migrateWithholdingBanks } from './migratewithholdingBanks';
 import { migrateDocRetentions } from './migrateSriWithholdings';
+import { migrateSeatsCostSales } from './migrateSeatsCostSales';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -470,7 +471,7 @@ export async function migrateCompany(codEmp: number) {
       conn,
       newCompanyId
     );
-    const {  mapWithholdingBanks  } = await migrateWithholdingBanks(
+    const { mapWithholdingBanks } = await migrateWithholdingBanks(
       legacyConn,
       conn
     );
@@ -796,7 +797,7 @@ export async function migrateCompany(codEmp: number) {
       workOrderSecuencieMap
     );
 
-
+    //== Migrar movimientos , cajas y bancos ===/
     const migrateCashBank = await migrateBankCashTransactions(
       legacyConn,
       conn,
@@ -811,7 +812,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     )
 
-
+    //== Migrar anticipos proveedores ===/
     const migrateSuppliersAdvances = await migrateDataMovementsSuppliersAdvances(
       legacyConn,
       conn,
@@ -832,7 +833,7 @@ export async function migrateCompany(codEmp: number) {
       workOrderSecuencieMap
     );
 
-
+    //== Migrar retencion de tarjetas ===/
     const migrateCardsHolds = await migrateDataMovementsRetentionsHolds(
       legacyConn,
       conn,
@@ -849,7 +850,7 @@ export async function migrateCompany(codEmp: number) {
       mapWithholdingBanks,
       oldRetentionCodeMap
     )
-
+    //== Migrar tomas fisicas ===/
     const mapPhysical = await migratingPhysicalTakeOff(
       legacyConn,
       conn,
@@ -862,7 +863,7 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
     )
-
+    //== Migrar transferencias ===/
     const mapTransfers = await migrateProductTransfers(
       legacyConn,
       conn,
@@ -872,7 +873,7 @@ export async function migrateCompany(codEmp: number) {
       mapProducts,
       userNameIdMap
     )
-
+    //== Migrar asientos manuales ===/
     const { mapEntryAccount } = await migrateManualSeats(
       legacyConn,
       conn,
@@ -881,17 +882,32 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-    );;
-
+    );
+    //== Migrar asientos de costo en ventas ===/
+    const mapSeatsCostSales = await migrateSeatsCostSales(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      mapSales,
+      mapAuditSales,
+      mapCreditNote,
+      mapAuditCreditNote
+    ); 
+    //== Migrar documentos recibidos sri ===/
     const mapRetentionsSri = await migrateDocRetentions(
       legacyConn,
       conn,
       newCompanyId,
       purchaseLiquidationAuditIdMap,
       mapAuditSales
-    ); console.log(mapRetentionsSri);
+    );
 
-    await conn.commit();
+    await conn.rollback();
+
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);

@@ -847,6 +847,7 @@ export async function migrateMovementsObligations(
             for (const o of batch) {
                 mapMovements[o.COD_TRANS] = newId++;
             }
+             console.log(`✅ Migración batch ${i+1} correctamente`);
         }
         console.log("✅ Migración completada correctamente");
         return { mapMovements };
