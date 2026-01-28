@@ -842,12 +842,15 @@ DESC;`);
 
     const ventas = rows as any[];
 
+      const mapNoteMovementsFull: Record<number, number> = { ...mapNoteMovements };
+
+
     if (!ventas.length) {
-        throw new Error(" -> No hay retenciones para migrar.");
+     
+        return { mapNoteMovementsFull };
     }
     /* const mapNoteMovementsFull= mapNoteMovements; */
-    const mapNoteMovementsFull: Record<number, number> = { ...mapNoteMovements };
-
+  
     const BATCH_SIZE = 1000;
 
 

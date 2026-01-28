@@ -125,9 +125,13 @@ DESC;`);
     // AND (detalle_anticipos.ID_DET_ANT IS  NULL or detalle_anticipos.ID_DET_ANT = '') and  (m.ID_MOVI    IS  NULL or m.ID_MOVI = '')
 
     const ventas = rows as any[];
+    const mapRetAuditSales: Record<number, number> = {};
+    let movAudit = [];
+
 
     if (!ventas.length) {
-        throw new Error(" -> No hay retenciones para migrar.");
+
+        return { mapRetMovements, mapRetAuditSales, movAudit };
     }
 
     //Ultima secuencia de auditoria
@@ -138,7 +142,7 @@ DESC;`);
 
     const BATCH_SIZE = 1000;
     /*  const mapSales: Record<number, number> = {}; */
-    const mapRetAuditSales: Record<number, number> = {};
+
 
 
 
@@ -192,7 +196,7 @@ DESC;`);
         [newCompanyId]
     );
     let secuenciaMovimiento = nextSecu;
-    let movAudit = [];
+
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
         try {
@@ -463,7 +467,7 @@ DESC;`);
     const ventas = rows as any[];
 
     if (!ventas.length) {
-        throw new Error(" -> No hay retenciones para migrar.");
+        return { mapRetMovements, mapRetAuditSales };
     }
 
     //Ultima secuencia de auditoria
@@ -472,9 +476,6 @@ DESC;`);
     let codigoAuditoria = dataSecuencia[0]['codigoAuditoria'];
 
     const BATCH_SIZE = 1000;
-    /*  const mapSales: Record<number, number> = {}; */
-    /*   const mapRetAuditSales: Record<number, number> = {};
-   */
 
 
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
@@ -495,7 +496,7 @@ DESC;`);
                 const codTrans = batch[j].COD_TRAC;
                 const auditId = firstAuditInsertId + j;
                 mapRetAuditSales[codTrans] = auditId;
-            } 
+            }
             // Preparar valores para INSERT en batch
             const values = batch.map((t, index) => {
                 console.log(`transformando y normalizando ${t.NUM_TRANS}`);
