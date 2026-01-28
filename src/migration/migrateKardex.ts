@@ -30,6 +30,7 @@ export async function migrateKardex({
 }: MigrateKardexParams) {
   try {
     console.log("Migrando kardex inventario...");
+    const kardexIdMap: Record<number, number> = {};
     const [kardexInventory]: any[] = await legacyConn.query(`
       SELECT
           COD_KARD AS KDX_ID,
@@ -63,15 +64,15 @@ export async function migrateKardex({
         ELSE INFO_KARD
       END AS KDX_TYPEDOC,
       DES_KARK AS KDX_DESCR,
-      CANT_ING AS KDX_CANT_IN,
-      VAL_ING AS KDX_VAL_IN,
-      TOT_ING AS KDX_TOTAL_IN,
-      CANT_EGR AS KDX_CANT_OUT,
-      VAL_EGR AS KDX_VAL_OUT,
-      TOT_EGR AS KDX_TOTAL_OUT,
-      CANT_PRO AS KDX_CANT_AVG,
-      VAL_PRO AS KDX_VAL_AVG,
-      TOT_PRO AS KDX_TOTAL_AVG,
+      COALESCE(NULLIF(CANT_ING, ''), 0)  AS KDX_CANT_IN,
+      COALESCE(NULLIF(VAL_ING, ''), 0) AS KDX_VAL_IN,
+      COALESCE(NULLIF(TOT_ING, ''), 0) AS KDX_TOTAL_IN,
+      COALESCE(NULLIF(CANT_EGR, ''), 0) AS KDX_CANT_OUT,
+      COALESCE(NULLIF(VAL_EGR, ''), 0) AS KDX_VAL_OUT,
+      COALESCE(NULLIF(TOT_EGR, ''), 0) AS KDX_TOTAL_OUT,
+      COALESCE(NULLIF(CANT_PRO, ''), 0) AS KDX_CANT_AVG,
+      COALESCE(NULLIF(VAL_PRO, ''), 0) AS KDX_VAL_AVG,
+      COALESCE(NULLIF(TOT_PRO, ''), 0) AS KDX_TOTAL_AVG,
       FECH_REGISTRO AS FECH_REGISTRO,
       FECH_REGISTRO AS KDX_DATE_DOC,
       NULL AS FK_COD_EMP,
@@ -93,7 +94,7 @@ export async function migrateKardex({
   `);
 
     if (kardexInventory.length === 0) {
-      return;
+      return { kardexIdMap };
     }
 
     const BATCH_SIZE = 1000;
@@ -102,19 +103,16 @@ export async function migrateKardex({
       const batch = kardexInventory.slice(i, i + BATCH_SIZE);
 
       const kardexValues = batch.map((kardex: any, index: number) => {
-        
-        const productId = mapProducts[kardex.FK_PROD_ID];
-        const userId = userMap[kardex.FK_USER_ID];
+
+        const productId   = mapProducts[kardex.FK_PROD_ID];
+        const userId      = userMap[kardex.FK_USER_ID];
         const warehouseId = storeMap[kardex.FK_WH_ID];
 
-        let transactionId: null | number = null;
-        if(kardex.KDX_TYPEDOC === 'TOMA FISICA'){
-          transactionId = mapPhysical[kardex?.SECUENCIAL] || null;
-        }else if(kardex.KDX_TYPEDOC === 'TRANSFERENCIA'){
-          transactionId = mapTransfers[kardex?.SECUENCIAL] || null;
-        }else{
-          transactionId = transactionIdMap[kardex?.FK_DOC_ID] || null; // Se mapea contra los id de todas las Trncs
-        }
+         const transactionId = resolveTransactionId(kardex, {
+          mapPhysical,
+          mapTransfers,
+          transactionIdMap
+        });
 
         return [
           kardex.KDX_TYPE,
@@ -138,7 +136,8 @@ export async function migrateKardex({
           kardex.STOCK_WAREHOUSE,
           kardex.AVERAGE_WAREHOUSE,
           kardex.TOTAL_WAREHOUSE,
-          warehouseId
+          warehouseId,
+          null
         ];
       })
 
@@ -170,9 +169,32 @@ export async function migrateKardex({
         )
         VALUES ?
       `, [kardexValues]);
+      let nextId = resultCreateKardex.insertId;
+      batch.forEach(({ KDX_ID }) => {
+        resultCreateKardex[KDX_ID] = nextId++;
+      });
+      console.log(` -> Batch migrado: ${batch.length} kardex`);
     }
+    return { kardexIdMap };
   } catch (error) {
     console.error("Error al migrar kardex:", error);
     throw error;
   }
+}
+
+
+function resolveTransactionId(kardex, {
+  mapPhysical,
+  mapTransfers,
+  transactionIdMap
+}) {
+  if (kardex.KDX_TYPEDOC === 'TOMA FISICA') {
+    return mapPhysical[kardex.SECUENCIAL] ?? null;
+  }
+
+  if (kardex.KDX_TYPEDOC === 'TRANSFERENCIA') {
+    return mapTransfers[kardex.SECUENCIAL] ?? null;
+  }
+
+  return transactionIdMap[kardex.FK_DOC_ID] ?? null;
 }

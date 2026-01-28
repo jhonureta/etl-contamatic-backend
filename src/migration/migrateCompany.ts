@@ -41,6 +41,7 @@ import { migrateSalesOrders } from './migrateSalesOrders';
 import { migrateProductTransfers } from './migrateProductTransfers';
 import { migrateManualSeats } from './migrateManualSeats';
 import { migrateTransactionDetails } from './migrateTransactionDetail';
+import { migrateKardex } from './migrateKardex';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -608,7 +609,6 @@ export async function migrateCompany(codEmp: number) {
       idFirstBranch
     })
 
-
     //== Migrar Pedidos de compra ===/
     const { purchaseOrderIdMap, purchaseOrderAuditIdMap } = await migratePurchaseOrders({
       legacyConn,
@@ -701,6 +701,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation,
     })
 
+    //== Migrar notas de credito en compras ===/
     const { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap } = await migrateCreditNotesPurchases({
       legacyConn,
       conn,
@@ -741,6 +742,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       mapRetentions
     );
+
     //== Migrar procesos notas de credito ventas ===/
     const { mapCreditNote, mapAuditCreditNote } = await migrateCreditNote(
       legacyConn,
@@ -762,6 +764,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       storeMap
     );
+
     //== Migrar anticipos clientes ===/
     const migrateCustomeradvances = await migrateDataMovements(
       legacyConn,
@@ -790,7 +793,7 @@ export async function migrateCompany(codEmp: number) {
       workOrderSecuencieMap
     );
 
-
+    //== Migrar transacciones de caja y bancos ===/
     const migrateCashBank = await migrateBankCashTransactions(
       legacyConn,
       conn,
@@ -805,7 +808,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     )
 
-
+    //== Migrar movimientos de anticipos de proveedores ===/
     const migrateSuppliersAdvances = await migrateDataMovementsSuppliersAdvances(
       legacyConn,
       conn,
@@ -826,7 +829,7 @@ export async function migrateCompany(codEmp: number) {
       workOrderSecuencieMap
     );
 
-
+    //== Migrar movimientos de retenciones y tarjetas de credito  ===/
     const migrateCardsHolds = await migrateDataMovementsRetentionsHolds(
       legacyConn,
       conn,
@@ -841,6 +844,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     )
 
+    //== Migrar tomas fisicas de bodegas  ===/
     const mapPhysical = await migratingPhysicalTakeOff(
       legacyConn,
       conn,
@@ -854,6 +858,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     )
 
+    //== Migrar transferencias de productos  ===/
     const mapTransfers = await migrateProductTransfers(
       legacyConn,
       conn,
@@ -864,6 +869,7 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap
     )
 
+    //== Migrar asientos manuales  ===/
     const { mapEntryAccount } = await migrateManualSeats(
       legacyConn,
       conn,
@@ -874,18 +880,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     );
 
-    await migrateTransactionDetails({
-      legacyConn,
-      conn,
-      newCompanyId,
-      storeMap,
-      userMap,
-      mapProducts,
-    });
-
-    //= Migracion de Inventario ==//
-    
-    //mapa de todos los comprobantes que ingresan a transacciones
+    //== Mapa general de transacciones ==//
     const transactionIdMap = {
       ...mapSales, // Ventas
       ...salesOrderIdMap, // Ordenes de venta
@@ -904,7 +899,34 @@ export async function migrateCompany(codEmp: number) {
       ...mapAuditCreditNote // Notas de credito
     };
 
+    //== Migrar detalles de transacciones  ===/
+    await migrateTransactionDetails({
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+      idFirstBranch,
+      transactionIdMap,
+      transactionIdToAuditIdMap
+    });
 
+    //= Migracion de Inventario ==//
+    
+    await migrateKardex({
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+      transactionIdMap,
+      transactionIdToAuditIdMap,
+      mapTransfers,
+      mapPhysical,
+      idFirstBranch
+    })
 
     await conn.commit();
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
