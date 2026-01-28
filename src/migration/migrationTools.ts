@@ -192,7 +192,14 @@ export async function fetchAccountingPeriod(conn, dataMov) {
     }
 }
 
-
+export const codigoIvaPorcentaje: Record<string, number> = {
+  '12': 2,
+  '0': 0,
+  '14': 3,
+  '15': 4,
+  '5': 5,
+  '13': 10
+}
 
 
 export function chunk<T>(array: T[], size: number): T[][] {
