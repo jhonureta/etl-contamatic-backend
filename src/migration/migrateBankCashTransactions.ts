@@ -188,8 +188,6 @@ WHERE
             console.log(` -> Batch migrado: ${batchMovements.length} cajas y bancos`);
         }
 
-        console.log(movementCashBanck);
-
 
         console.log("✅ Migración de movimientos anticipos clientes");
 
@@ -303,10 +301,6 @@ DESC;`);
                 const periodoId = mapPeriodo[o.FK_PERIODO]
                 const idAuditTr = movementAuditCashBanck[`${o.TIP_ASI_VER}-${o.FK_ANTDET}`];
                 const idMovimiento = movementCashBanck[`${o.TIP_ASI_VER}-${o.FK_ANTDET}`];
-
-                console.log(`periodoId: ${periodoId}`);
-                console.log(`idAuditTr: ${idAuditTr}`);
-                console.log(`idMovimiento: ${idMovimiento}`);
 
                 insertValues.push([
                     o.FECHA_ASI,

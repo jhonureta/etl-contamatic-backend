@@ -1,4 +1,5 @@
 import { upsertTotaledEntry } from "./migrationTools";
+import { RetentionCodeValue } from "./purchaseHelpers";
 
 export async function migrateDataMovementsRetentionsHolds(
     legacyConn: any,
@@ -13,7 +14,8 @@ export async function migrateDataMovementsRetentionsHolds(
     mapCenterCost: Record<number, number>,
     mapAccounts: Record<number, number>,
     mapRetentions: Record<number, number>,
-    mapWithholdingBanks: Record<string, number>
+    mapWithholdingBanks: Record<string, number>,
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>
 ): Promise<{ movementIdRetentionsMap: Record<number, number> }> {
     try {
         console.log(`Migrando movimientos de tarjetas`);
@@ -27,7 +29,7 @@ export async function migrateDataMovementsRetentionsHolds(
     NULL AS FK_COD_BANCO_MOVI,
     'TARJETA' AS TIP_MOVI,
     NULL AS periodo_caja,
-    fecha_registro_asiento AS FECHA_MOVI,
+   retenciones_tarjeta.fecha_retencion AS FECHA_MOVI,
     'RET-TAR' AS ORIGEN_MOVI,
     total_retencion AS IMPOR_MOVI,
     'TARJETA' AS TIPO_MOVI,
@@ -40,7 +42,7 @@ export async function migrateDataMovementsRetentionsHolds(
     'INGRESO' AS CAUSA_MOVI,
     'TARJETA' AS MODULO,
     'RET-TAR' AS ORG_ORDEN,
-    fecha_retencion AS FECHA_MANUAL,
+    retenciones_tarjeta.fecha_retencion AS FECHA_MANUAL,
     'POR CONCILIAR' AS CONCILIADO,
     NULL AS FK_COD_CX,
     NULL AS SECU_MOVI,
@@ -209,9 +211,10 @@ WHERE
 
 
             //agregar card holds
-            const valCards = batchMovements.forEach(o => {
+            const valCards = batchMovements.map(o => {
                 const currentAuditId = mapAuditRetentions[o.ID_MOVI];
-                const retencionVentaNueva = adaptarEstructuraMultiple(mapRetentions, o.TARJETA_DETAIL);
+
+                const retencionVentaNueva = adaptarEstructuraMultiple(oldRetentionCodeMap, o.TARJETA_DETAIL);
                 const idMov = movementIdRetentionsMap[o.ID_MOVI];
                 const idBanRet = mapWithholdingBanks[o.BANCO_RETENEDOR_RUC] ?? null;
 
@@ -233,6 +236,7 @@ WHERE
                     o.CLAVE_REL_TRANS
                 ];
             });
+
             const [resCardsHolds]: any = await conn.query(
                 `INSERT INTO card_holds(FECREG_RETENCION, SUBDIFERENTE_TARJETA, SUBCERO_TARJETA, IVA_TARJETA, TOTAL_TARJETA, TOTALNETO_TARJETA, TARJETA_DETAIL, 
                 FK_TARJETA, FK_BANKRET, FK_CODTRAN, FK_AUDITMV, FK_MOV, FK_COD_EMP, NUMERO_TARJETA, 
@@ -279,7 +283,7 @@ function parseInteger(value: any): number | null {
     return isNaN(num) ? null : num;
 };
 
-function adaptarEstructuraMultiple(mapRetentions, estructuraAntigua: any): any[] {
+function adaptarEstructuraMultiple(oldRetentionCodeMap, estructuraAntigua: any): any[] {
     try {
         // Parsear si es string JSON
         let datos = estructuraAntigua;
@@ -290,7 +294,7 @@ function adaptarEstructuraMultiple(mapRetentions, estructuraAntigua: any): any[]
                 console.error('Error al parsear JSON de retencion:', parseError);
                 return [];
             }
-        }
+        }//retencionRentaCero
 
         // Normalizar: si viene como array, tomar el primer elemento; si es objeto, usarlo directamente
         const datosOriginales = Array.isArray(datos) ? datos[0] : datos;
@@ -301,41 +305,39 @@ function adaptarEstructuraMultiple(mapRetentions, estructuraAntigua: any): any[]
         }
 
         // Mapear retenciones por renta (Retención en la Fuente)
-        const nuevasRetencionesRenta = (datosOriginales.listadoRetenciones || [])
-            .filter((ret: any) => ret && ret.renta) // Filtrar nulos/undefined y renta vacío
+        const nuevasRetencionesRenta = (datosOriginales.retencionesRenta || [])
+            .filter((ret: any) => ret && ret.selectCodigoTributario) // Filtrar nulos/undefined y renta vacío
             .map((ret: any) => ({
-                codigoRenta: ret.renta || null,
-                idRetRenta: mapRetentions[ret.idRetencionRenta],
-                nombreRenta: ret.nombreRetencionFuente || null,
-                porcentajeRenta: formatDecimal(ret.porcentaje),
-                subtotalBase0: formatDecimal(ret.subtotalBase0),
-                subtotalDiferente: formatDecimal(ret.subtotalDiferente),
-                valorRetenido: formatDecimal(ret.valorRetenido)
+                codigoRenta: ret.selectCodigoTributario || null,
+                idRetRenta: oldRetentionCodeMap.get(`${ret.selectCodigoTributario}:RENTA`)?.id || '',
+                nombreRenta: oldRetentionCodeMap.get(`${ret.selectCodigoTributario}:RENTA`)?.name || '',
+                porcentajeRenta: formatDecimal(ret.retencionRentaPorcentaje || '0'),
+                subtotalBase0: formatDecimal(ret.retencionRentaCero) + Number(ret.retencionRentaNoGraba),
+                subtotalDiferente: formatDecimal(ret.retencionRentaDoce || '0.00'),
+                valorRetenido: formatDecimal(ret.retencionRentaValor || '0.00')
             }));
 
-        // Mapear retenciones por IVA
-        const nuevasRetencionesIva = (datosOriginales.listadoRetencionesIva || [])
-            .filter((ret: any) => ret && ret.rentaIva)
-            .map((ret: any) => {
-                // Filtrar impuestos activos con tarifa > 0
-                const impuestosActivos = (ret.arraryImpuestos || [])
-                    .filter((imp: any) => imp && imp.impuestoActivoIva === 1 && parseFloat(imp.tarifa) > 0)
-                    .map((imp: any) => ({
-                        codigo: parseInteger(imp.codigo),
-                        tarifa: parseInteger(imp.tarifa),
-                        total: formatDecimal(imp.total)
-                    }));
 
+
+        // Mapear retenciones por IVA
+        const nuevasRetencionesIva = (datosOriginales.retencionesIva || [])
+            .filter((ret: any) => ret && ret.selectIva)
+            .map((ret: any) => {
                 return {
-                    codigoIva: ret.rentaIva || null,
-                    idRetIva: mapRetentions[ret.idRetencionIva],
-                    nombreIva: ret.nombreRetencionIva || null,
-                    porcentajeIva: formatDecimal(ret.porcentajeIva),
-                    subtotalDiferenteIva: formatDecimal(ret.subtotalDiferenteIva),
-                    valorRetenido: formatDecimal(ret.valorRetenidoIva),
-                    impuestos: impuestosActivos
+                    codigoIva: ret.selectIva || null,
+                    idRetIva: oldRetentionCodeMap.get(`${ret.selectIva}:IVA`)?.id || '',
+                    nombreIva: oldRetentionCodeMap.get(`${ret.selectIva}:IVA`)?.id || '',
+                    porcentajeIva: formatDecimal(ret.retencionIvaPorcentaje),
+                    subtotalDiferenteIva: formatDecimal(ret.retencionIvaDoce),
+                    valorRetenido: formatDecimal(ret.retencionIvaValor),
+                    impuestos: [{
+                        codigo: 2,
+                        tarifa: 12,
+                        total: formatDecimal(ret.retencionIvaDoce) || '0.00'
+                    }]
                 };
             });
+
 
         return [
             {

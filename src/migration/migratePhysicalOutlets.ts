@@ -308,7 +308,6 @@ FROM
                 const periodoId = mapPeriodo[o.FK_PERIODO]
                 const idAuditTr = mapAuditPhysical[o.cod_origen];
                 const idMovimiento = null;
-                console.log(o.cod_origen, idAuditTr);
                 insertValues.push([
                     o.FECHA_ASI,
                     o.DESCRIP_ASI,
@@ -331,8 +330,7 @@ FROM
                 ]);
 
 
-            } /* console.log(insertValues); */
-
+            }
             const [res]: any = await conn.query(`INSERT INTO accounting_movements(
                     FECHA_ASI,
                     DESCRIP_ASI,

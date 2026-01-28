@@ -8,7 +8,7 @@ export async function migrateWithholdingBanks(
         const mapWithholdingBanks: Record<string, number> = {};
         /* 1️⃣ Bancos origen */
         const [sourceBanks]: any[] = await legacyConn.query(`
-            SELECT COD_BANK, RUC, NOMBRE, FECREG_BANKS
+            SELECT ID_BAN_RET, RUC, NOMBRE
             FROM bancos_emisores_retencion
         `);
 
@@ -18,15 +18,16 @@ export async function migrateWithholdingBanks(
 
         /* 2️⃣ Bancos ya existentes */
         const [existingBanks]: any[] = await conn.query(`
-            SELECT ID_BANK, RUC
+            SELECT ID_BAN_RET,RUC,NOMBRE,FECREG_BANKS
             FROM withholding_banks
         `);
 
         /* 3️⃣ Mapa por RUC */
         const bankByRuc = new Map<string, number>();
         existingBanks.forEach((b: any) => {
-            bankByRuc.set(b.RUC, b.ID_BANK);
-        });
+            bankByRuc.set(b.RUC, b.ID_BAN_RET);
+            mapWithholdingBanks[b.RUC] = b.ID_BAN_RET;
+        }); /* console.log(bankByRuc); */
 
         /* 4️⃣ Procesar uno por uno */
         for (const bank of sourceBanks) {
@@ -55,7 +56,6 @@ export async function migrateWithholdingBanks(
         }
 
         console.log(` -> Bancos retenedores procesados: ${Object.keys(mapWithholdingBanks).length}`);
-
         return { mapWithholdingBanks };
 
     } catch (error) {
