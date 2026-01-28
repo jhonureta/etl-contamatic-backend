@@ -102,17 +102,18 @@ export async function migrateKardex({
       const batch = kardexInventory.slice(i, i + BATCH_SIZE);
 
       const kardexValues = batch.map((kardex: any, index: number) => {
+        
         const productId = mapProducts[kardex.FK_PROD_ID];
         const userId = userMap[kardex.FK_USER_ID];
         const warehouseId = storeMap[kardex.FK_WH_ID];
 
         let transactionId: null | number = null;
         if(kardex.KDX_TYPEDOC === 'TOMA FISICA'){
-          transactionId = mapPhysical[kardex.SECUENCIAL] || null;
+          transactionId = mapPhysical[kardex?.SECUENCIAL] || null;
         }else if(kardex.KDX_TYPEDOC === 'TRANSFERENCIA'){
-          transactionId = mapTransfers[kardex.SECUENCIAL] || null;
+          transactionId = mapTransfers[kardex?.SECUENCIAL] || null;
         }else{
-          transactionId = transactionIdMap[kardex.FK_DOC_ID] || null; // Se mapea contra los id de todas las Trncs
+          transactionId = transactionIdMap[kardex?.FK_DOC_ID] || null; // Se mapea contra los id de todas las Trncs
         }
 
         return [
@@ -134,8 +135,9 @@ export async function migrateKardex({
           productId,
           transactionId,
           userId,
-
-
+          kardex.STOCK_WAREHOUSE,
+          kardex.AVERAGE_WAREHOUSE,
+          kardex.TOTAL_WAREHOUSE,
           warehouseId
         ];
       })

@@ -13,7 +13,7 @@ export async function migrateSalesOrders({
 }): Promise<{ salesOrderIdMap: Record<number, number>, salesOrderAuditIdMap: Record<number, number> }> {
 
   try {
-    console.log("Migrando ordenes de trabajo...");
+    console.log("Migrando ordenes de venta...");
     const salesOrderIdMap: Record<number, number> = {};
     const salesOrderAuditIdMap: Record<number, number> = {};
 

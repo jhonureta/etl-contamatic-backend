@@ -40,6 +40,7 @@ import { migratingPhysicalTakeOff } from './migratePhysicalOutlets';
 import { migrateSalesOrders } from './migrateSalesOrders';
 import { migrateProductTransfers } from './migrateProductTransfers';
 import { migrateManualSeats } from './migrateManualSeats';
+import { migrateTransactionDetails } from './migrateTransactionDetail';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -872,6 +873,15 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
     );
+
+    await migrateTransactionDetails({
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+    });
 
     //= Migracion de Inventario ==//
     
