@@ -426,10 +426,10 @@ function transformProductDetail(
       tota: toNumber(item.tota),
       preciomanual: toNumber(item.preciomanual),
       codigoAuxiliar: item.codigoAuxiliar || "",
-      precios: (item.valores || []).map((p: any, index: number) => ({
-        name: p.nombre || "",
-        price: toNumber(p.valor),
-        discount: toNumber(p.descuento),
+      precios: (item?.valores || [{ name: "Publico", price: toNumber(item.precioProducto), discount: 0, select: true }]).map((p: any, index: number) => ({
+        name: p?.nombre || "",
+        price: toNumber(p?.valor),
+        discount: toNumber(p?.descuento),
         select: index === 0 ? true : false,
       })),
     };

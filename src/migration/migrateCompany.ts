@@ -43,6 +43,8 @@ import { migrateManualSeats } from './migrateManualSeats';
 import { migrateWithholdingBanks } from './migratewithholdingBanks';
 import { migrateDocRetentions } from './migrateSriWithholdings';
 import { migrateSeatsCostSales } from './migrateSeatsCostSales';
+import { migrateTransactionDetails } from './migrateTransactionDetail';
+import { migrateKardex } from './migrateKardex';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -582,7 +584,7 @@ export async function migrateCompany(codEmp: number) {
       idFirstBranch
     })
 
-    await migrateSalesOrders({
+    const { salesOrderIdMap, salesOrderAuditIdMap } = await migrateSalesOrders({
       legacyConn,
       conn,
       newCompanyId,
@@ -614,7 +616,6 @@ export async function migrateCompany(codEmp: number) {
       storeMap,
       idFirstBranch
     })
-
 
     //== Migrar Pedidos de compra ===/
     const { purchaseOrderIdMap, purchaseOrderAuditIdMap } = await migratePurchaseOrders({
@@ -708,7 +709,8 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation,
     })
 
-    await migrateCreditNotesPurchases({
+    //== Migrar notas de credito en compras ===/
+    const { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap } = await migrateCreditNotesPurchases({
       legacyConn,
       conn,
       newCompanyId,
@@ -748,6 +750,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       mapRetentions
     );
+
     //== Migrar procesos notas de credito ventas ===/
     const { mapCreditNote, mapAuditCreditNote } = await migrateCreditNote(
       legacyConn,
@@ -769,6 +772,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       storeMap
     );
+
     //== Migrar anticipos clientes ===/
     const migrateCustomeradvances = await migrateDataMovements(
       legacyConn,
@@ -797,7 +801,7 @@ export async function migrateCompany(codEmp: number) {
       workOrderSecuencieMap
     );
 
-    //== Migrar movimientos , cajas y bancos ===/
+    //== Migrar movimientos , cajas y bancos ===/    //== Migrar transacciones de caja y bancos ===/
     const migrateCashBank = await migrateBankCashTransactions(
       legacyConn,
       conn,
@@ -812,7 +816,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     )
 
-    //== Migrar anticipos proveedores ===/
+    //== Migrar anticipos proveedores ===/    //== Migrar movimientos de anticipos de proveedores ===/
     const migrateSuppliersAdvances = await migrateDataMovementsSuppliersAdvances(
       legacyConn,
       conn,
@@ -833,7 +837,7 @@ export async function migrateCompany(codEmp: number) {
       workOrderSecuencieMap
     );
 
-    //== Migrar retencion de tarjetas ===/
+    //== Migrar retencion de tarjetas ===/    //== Migrar movimientos de retenciones y tarjetas de credito  ===/
     const migrateCardsHolds = await migrateDataMovementsRetentionsHolds(
       legacyConn,
       conn,
@@ -851,6 +855,7 @@ export async function migrateCompany(codEmp: number) {
       oldRetentionCodeMap
     )
     //== Migrar tomas fisicas ===/
+    //== Migrar tomas fisicas de bodegas  ===/
     const mapPhysical = await migratingPhysicalTakeOff(
       legacyConn,
       conn,
@@ -864,6 +869,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     )
     //== Migrar transferencias ===/
+    //== Migrar transferencias de productos  ===/
     const mapTransfers = await migrateProductTransfers(
       legacyConn,
       conn,
@@ -874,6 +880,7 @@ export async function migrateCompany(codEmp: number) {
       userNameIdMap
     )
     //== Migrar asientos manuales ===/
+    //== Migrar asientos manuales  ===/
     const { mapEntryAccount } = await migrateManualSeats(
       legacyConn,
       conn,
@@ -883,6 +890,54 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
     );
+
+    //== Mapa general de transacciones ==//
+    const transactionIdMap = {
+      ...mapSales, // Ventas
+      ...salesOrderIdMap, // Ordenes de venta
+      ...purchaseOrderIdMap, // Pedidos
+      ...purchaseLiquidationIdMap, // Compras, liquidaciones,
+      ...creditNotesPurchasesIdMap, // Notas de credito en compras,
+      ...mapCreditNote // Notas de credito
+    };
+
+    const transactionIdToAuditIdMap = {
+      ...mapAuditSales, // Ventas
+      ...salesOrderAuditIdMap, // Ordenes de venta
+      ...purchaseOrderAuditIdMap, // Pedidos
+      ...purchaseLiquidationAuditIdMap, // Compras, liquidaciones,
+      ...creditNotesPurchasesAuditIdMap, // Notas de credito en compras
+      ...mapAuditCreditNote // Notas de credito
+    };
+
+    //== Migrar detalles de transacciones  ===/
+    await migrateTransactionDetails({
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+      idFirstBranch,
+      transactionIdMap,
+      transactionIdToAuditIdMap
+    });
+
+    //= Migracion de Inventario ==//
+    
+    await migrateKardex({
+      legacyConn,
+      conn,
+      newCompanyId,
+      storeMap,
+      userMap,
+      mapProducts,
+      transactionIdMap,
+      transactionIdToAuditIdMap,
+      mapTransfers,
+      mapPhysical,
+      idFirstBranch
+    })
     //== Migrar asientos de costo en ventas ===/
     const mapSeatsCostSales = await migrateSeatsCostSales(
       legacyConn,
