@@ -1515,6 +1515,8 @@ export async function migratePurchaseObligationDetail({
 	mapConciliation,
 }: MigratePurchaseObligationDetailParams) {
 	try {
+
+		console.log("🚀 Migrando movimientos de obligaciones de compra");
 		const movementIdMap: Record<number, number> = {};
 		const movementAuditIdMap: Record<number, number> = {};
 

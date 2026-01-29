@@ -51,7 +51,7 @@ export async function migrateProductTransfers(
     const transferencias = rows as any[];
 
     if (!transferencias.length) {
-        throw new Error(" -> No hay medidas para migrar.");
+        return mapTransfers;
     }
     const BATCH_SIZE = 1000;
 

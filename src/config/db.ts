@@ -22,19 +22,30 @@ export const erpPool = mysql.createPool({
 /**
  * Conexión dinámica para BD de empresa antigua (BASE_EMP).
  */
-export async function createLegacyConnection(opts: {
+/**
+ * Pool dinámico para BD de empresa antigua (BASE_EMP).
+ * Reemplaza createLegacyConnection() para evitar "connection is in closed state".
+ */
+export function createLegacyPool(opts: {
   host?: string;
   port?: number;
   user: string;
   password: string;
   database: string;
+  connectionLimit?: number;
 }) {
-  return mysql.createConnection({
+  return mysql.createPool({
     host: opts.host || env.systemwork.host,
     port: opts.port || env.systemwork.port,
     user: opts.user,
     password: opts.password,
     database: opts.database,
+    waitForConnections: true,
+    connectionLimit: opts.connectionLimit ?? 5,
+    queueLimit: 0,
     multipleStatements: false,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
+    connectTimeout: 30000,
   });
 }
