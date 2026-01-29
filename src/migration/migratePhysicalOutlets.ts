@@ -114,7 +114,7 @@ FROM
     const tomaFisica = rows as any[];
 
     if (!tomaFisica.length) {
-        throw new Error(" -> No hay medidas para migrar.");
+        return mapPhysical;
     }
     const BATCH_SIZE = 1000;
 
