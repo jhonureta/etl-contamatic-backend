@@ -212,6 +212,8 @@ export async function migrateMovementDetail0bligations(
             batch.forEach(o => {
                 mapMovements[o.FK_COD_GD] = currentMovId++;
             });
+
+             console.log(` -> Batch migrado: ${batch.length} movimiento de obligaciones`);
         }
         const mapDetailObligationsAplicate = await migratePaymentDetails(
             legacyConn,
@@ -324,6 +326,8 @@ export async function migratePaymentDetails(
             batch.forEach(o => {
                 mapDetailObligationsAplicate[o.fk_cod_cuenta] = currentMovId++;
             });
+
+             console.log(` -> Batch migrado: ${batch.length} detalle de obligaciones`);
         }
         console.log("✅ Migración completada");
         return { mapDetailObligationsAplicate };
@@ -436,6 +440,8 @@ export async function migrateAccountingEntriesCustomerObligations(
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
+
+             console.log(` -> Batch migrado: ${batch.length} asiento de obligaciones`);
         }
         console.log("✅ Migración asiento contable completada correctamente");
         return { mapEntryAccount };

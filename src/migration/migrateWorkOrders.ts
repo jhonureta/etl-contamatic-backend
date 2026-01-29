@@ -15,7 +15,7 @@ export async function migrateWorkOrders({
     const workOrderIdMap: Record<number, number> = {};
     const workOrderAuditIdMap: Record<number, number> = {};
     const workOrderSecuencieMap: Record<number, number> = {};
-    
+
     const [workOrders]: any[] = await legacyConn.query(`
       SELECT
           COD_TRAC AS COD_TRANS,
@@ -288,12 +288,21 @@ export async function migrateWorkOrders({
         VALUES ?
       `, [workOrderValues]);
 
+      /*    let nextId = resultCreateWorkOrders.insertId;
+         batch.forEach(({ COD_TRANS, NUM_TRANS }) => {
+           let secNext = nextId++;
+           workOrderIdMap[COD_TRANS] = secNext;
+           workOrderSecuencieMap[NUM_TRANS] = secNext;
+         }); */
+
       let nextId = resultCreateWorkOrders.insertId;
-      batch.forEach(({ COD_TRANS, NUM_TRANS }) => {
-        let secNext = nextId++;
+
+      for (const { COD_TRANS, NUM_TRANS } of batch) {
+        const secNext = nextId++;
         workOrderIdMap[COD_TRANS] = secNext;
         workOrderSecuencieMap[NUM_TRANS] = secNext;
-      });
+      }
+
       console.log(` -> Batch migrado: ${batch.length} ordenes de trabajos`);
     }
 

@@ -238,7 +238,7 @@ WHERE
             batchMovements.forEach(o => {
                 movementIdAdvancesMap[o.FK_ANT_MOVI] = currentMovId++;
             });
-
+            console.log(` -> Batch migrado: ${batchMovements.length} migrar anticipo proveedores`);
 
         }
         console.log("✅ Migración de movimientos anticipos de proveedores completada correctamente");
@@ -419,7 +419,7 @@ WHERE a.TIPO_ANT = 'PROVEEDORES';`);
             if (a.ORIGEN_ANT == 'ANT-ORDEN') {
                 idAuditoria = mapAuditAdvances[a.ID_DET_ANT];
                 idMov = movementIdAdvancesMap[a.ID_DET_ANT] || null;
-           
+
             }
 
             if (a.ORIGEN_ANT === 'ANT-ORDEN') {
@@ -599,6 +599,8 @@ WHERE
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
+
+            console.log(` -> Batch migrado: ${batch.length} migrar asientos anticipo proveedores`);
         }
         console.log("✅ Migración asiento contable anticipo proveedores completada correctamente");
         return { mapEntryAccount };

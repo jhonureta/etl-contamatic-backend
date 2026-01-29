@@ -927,7 +927,7 @@ DESC;`);
             batch.forEach(o => {
                 mapNoteMovementsFull[o.COD_TRAC] = currentMovId++;
             });
-            console.log(` -> Batch migrado: ${batch.length} retenciones de ventas por credito.`);
+            console.log(` -> Batch migrado: ${batch.length} nota de credito por venta.`);
 
         } catch (err) {
 

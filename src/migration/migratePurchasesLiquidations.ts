@@ -1753,6 +1753,7 @@ export async function migratePurchaseObligationDetail({
 			obligationBatch.forEach(({ FK_COD_GD }) => {
 				movementIdMap[FK_COD_GD] = nextMovementId++;
 			});
+			 console.log(` -> Batch migrado: ${obligationBatch.length} movimiento de compras y liquidaciones`);
 		}
 
 		const { detailObligationIdMap } = await migrateDetailsOfObligations({

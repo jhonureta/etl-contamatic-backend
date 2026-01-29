@@ -243,6 +243,8 @@ WHERE
                 CLAVE_TARJETA) VALUES ?`,
                 [valCards]
             );
+
+              console.log(` -> Batch migrado: ${batchMovements.length} retencion de tarjetas`);
         }
         console.log("✅ Migración  movimientos de tarjetas completada correctamente");
         const mapEntryAccount = await migrateAccountingEntriesRetentions(

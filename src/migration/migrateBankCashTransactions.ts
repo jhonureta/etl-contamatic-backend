@@ -348,6 +348,7 @@ DESC;`);
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
+             console.log(` -> Batch migrado: ${batch.length} caja-bancos`);
         }
         console.log("✅ Migración asiento contable gestion caja-bancos correctamente");
         return { mapEntryAccount };

@@ -65,6 +65,7 @@ export async function migrateBancos(
             });
 
             bankMap[banco.BANCKID_MIG] = insertId;
+             console.log(` -> Batch migrado: ${banco.length} bancos`);
         }
 
     } catch (error) {

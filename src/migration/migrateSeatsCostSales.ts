@@ -135,6 +135,7 @@ FROM contabilidad_asientos WHERE tipo_asiento ='COVENTAS'  ORDER BY cod_asiento 
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
+            console.log(` -> Batch migrado: ${batch.length} migrar asientos de costos`);
         }
         const mapDetailAsiento = await migrateDetailedAccountingEntriesCustomerObligations(
             legacyConn,

@@ -41,9 +41,13 @@ export async function migrateVehicles({
     );
 
     let nextVehicleId = createVehicle.insertId;
-    vehicles.forEach((v) => {
+
+
+    for (const v of vehicles) {
       vehicleIdMap[v.COD_VEH] = nextVehicleId++;
-    });
+    }
+
+
     console.log(` -> Vehiculos migrados: ${Object.keys(vehicleIdMap).length}.`);
     return { vehicleIdMap };
   } catch (error) {

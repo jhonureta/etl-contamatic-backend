@@ -355,6 +355,8 @@ FROM
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
+
+             console.log(` -> Batch migrado: ${batch.length} asiento de toma fisica`);
         }
         console.log("✅ Migración asiento contable toma fisica completada correctamente");
         return { mapEntryAccount };

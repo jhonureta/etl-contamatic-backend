@@ -595,6 +595,8 @@ async function migratePurchaseOrderObligations({
       batchObligation.forEach((o: any) => {
         orderObligationIdMap[o.old_id] = nextOrderObligationId++;
       });
+
+       console.log(` -> Batch migrado: ${batchObligation.length} obligaciones de pedidos`);
     }
 
     return { orderObligationIdMap, orderObligationAuditIdMap };
@@ -779,6 +781,8 @@ async function migrateOrderMovements({
       batchMovements.forEach(({ COD_TRANS }) => {
         movementOrderIdMap[COD_TRANS] = nextMovementId++;
       });
+
+       console.log(` -> Batch migrado: ${batchMovements.length} movimiento de pedidos`);
     }
     console.log("✅ Migración de movimientos pedidos completada correctamente");
     return { movementOrderIdMap };

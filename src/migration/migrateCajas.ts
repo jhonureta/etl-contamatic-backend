@@ -59,7 +59,7 @@ export async function migrateCajas(
                 statusDetail: caja.EST_CAJA == 'ACTIVO' ? 1 : 0
             });
             if (detail.affectedRows != 1) {
-                throw new Error('Error al insertar el detalle de la caja');
+                continue;
             }
             boxMap[caja.ID_CAJA] = detail.insertId;
             /* } */

@@ -250,7 +250,7 @@ WHERE
             batchMovements.forEach(o => {
                 movementIdAdvancesMap[o.FK_ANT_MOVI] = currentMovId++;
             });
-
+            console.log(` -> Batch migrado: ${batchMovements.length} anticipos clientes`);
 
         }
         console.log("✅ Migración de movimientos anticipos clientes");
@@ -386,12 +386,12 @@ LEFT JOIN movimientos m
 WHERE a.TIPO_ANT = 'CLIENTES';`);
 
     const anticiposClientes = rows;
-
+    const mapAdvancesDetailCustomers: Record<string, number> = {};
     if (!anticiposClientes.length) {
-        throw new Error(" -> No hay detalle  de anticipos clientes para migrar.");
+        return mapAdvancesDetailCustomers;
     }
     const BATCH_SIZE = 1000;
-    const mapAdvancesDetailCustomers: Record<string, number> = {};
+
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 
@@ -431,7 +431,7 @@ WHERE a.TIPO_ANT = 'CLIENTES';`);
             if (a.ORIGEN_ANT == 'ANT-ORDEN') {
                 idAuditoria = mapAuditAdvances[a.ID_DET_ANT];
                 idMov = movementIdAdvancesMap[a.ID_DET_ANT] || null;
-    
+
             }
 
             if (a.ORIGEN_ANT === 'ANT-ORDEN') {
@@ -609,6 +609,7 @@ WHERE
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
+             console.log(` -> Batch migrado: ${batch.length} asiento anticipo clientes`);
         }
         console.log("✅ Migración asiento contable anticipo clientes completada correctamente");
         return { mapEntryAccount };

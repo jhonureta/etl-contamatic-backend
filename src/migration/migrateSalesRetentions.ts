@@ -462,7 +462,6 @@ ORDER BY
     COD_TRAC
 DESC;`);
 
-    // AND (detalle_anticipos.ID_DET_ANT IS  NULL or detalle_anticipos.ID_DET_ANT = '') and  (m.ID_MOVI    IS  NULL or m.ID_MOVI = '')
 
     const ventas = rows as any[];
 

@@ -135,7 +135,9 @@ export async function migratePreconfiguredAccounts(
                     codIdPlan,
                 }, conn);
                 if (!dataInsert.affectedRows) {
-                    throw new Error(`Error al migrar cuenta de resultados: ${detalle}`);
+                   /*  throw new Error(`Error al migrar cuenta de resultados: ${detalle}`); */
+                
+                   continue;
 
                 }
                 //console.log(`✅ Cuenta de resultados ${detalle} - Cuenta: ${codIdPlan}`);

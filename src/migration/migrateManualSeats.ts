@@ -141,6 +141,8 @@ for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     for (const o of batch) {
         mapEntryAccount[o.cod_asiento] = newId++;
     }
+
+     console.log(` -> Batch migrado: ${batch.length} asiento manuales`);
 }
 const mapDetailAsiento = await migrateDetailedAccountingEntriesCustomerObligations(
     legacyConn,

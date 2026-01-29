@@ -279,6 +279,8 @@ export async function migrateMovementsTransactions(
                 }
 
                 insertValues.push(buildCuentasOblRow(o, auditId));
+
+
             }
 
             const [res]: any = await conn.query(`
@@ -294,6 +296,8 @@ export async function migrateMovementsTransactions(
             for (const o of batch) {
                 mapObligationsCustomers[o.old_id] = newId++;
             }
+
+            console.log(` -> Batch migrado: ${batch.length} obligaciones cxc`);
         }
 
         // MIGRAR OBLIGACIONES MIGRADAS (misma lógica que antes)
@@ -484,6 +488,8 @@ export async function migrateMovementsObligationsMigrados(
             for (const o of batch) {
                 movimientosMigrados[o.FK_AUDITOB] = newId++;
             }
+
+            console.log(` -> Batch migrado: ${batch.length} importacion obligaciones cxc`);
         }
 
         for (let i = 0; i < ArrayMovements.length; i += BATCH_SIZE) {
@@ -540,6 +546,8 @@ export async function migrateMovementsObligationsMigrados(
             for (const o of batch) {
                 mapAsientos[o.auditoria] = newId++;
             }
+
+            console.log(` -> Batch migrado: ${batch.length} asientos obligaciones cxc`);
         }
 
         const [rowsAsientoDetail]: any[] = await legacyConn.query(`SELECT contabilidad_detalle_asiento.fk_cod_asiento,contabilidad_detalle_asiento.fk_cod_plan, contabilidad_detalle_asiento.debe_detalle_asiento, contabilidad_detalle_asiento.haber_detalle_asiento FROM contabilidad_asientos inner join contabilidad_detalle_asiento on contabilidad_asientos.cod_asiento= contabilidad_detalle_asiento.fk_cod_asiento where tipo_asiento = 'OBLIGACIONES' limit 2`, [newCompanyId]);
@@ -847,7 +855,7 @@ export async function migrateMovementsObligations(
             for (const o of batch) {
                 mapMovements[o.COD_TRANS] = newId++;
             }
-             console.log(`✅ Migración batch ${i+1} correctamente`);
+            console.log(`✅ Migración batch ${i + 1} correctamente`);
         }
         console.log("✅ Migración completada correctamente");
         return { mapMovements };
