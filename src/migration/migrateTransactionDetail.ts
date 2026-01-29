@@ -1,22 +1,20 @@
 import { codigoIvaPorcentaje } from "./migrationTools";
+import { toJSONArray } from "./purchaseHelpers";
 
 export async function migrateTransactionDetails({
   legacyConn,
   conn,
-  newCompanyId,
-  storeMap,
-  userMap,
   mapProducts,
-  idFirstBranch,
-  transactionIdMap,
-  transactionIdToAuditIdMap
+  transactionIdToAuditIdMap,
+  prodWareDetailIdMap,
+  storeMap
 }) {
   try {
     console.log("Migrando detalle de transacciones...");
     const transactionDetailMap: Record<number, number> = {};
     const [transactionsDetails]: any[] = await legacyConn.query(`
-      SELECT
-          CAN_DET AS COD_DETID,
+        SELECT
+          COD_DET AS COD_DETID,
           CAN_DET AS CAN_DET,
           PRE_DET AS PRE_DET,
           SUB_DET AS SUB_DET,
@@ -28,9 +26,15 @@ export async function migrateTransactionDetails({
           NULL AS FK_WHDET_ID,
           NULL AS FK_AUDITDET,
           FECCAR_DET AS FECHA_REG,
-          FK_COD_TRA
+          FK_COD_TRA,
+          CASE 
+          	WHEN transacciones.TIP_TRAC = 'Compra' THEN transacciones.DET_TRACCOM
+          	WHEN transacciones.TIP_TRAC = 'liquidacion' THEN transacciones.DET_TRACCOM
+          	ELSE transacciones.DET_TRAC
+          END AS DETALLE
       FROM
-          detalle;
+          detalle
+      LEFT JOIN transacciones ON detalle.FK_COD_TRA = transacciones.COD_TRAC;
     `);
 
     if (transactionsDetails.length === 0) {
@@ -45,27 +49,24 @@ export async function migrateTransactionDetails({
       const batch = transactionsDetails.slice(i, i + BATCH_SIZE);
       const detailValues: any = [];
       for (const detail of batch) {
-        const newProductId = mapProducts[detail?.FK_PROD_ID];
+        const oldProductId = detail?.FK_PROD_ID;
+        const newProductId = mapProducts[oldProductId];
         const ivaCode = codigoIvaPorcentaje[detail?.IVA_TAR] ?? 0;
         const auditId = transactionIdToAuditIdMap[detail?.FK_COD_TRA] ?? null;
 
-        const hasTransaction = detail.FK_COD_TRA !== null && detail.FK_COD_TRA !== 0;
-        let whdetId: number | null = hasTransaction ? await findWarehouseDetailIdByTransaction({
-          conn,
-          legacyConn,
-          cache: whdetCache,
-          transactionId: Number(detail.FK_COD_TRA),
-          legacyProductId: Number(detail.FK_PROD_ID),
-          amount: Number(detail.CAN_DET),
-          newProductId,
-          storeMap
-        }) : null;
+        const transactionDetail = toJSONArray(detail?.DETALLE);
 
-        if (!whdetId) {
-          whdetId = await findFirstWarehouseDetailByProduct({
-            cache: firstWhdetCache,
+        const { oldWarehouseId } = findWarehouseDetailIdByTransaction({
+          productId: oldProductId,
+          detail: transactionDetail
+        });
+
+        let whdetId = prodWareDetailIdMap[`${oldProductId}:${oldWarehouseId}`] ?? null;
+        if(!whdetId && newProductId && storeMap[oldWarehouseId]) {
+          whdetId = await insertWarehouseDetail({
             conn,
-            newProductId
+            productId: newProductId,
+            warehouseId: storeMap[oldWarehouseId]
           });
         }
 
@@ -107,7 +108,6 @@ export async function migrateTransactionDetails({
       });
       console.log(` -> Batch migrado: ${batch.length} detalle de transacciones`);
     }
-    console.log(`Total cacheados de detalle de transacciones: ${Object.keys(transactionDetailMap).length}`);
     return { transactionDetailMap };
   } catch (error) {
     console.error("Error al migrar detalle de transacciones:", error);
@@ -115,105 +115,33 @@ export async function migrateTransactionDetails({
   }
 }
 
-
-async function findWarehouseDetailIdByTransaction({
-  cache,
-  conn,
-  legacyConn,
-  transactionId,
-  legacyProductId,
-  amount,
-  newProductId,
-  storeMap
+function findWarehouseDetailIdByTransaction({
+  productId,
+  detail
 }: {
-  cache: Map<string, number | null>;
-  legacyConn: any;
-  conn: any;
-  transactionId: number;
-  legacyProductId: number;
-  newProductId: number;
-  amount: number;
-  storeMap: Record<number, number>;
+  productId: number;
+  detail: any[];
 }) {
-  const key = `${transactionId}:${legacyProductId}`;
-  if (cache.has(key)) return cache.get(key);
-
-  const [warehouseData]: any[] = await legacyConn.query(`
-   SELECT
-    jt.idBodega
-FROM
-    transacciones t
-JOIN JSON_TABLE(
-        CASE 
-            WHEN JSON_VALID(t.DET_TRAC) THEN t.DET_TRAC
-            ELSE '[]'
-        END,
-        '$[*]' COLUMNS(
-            idProducto INT PATH '$.idProducto',
-            idBodega INT PATH '$.idBodega',
-            cantidad DECIMAL(18,6) PATH '$.cantidad'
-        )
-    ) jt
-WHERE
-    t.COD_TRAC = ?
-    AND jt.idProducto = ?
-    AND jt.cantidad = ?
-LIMIT 1;
-
-  `, [transactionId, legacyProductId, amount]);
-
-  if (warehouseData.length === 0) {
-    cache.set(key, null);
-    return null;
-  }
-
-  const legacyWarehouseId = warehouseData[0].idBodega;
-  const newWarehouseId = storeMap[legacyWarehouseId];
-
-  const [warehouseDetail] = await conn.query(`
-    SELECT
-        WHDET_ID
-    FROM
-        warehouse_detail
-    WHERE
-        FK_PROD_ID = ? AND FK_WH_ID = ?
-    ORDER BY
-        WHDET_ID ASC
-    LIMIT 1;
-  `, [newProductId, newWarehouseId]);
-
-  const whdetId = warehouseDetail.length ? warehouseDetail[0].WHDET_ID : null;
-  cache.set(key, whdetId);
-  return whdetId;
+  const productDetail = detail.find(item => 
+    Number(item.idProducto) === Number(productId)
+  );
+  const warehouseId = productDetail ? Number(productDetail.idBodega) : null;
+  return { oldWarehouseId: warehouseId };
 }
 
-
-async function findFirstWarehouseDetailByProduct({
+async function insertWarehouseDetail({
   conn,
-  newProductId,
-  cache
-}: {
-  conn: any;
-  newProductId: number;
-  cache: Map<number, number | null>;
+  productId,
+  warehouseId
 }) {
-  if (cache.has(newProductId)) return cache.get(newProductId);
-  const [rows] = await conn.query(`
-    SELECT
-        WHDET_ID,
-        FK_PROD_ID,
-        FK_WH_ID,
-        PROD_STATE
-    FROM
-        warehouse_detail
-    WHERE
-        FK_PROD_ID = ?
-    ORDER BY
-        WHDET_ID ASC
-    LIMIT 1;
-  `, [newProductId]);
-
-  const id = rows.length ? rows[0].WHDET_ID : null;
-  cache.set(newProductId, id);
-  return id;
+  const [res]: any = await conn.query(`
+    INSERT INTO warehouse_detail(  
+        WHDET_STOCK,
+        FK_PROD_ID, 
+        FK_WH_ID, 
+        PROD_STATE) VALUES  (?, ?, ?, ?)`,
+    [0, productId, warehouseId, 1]
+  );
+  let newId = res.insertId;
+  return newId;
 }

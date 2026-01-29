@@ -497,7 +497,7 @@ export async function migrateCompany(codEmp: number) {
       mapBrand
     );
 
-    const mapDetWare = await migrateWarehouseDetails(
+    const { mapDetWare, prodWareDetailIdMap } = await migrateWarehouseDetails(
       legacyConn,
       conn,
       branchMap,
@@ -914,13 +914,10 @@ export async function migrateCompany(codEmp: number) {
     await migrateTransactionDetails({
       legacyConn,
       conn,
-      newCompanyId,
-      storeMap,
-      userMap,
       mapProducts,
-      idFirstBranch,
-      transactionIdMap,
-      transactionIdToAuditIdMap
+      transactionIdToAuditIdMap,
+      prodWareDetailIdMap,
+      storeMap
     });
 
     //= Migracion de Inventario ==//
