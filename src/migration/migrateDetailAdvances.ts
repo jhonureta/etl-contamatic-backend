@@ -381,9 +381,83 @@ INNER JOIN anticipos a
 INNER JOIN clientes c 
     ON c.COD_CLI = a.FK_COD_CLI_ANT
 LEFT JOIN movimientos m 
-    ON m.FK_ANT_MOVI = da.ID_DET_ANT
+    ON m.FK_ANT_MOVI = da.ID_DET_ANT  and date(da.FEC_DET_ANT) = date(m.FECHA_MANUAL) and m.IMPOR_MOVI = da.IMPOR_DET_ANT  and da.PER_DET_ANT = m.PER_BENE_MOVI 
 
 WHERE a.TIPO_ANT = 'CLIENTES';`);
+
+    /*
+    SELECT
+    da.ID_DET_ANT,
+    da.FEC_DET_ANT,
+    da.OBS_DET_ANT AS ABS_ANT,
+
+    CASE da.FDP_DET_ANT
+        WHEN 'CUENTA CONTABLE'     THEN 'CCTACONT'
+        WHEN 'DEVOLUCION A CAJA'   THEN 'DEVCAJA'
+        WHEN 'DEVOLUCION'          THEN 'DEVBANCO'
+        ELSE da.FDP_DET_ANT
+    END AS FORMAPAGO,
+
+    ABS(da.IMPOR_DET_ANT) AS IMPORTE_DET,
+    da.SALDO_DET_ANT AS SALDO_DET,
+    da.SECU_DET_ANT AS SECUENCIA_DET,
+    da.FK_COD_ANT AS FK_IDANT,
+    da.PER_DET_ANT AS BENEFICIARIA,
+
+    CASE
+        WHEN da.ref_cuentas > 0 THEN 'CXC'
+        WHEN da.FDP_DET_ANT = 'NOTA DE CREDITO' THEN 'nota'
+        WHEN da.FDP_DET_ANT = 'RETENCION EN VENTA' THEN 'RETENCION-VENTA'
+        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV') THEN 'ANT-ORDEN'
+        ELSE 'ANTCLI'
+    END AS ORIGEN_ANT,
+
+CASE
+WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN('OE') THEN 'ANT-ORDEN-TRABAJO' 
+WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN('OV') THEN 'ANT-ORDEN-VENTA' ELSE 'ANTCLI'
+END AS ORG_ORDEN,
+
+    CASE
+        WHEN da.ref_cuentas > 0 THEN da.ref_cuentas else NULL
+    END AS ref_cuentas,
+    CASE
+        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV')
+        THEN da.FK_ORDEN
+        ELSE NULL
+    END AS FK_ID_ORDEN,
+
+    CASE
+        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV')
+        THEN da.FK_ORDEN
+        ELSE NULL
+    END AS  SECUENCIA,
+
+    CASE
+        WHEN da.FK_COD_TRAC > 0 THEN da.FK_COD_TRAC
+        ELSE NULL
+    END AS FK_COD_TRAC,
+
+    CASE
+        WHEN da.FECH_REG = '0000-00-00 00:00:00'
+        THEN da.FEC_DET_ANT
+        ELSE da.FECH_REG
+    END AS FECH_REG,
+
+    CASE
+        WHEN da.IMPOR_DET_ANT > 0 THEN 'INGRESO'
+        ELSE 'EGRESO'
+    END AS CAUSA_ANT
+
+FROM detalle_anticipos da
+INNER JOIN anticipos a 
+    ON a.ID_ANT = da.FK_COD_ANT
+INNER JOIN clientes c 
+    ON c.COD_CLI = a.FK_COD_CLI_ANT
+LEFT JOIN movimientos m 
+    ON m.FK_ANT_MOVI = da.ID_DET_ANT
+
+WHERE a.TIPO_ANT = 'CLIENTES';
+    */
 
     const anticiposClientes = rows;
     const mapAdvancesDetailCustomers: Record<string, number> = {};
@@ -540,7 +614,7 @@ FROM
     contabilidad_asientos
 INNER JOIN detalle_anticipos ON detalle_anticipos.ID_DET_ANT = contabilidad_asientos.cod_origen
 INNER JOIN anticipos ON anticipos.ID_ANT = detalle_anticipos.FK_COD_ANT
-INNER JOIN movimientos ON movimientos.FK_ANT_MOVI = detalle_anticipos.ID_DET_ANT
+INNER JOIN movimientos ON movimientos.FK_ANT_MOVI = detalle_anticipos.ID_DET_ANT #and date(detalle_anticipos.FEC_DET_ANT) = date(movimientos.FECHA_MANUAL) and movimientos.IMPOR_MOVI = detalle_anticipos.IMPOR_DET_ANT  and detalle_anticipos.PER_DET_ANT = movimientos.PER_BENE_MOVI 
 INNER JOIN clientes ON clientes.COD_CLI = anticipos.FK_COD_CLI_ANT
 WHERE
     origen_asiento = 'ANTTICIPOS CLI';` );
@@ -651,7 +725,7 @@ INNER JOIN anticipos ON anticipos.ID_ANT = detalle_anticipos.FK_COD_ANT
 INNER JOIN movimientos ON movimientos.FK_ANT_MOVI = detalle_anticipos.ID_DET_ANT
 INNER JOIN clientes ON clientes.COD_CLI = anticipos.FK_COD_CLI_ANT
 WHERE
-    origen_asiento = 'ANTTICIPOS CLI';`);
+    origen_asiento = 'ANTTICIPOS CLI' ;`);
 
     if (!rows.length) {
         console.log("⚠️ No hay registros para migrar");
