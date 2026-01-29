@@ -62,11 +62,11 @@ export async function migratePreconfiguredAccounts(
     if (!businesPreConf.length) {
         throw new Error(`Preconfigurado no encontrado`);
     }
-   /*  const endTime = performance.now(); // ⏱ Fin
-    const durationMs = endTime - startTime; */
+    /*  const endTime = performance.now(); // ⏱ Fin
+     const durationMs = endTime - startTime; */
 
- /*    console.log(`⏱ Tiempo total del proceso: ${durationMs.toFixed(2)} ms`);
- */
+    /*    console.log(`⏱ Tiempo total del proceso: ${durationMs.toFixed(2)} ms`);
+    */
     // Configuración centralizada: cada CODCONT y sus detalles con los parámetros asociados
     const configMap = {
         CTAR: { 'TARJETA': [38] },
@@ -123,22 +123,23 @@ export async function migratePreconfiguredAccounts(
     // 🔁 Función genérica para insertar cuentas
     const processCuenta = async ({ detalle, codigo, parameterIds, newCompanyId }, conn) => {
         const cuentaData = await consultarCuentaCodigoContable(codigo, newCompanyId, conn);
-        if (!cuentaData.length) {
-            return 1;
-        }
-        console.log(`Cuenta contable pre procesando: ${codigo}`);
-        const codIdPlan = cuentaData[0].ID_PLAN;
-        for (const parameterId of parameterIds) {
-            const dataInsert = await findParametersInsertAccounting({
-                newCompanyId,
-                parameterId,
-                codIdPlan,
-            }, conn);
-            if (!dataInsert.affectedRows) {
-                throw new Error(`Error al migrar cuenta de resultados: ${detalle}`);
+        if (cuentaData.length > 0) {
+            /*  return 1; */
+            /*  } */
+            console.log(`Cuenta contable pre procesando: ${codigo}`);
+            const codIdPlan = cuentaData[0].ID_PLAN;
+            for (const parameterId of parameterIds) {
+                const dataInsert = await findParametersInsertAccounting({
+                    newCompanyId,
+                    parameterId,
+                    codIdPlan,
+                }, conn);
+                if (!dataInsert.affectedRows) {
+                    throw new Error(`Error al migrar cuenta de resultados: ${detalle}`);
 
+                }
+                //console.log(`✅ Cuenta de resultados ${detalle} - Cuenta: ${codIdPlan}`);
             }
-            //console.log(`✅ Cuenta de resultados ${detalle} - Cuenta: ${codIdPlan}`);
         }
     };
 
@@ -203,7 +204,8 @@ async function findParametersInsertAccounting(parameter, conn) {
             const [param] = await conn.query(query, [parameter.parameterId, parameter.newCompanyId, parameter.codIdPlan]);
             return param;
         }
-    } catch (error) { console.log(error);
+    } catch (error) {
+        console.log(error);
         throw new Error(` find-> Error en actualizar informacion de los parametros contables`);
 
     }

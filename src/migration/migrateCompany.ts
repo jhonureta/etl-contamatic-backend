@@ -924,7 +924,7 @@ export async function migrateCompany(codEmp: number) {
     });
 
     //= Migracion de Inventario ==//
-    
+
     await migrateKardex({
       legacyConn,
       conn,
@@ -951,7 +951,7 @@ export async function migrateCompany(codEmp: number) {
       mapAuditSales,
       mapCreditNote,
       mapAuditCreditNote
-    ); 
+    );
     //== Migrar documentos recibidos sri ===/
     const mapRetentionsSri = await migrateDocRetentions(
       legacyConn,

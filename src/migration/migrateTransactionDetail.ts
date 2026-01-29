@@ -59,7 +59,7 @@ export async function migrateTransactionDetails({
           amount: Number(detail.CAN_DET),
           newProductId,
           storeMap
-        }): null;
+        }) : null;
 
         if (!whdetId) {
           whdetId = await findFirstWarehouseDetailByProduct({
@@ -139,21 +139,27 @@ async function findWarehouseDetailIdByTransaction({
   if (cache.has(key)) return cache.get(key);
 
   const [warehouseData]: any[] = await legacyConn.query(`
-    SELECT
-        jt.idBodega
-    FROM
-        transacciones t
-    JOIN JSON_TABLE(
-            t.DET_TRAC,
-            '$[*]' COLUMNS(
-                idProducto INT PATH '$.idProducto',
-                idBodega INT PATH '$.idBodega',
-                cantidad DECIMAL(18, 6) PATH '$.cantidad'
-            )
-        ) jt
-    WHERE
-        t.COD_TRAC = ? AND jt.idProducto = ? AND jt.cantidad = ?
-    LIMIT 1;
+   SELECT
+    jt.idBodega
+FROM
+    transacciones t
+JOIN JSON_TABLE(
+        CASE 
+            WHEN JSON_VALID(t.DET_TRAC) THEN t.DET_TRAC
+            ELSE '[]'
+        END,
+        '$[*]' COLUMNS(
+            idProducto INT PATH '$.idProducto',
+            idBodega INT PATH '$.idBodega',
+            cantidad DECIMAL(18,6) PATH '$.cantidad'
+        )
+    ) jt
+WHERE
+    t.COD_TRAC = ?
+    AND jt.idProducto = ?
+    AND jt.cantidad = ?
+LIMIT 1;
+
   `, [transactionId, legacyProductId, amount]);
 
   if (warehouseData.length === 0) {

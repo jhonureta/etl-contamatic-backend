@@ -44,7 +44,7 @@ export async function migrateUsersForCompany(
     console.log("Migrando usuarios...");
 
     const queryUsers = `
-        SELECT COD_USUEMP, IDE_USUEMP, NOM_USUEMP, TEL_USUEMP, EMA_USUEMP, ALI_USUEMP, PASS_USUEMP, FOTO_USUEMP, 
+        SELECT COD_USUEMP, IDE_USUEMP, NOM_USUEMP, TEL_USUEMP, EMA_USUEMP, CASE WHEN  ALI_USUEMP = 'SoportE9' THEN 'admin' else ALI_USUEMP END AS ALI_USUEMP , PASS_USUEMP, FOTO_USUEMP, 
                ROL_USUEMP, EST_USUEMP, ACCESOS_USU, estado_usu, count_intentos, 
                0 AS TWOFACT_USUEMP, NULL AS KEY_TWOFACT_USUEMP, NULL AS CODE_REC_USUEMP, NULL AS EXP_CODE_USUEMP, 
                NOW() AS FEC_REG, NOW() AS FEC_MOD, NULL AS deleteAt, '[]' AS CONF_VENTAS, FK_COD_SUC as idSucursal 
@@ -97,7 +97,7 @@ export async function migrateUsersForCompany(
 
     const detailSet = new Set(existingDetails.map((d: any) => `${d.FK_COD_USUC}-${d.FK_COD_USU}`));
 
-   
+
     const detailValues = [];
     const userNameIdMap = new Map<string, UserIdentity>();
     for (const u of users) {
@@ -124,5 +124,5 @@ export async function migrateUsersForCompany(
 
     console.log(` -> Detalle usuarios insertados: ${detailValues.length}`);
 
-    return { userMap , userNameIdMap };
+    return { userMap, userNameIdMap };
 }
