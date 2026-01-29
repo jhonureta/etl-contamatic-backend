@@ -3,7 +3,7 @@ export async function migrateWarehouseDetails(
     conn: any,
     branchMap: any,
     mapProducts: any
-): Promise<Record<number, number>> {
+): Promise<{ mapDetWare: Record<number, number>; prodWareDetailIdMap: Record<string, number> }> {
     console.log("Migrando detalle de bodega stock...");
 
     const [rows] = await legacyConn.query(`SELECT detallebodega.COD_DETBOD as WHDET_ID, FK_COD_PROBOD as FK_PROD_ID, bodegas.COD_BOD as FK_WH_ID, STO_PRODET as WHDET_STOCK, ESTA_PROD as PROD_STATE  FROM detallebodega inner join bodegas on bodegas.COD_BOD = detallebodega.FK_COD_DETBOD WHERE 1 ;`);
@@ -14,6 +14,7 @@ export async function migrateWarehouseDetails(
     }
     const BATCH_SIZE = 1000;
     const mapDetWare: Record<number, number> = {};
+    const prodWareDetailIdMap: Record<string, number> = {};
     for (let i = 0; i < detale.length; i += BATCH_SIZE) {
         const batch = detale.slice(i, i + BATCH_SIZE);
 
@@ -43,6 +44,7 @@ export async function migrateWarehouseDetails(
             let newId = res.insertId;
             for (const s of batch) {
                 mapDetWare[s.WHDET_ID] = newId;
+                prodWareDetailIdMap[`${s.FK_PROD_ID}:${s.FK_WH_ID}`] = newId;
                 newId++;
             }
             console.log(` -> Batch migrado: ${batch.length} detalle de bodega`);
@@ -51,5 +53,5 @@ export async function migrateWarehouseDetails(
         }
     }
 
-    return mapDetWare;
+    return { mapDetWare, prodWareDetailIdMap};
 }

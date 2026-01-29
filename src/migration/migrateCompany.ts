@@ -1,4 +1,4 @@
-import { systemworkPool, erpPool, createLegacyConnection } from '../config/db';
+import { systemworkPool, erpPool, createLegacyPool } from '../config/db';
 import CryptoService from './encrypt.handler';
 import { migrateAccountingPeriod } from './migrateAccountingPeriod';
 import { migrateBancos } from './migrateBancos';
@@ -63,7 +63,7 @@ export async function migrateCompany(codEmp: number) {
     `Migrando empresa: ${empresa.NOM_EMPSYS} (BD: ${empresa.BASE_EMP})`,
   );
 
-  const legacyConn = await createLegacyConnection({
+  const legacyConn = createLegacyPool({
     user: empresa.USER_BASE_EMP,
     password: empresa.PASS_BASE_EMP,
     database: empresa.BASE_EMP,
@@ -497,7 +497,7 @@ export async function migrateCompany(codEmp: number) {
       mapBrand
     );
 
-    const mapDetWare = await migrateWarehouseDetails(
+    const { mapDetWare, prodWareDetailIdMap } = await migrateWarehouseDetails(
       legacyConn,
       conn,
       branchMap,
@@ -914,13 +914,10 @@ export async function migrateCompany(codEmp: number) {
     await migrateTransactionDetails({
       legacyConn,
       conn,
-      newCompanyId,
-      storeMap,
-      userMap,
       mapProducts,
-      idFirstBranch,
-      transactionIdMap,
-      transactionIdToAuditIdMap
+      transactionIdToAuditIdMap,
+      prodWareDetailIdMap,
+      storeMap
     });
 
     //= Migracion de Inventario ==//
