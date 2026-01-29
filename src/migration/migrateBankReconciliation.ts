@@ -26,7 +26,7 @@ export async function migrateBankReconciliation(
         );
 
         let currentAuditSeq = nextAudit;
-        const BATCH_SIZE = 500; // Reducido un poco para estabilidad
+        const BATCH_SIZE = 1000; // Reducido un poco para estabilidad
 
         for (let i = 0; i < dataConciliacion.length; i += BATCH_SIZE) {
             const batch = dataConciliacion.slice(i, i + BATCH_SIZE);

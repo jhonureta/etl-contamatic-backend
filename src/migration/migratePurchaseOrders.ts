@@ -530,7 +530,7 @@ async function migratePurchaseOrderObligations({
       return { orderObligationIdMap, orderObligationAuditIdMap };
     }
 
-    const BATCH_SIZE: number = 500;
+    const BATCH_SIZE: number = 1500;
 
     for (let i = 0; i < obligations.length; i += BATCH_SIZE) {
       const batchObligation = obligations.slice(i, i + BATCH_SIZE);
@@ -691,7 +691,7 @@ async function migrateOrderMovements({
     const [movementData] = movementSequenceQuery as Array<any>;
     let movementSequence = movementData[0]?.SECU_MOVI ?? 1;
 
-    const BATCH_SIZE = 500;
+    const BATCH_SIZE = 1500;
 
     for (let i = 0; i < movements.length; i += BATCH_SIZE) {
       const batchMovements = movements.slice(i, i + BATCH_SIZE);

@@ -108,7 +108,7 @@ WHERE
         let movementSequence = movementData[0]?.SECU_MOVI ?? 1;
 
 
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 1000;
         //TIPO_MOVI
         for (let i = 0; i < movements.length; i += BATCH_SIZE) {
             const batchMovements = movements.slice(i, i + BATCH_SIZE);

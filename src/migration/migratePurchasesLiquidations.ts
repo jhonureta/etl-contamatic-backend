@@ -627,7 +627,7 @@ async function migrateDataMovements({
 		const [movementData] = movementSequenceQuery as Array<any>;
 		let movementSequence = movementData[0]?.SECU_MOVI ?? 1;
 
-		const BATCH_SIZE = 500;
+		const BATCH_SIZE = 1500;
 
 		for (let i = 0; i < movements.length; i += BATCH_SIZE) {
 			const batchMovements = movements.slice(i, i + BATCH_SIZE);
@@ -783,7 +783,7 @@ async function migrateObligationsTransactions({
 			return { purchaseLiquidationObligationIdMap, purchaseLiquidationObligationAuditIdMap, oblAsiToAuditId };
 		}
 
-		const BATCH_SIZE: number = 500;
+		const BATCH_SIZE: number = 1500;
 		let nexAuditId = auditId;
 		let importedAuditId: number | null = null;
 
@@ -907,7 +907,7 @@ async function migrateImportedObligations({
 		const migratedMovementsIdMap: Record<number, number> = {};
 		const seatIdMap: Record<number, number> = {};
 		const movements: any[] = [];
-		const BATCH_SIZE = 500;
+		const BATCH_SIZE = 1500;
 		type AggRow = {
 			IMPORTE: number;
 			COD_CUENTA: number | null;
@@ -1632,7 +1632,7 @@ export async function migratePurchaseObligationDetail({
 		if (obligationDetails.length === 0) {
 			return { movementIdMap, movementAuditIdMap };
 		}
-		const BATCH_SIZE = 500;
+		const BATCH_SIZE = 1500;
 
 		for (let i = 0; i < obligationDetails.length; i += BATCH_SIZE) {
 			const obligationBatch = obligationDetails.slice(i, i + BATCH_SIZE);
@@ -1833,7 +1833,7 @@ async function migrateDetailsOfObligations({
 		if (detailsObligations.length === 0) {
 			return { detailObligationIdMap };
 		}
-		const BATCH_SIZE = 500;
+		const BATCH_SIZE = 1500;
 
 		for (let i = 0; i < detailsObligations.length; i += BATCH_SIZE) {
 			const batchObligations = detailsObligations.slice(i, i + BATCH_SIZE);

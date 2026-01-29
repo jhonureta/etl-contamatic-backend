@@ -199,7 +199,7 @@ export async function migrateMovementsTransactions(
     }
 
     try {
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 1000;
 
         let auditSeq: number = await fetchNextAuditSeq(conn, newCompanyId);
 
@@ -354,7 +354,7 @@ export async function migrateMovementsObligationsMigrados(
         OBLG_FEC_REG: any;
     };
 
-    const BATCH_SIZE = 500;
+    const BATCH_SIZE = 1000;
 
     try {
         const [rows]: any[] = await conn.query(`SELECT
@@ -750,7 +750,7 @@ export async function migrateMovementsObligations(
 
         let secuenciaMovimiento = movSec[0]?.SECU_MOVI ?? 1;
 
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 1500;
 
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
             const batch = rows.slice(i, i + BATCH_SIZE);
@@ -929,7 +929,7 @@ export async function migrateMovementsObligationsCredito(
 
         let secuenciaMovimiento = movSec[0]?.SECU_MOVI ?? 1;
 
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 1500;
 
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
             const batch = rows.slice(i, i + BATCH_SIZE);

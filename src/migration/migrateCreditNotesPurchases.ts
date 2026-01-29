@@ -1026,7 +1026,7 @@ export async function migratePaymentDetails(
 
     if (rows.length === 0) return { mapDetailObligationsAplicate };
 
-    const BATCH_SIZE = 500;
+    const BATCH_SIZE = 1000;
 
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);

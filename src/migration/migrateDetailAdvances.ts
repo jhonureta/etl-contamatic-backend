@@ -135,7 +135,7 @@ WHERE
         );
         const accountMap = new Map(accountRows.map((a: any) => [a.CODIGO_PLAN, a.ID_PLAN]));
 
-        const BATCH_SIZE = 500;
+        const BATCH_SIZE = 1500;
         //TIPO_MOVI
         for (let i = 0; i < movements.length; i += BATCH_SIZE) {
             const batchMovements = movements.slice(i, i + BATCH_SIZE);

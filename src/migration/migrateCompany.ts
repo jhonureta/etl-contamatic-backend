@@ -961,7 +961,7 @@ export async function migrateCompany(codEmp: number) {
       mapAuditSales
     );
 
-    await conn.rollback();
+    await conn.commit();
 
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
