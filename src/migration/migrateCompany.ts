@@ -144,7 +144,7 @@ export async function migrateCompany(codEmp: number) {
       e.CONTADOR ?? 1,
       vacio,
       vacio,
-
+      e.COD_EMPSYS
     ]
 
     await conn.beginTransaction();
@@ -179,7 +179,7 @@ export async function migrateCompany(codEmp: number) {
      SELECCION_COSTEO, EDIT_VENDEDOR, DESCUENTO_AUTOMATICO, 
      JSON_ESTAB, LEGEND_EMP, TIT_LEGEND_EMP, ITEMS_AUT, CLAVRUC_EMP, 
      SEC_EXTR_EMP, DATOS_EXTR_EMP, ACT_DESCRIPCION, IMP_LOGO, IMP_SURC_EMP, COLOR_LEYENDA, 
-     FK_COD_COUNT, FECCREACION_EMP, EST_EMP, CONTADOR,DIRMAT_EMP, WHATS_EMP)
+     FK_COD_COUNT, FECCREACION_EMP, EST_EMP, CONTADOR,DIRMAT_EMP, WHATS_EMP, COD_SYSTEM)
     VALUES (?, ?, ?, ?, ?, ?, ?,
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
@@ -187,7 +187,7 @@ export async function migrateCompany(codEmp: number) {
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
-       ?, ?, ?, ?, ?, ?,?
+       ?, ?, ?, ?, ?, ?,?,?
     )
     `,
       resultInsert
@@ -958,7 +958,7 @@ export async function migrateCompany(codEmp: number) {
       mapAuditSales
     );
 
-    await conn.commit();
+    await conn.rollback();
 
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
