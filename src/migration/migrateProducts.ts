@@ -102,7 +102,7 @@ export async function batchInsertProducts(
                 p.PROD_DESCR,
                 p.PROD_FEC_EXPI,
                 p.PROD_TYPE?.toUpperCase() || 'PRODUCTO SIMPLE',
-                "https://empresarial.contamatic.ec/sistema/"+p.PROD_IMG,
+                p.PROD_IMG,
                 p.PROD_FEC_REG,
                 p.PROD_PRICE_COST,
                 p.PROD_PRICE_PUB,
