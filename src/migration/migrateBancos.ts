@@ -9,7 +9,7 @@ export async function migrateBancos(
     const bankNationalMap: Record<number, number> = {};
 
     try {
-        await cardGeneric(conn,newCompanyId);
+        await cardGeneric(conn, newCompanyId);
         // 1️⃣ Traer todos los bancos migrados
         const [bancosMigrados] = await legacyConn.query(`
             SELECT ID_BANCO as BANCKID_MIG, FECREG_BANCO, FK_ENTIDAD_BANCARIA, NUMCUEN_BANC, DIR_BANC, TEL_BANC, CONTAC_BANC, AGEN_BANC, SALDO_BANCO, EST_BANCO, FK_CTAB_PLAN, SECU_CHEQ
@@ -36,7 +36,7 @@ export async function migrateBancos(
                 const [insertNational] = await conn.query(
                     `INSERT INTO national_banks (CODN_BAN,NOM_BAN,EST_BAN) VALUES (?,?,?)`,
                     [
-                        banco.CODN_BAN,
+                        banco.CODN_BAN ?? `SN${banco.FK_ENTIDAD_BANCARIA}`,
                         banco.NOM_BAN,
                         banco.EST_BAN
                     ]
@@ -65,7 +65,7 @@ export async function migrateBancos(
             });
 
             bankMap[banco.BANCKID_MIG] = insertId;
-             console.log(` -> Batch migrado: ${banco.length} bancos`);
+            console.log(`-> Batch migrado: ${[banco].length} bancos`);
         }
 
     } catch (error) {

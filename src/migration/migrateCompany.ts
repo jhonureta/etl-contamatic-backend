@@ -45,6 +45,7 @@ import { migrateDocRetentions } from './migrateSriWithholdings';
 import { migrateSeatsCostSales } from './migrateSeatsCostSales';
 import { migrateTransactionDetails } from './migrateTransactionDetail';
 import { migrateKardex } from './migrateKardex';
+import { migrateCashClose } from './migrateCashClose';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -196,21 +197,7 @@ export async function migrateCompany(codEmp: number) {
 
     const newCompanyId: number = resCompany.insertId;
     console.log(`-> Empresa migrada con ID = ${newCompanyId}`);
-
     console.log(`-> Migrando configuracion de empresa`);
-
-    /*   const datosExtras = JSON.parse(e.DATOS_EXTR_EMP) || [];
-      const requiredExtras = ['RESPONSABLE', 'BODEGA', 'VENDEDOR'];
-      const CONF_DATOS_RESP = datosExtras.some(d => d.toUpperCase() === 'RESPONSABLE') ? 1 : 0;
-      const CONF_DATOS_BOD = datosExtras.some(d => d.toUpperCase() === 'BODEGA') ? 1 : 0;
-      const CONF_DATOS_VEND = datosExtras.some(d => d.toUpperCase() === 'VENDEDOR') ? 1 : 0;
-      const faltantesExtras = requiredExtras.filter(k => !datosExtras.map(d => d.toUpperCase()).includes(k));
-      if (faltantesExtras.length > 0) {
-        throw new Error(
-          `Faltan datos extra obligatorios: ${faltantesExtras.join(', ')}`,
-        );
-      }
-   */
 
     // 1. Intentar parsear de forma segura para que no rompa si e.DATOS_EXTR_EMP es null o mal formado
     let datosExtras = [];
@@ -333,7 +320,7 @@ export async function migrateCompany(codEmp: number) {
       `SELECT  FK_COD_EMP as FK_COD_EMP,CONTADOR as DOC_UTI, DOC_TOTAL as DOC_TOTAL, 
       FEC_INICIO as FEC_INICIO,ADDDATE(FEC_INICIO, INTERVAL 1 YEAR)  as FEC_FIN, 
       FEC_VENCE,RENOVACION, FK_COD_PLAN as PLAN_ID, FEC_REG as FEC_REG,ESTADO as EST_PLAN, 
-      FEC_MOD as FEC_MOD  FROM detalle_plan WHERE FK_COD_EMP =?;`,
+      FEC_MOD as FEC_MOD  FROM detalle_plan WHERE FK_COD_EMP =? ORDER BY COD_DETALLE DESC LIMIT 1;`,
       [codEmp],
     );
 
@@ -455,13 +442,26 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const boxMap = await migrateCajas(
+    const {boxMap, boxMapId} = await migrateCajas(
       legacyConn,
       conn,
       newCompanyId,
       mapAccounts,
       userMap
     );
+
+
+/*     const { mapCloseCash } = await migrateCashClose(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapAccounts,
+      userMap,
+      boxMapId
+    )
+
+     */
+
     const mapCategories = await migrateCategories(
       legacyConn,
       conn,
@@ -478,8 +478,6 @@ export async function migrateCompany(codEmp: number) {
       conn
     );
 
-    /*  await conn.rollback();
-     return; */
     const mapBrand = await migrateBrand(
       legacyConn,
       conn,
@@ -504,13 +502,14 @@ export async function migrateCompany(codEmp: number) {
       mapProducts
     );
 
+
+
     const { mapSales, mapAuditSales } = await migrateSales(
       legacyConn,
       conn,
       newCompanyId, branchMap, userMap, mapClients, mapProducts, mapRetentions, oldRetentionCodeMap, newRetentionIdMap, storeMap);
 
     //MIGRACION DE CONCILIACION BANCARIA
-
     const mapConciliation = await migrateBankReconciliation(
       legacyConn,
       conn,

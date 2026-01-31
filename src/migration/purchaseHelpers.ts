@@ -358,7 +358,7 @@ export async function findFirstDefaultUser({
 }: FindFirstDefaultUserParams) {
   try {
     const userQuery = `
-      SELECT
+     SELECT
           COD_USUEMP,
           IDE_USUEMP,
           NOM_USUEMP,
@@ -366,9 +366,9 @@ export async function findFirstDefaultUser({
           ROL_USUEMP,
           EST_USUEMP
       FROM
-          users
+          users INNER join user_company on user_company.FK_COD_USUEMP = users.COD_USUEMP
       WHERE
-          FK_COD_EMP = ? AND ROL_USUEMP <> 'superadmin'
+          user_company.FK_COD_EMP = ? AND ROL_USUEMP <> 'superadmin'
       ORDER BY
           COD_USUEMP ASC
       LIMIT 1;

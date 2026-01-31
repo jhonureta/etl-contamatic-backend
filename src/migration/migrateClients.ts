@@ -98,6 +98,8 @@ export async function migrateClientsForCompany(
             if (u.CUST_NOM === 'CONSUMIDOR FINAL') {
                 CUST_TIPCI = 'CF';
                 CUST_CODE_CI = '07';
+                u.CUST_CI = '9999999999999';
+
             } else {
                 if (!u.CUST_TIPCI || u.CUST_TIPCI === '') {
                     CUST_TIPCI = u.CUST_CI.length === 10 ? 'CEDULA'

@@ -6,9 +6,10 @@ export async function migrateCajas(
     newCompanyId: number,
     mapAccounts: Record<number, number | null>,
     userMap: Record<number, number | null>
-): Promise<Record<number, number>> {
+): Promise<{ boxMap: Record<number, number>, boxMapId: Record<number, number> }> {
 
     const boxMap: Record<number, number> = {};
+    const boxMapId: Record<number, number> = {};
     console.log("Migrando cajas...");
 
     try {
@@ -18,7 +19,7 @@ export async function migrateCajas(
             FROM cajas;
         `;
         const [cajasMigradas] = await legacyConn.query(queryCajas);
-        if (!cajasMigradas.length) return boxMap;
+        if (!cajasMigradas.length) return { boxMap, boxMapId };
 
         console.log(` -> Batch migrado: ${cajasMigradas.length} cajas`);
 
@@ -46,12 +47,9 @@ export async function migrateCajas(
             if (data.affectedRows != 1) {
                 throw new Error('Error al insertar los registros de la caja');
             }
-
+            boxMapId[caja.ID_CAJA] = data.insertId;
             // Insertar detalle solo si hay usuarios
             const firstUserId = userMap[caja.FK_COD_USU] ?? defaultUserId;
-
-            console.log(userMap, caja.FK_COD_USU, defaultUserId);
-
 
             const detail = await createBoxDetailReg(conn, {
                 userId: firstUserId,
@@ -62,10 +60,11 @@ export async function migrateCajas(
                 continue;
             }
             boxMap[caja.ID_CAJA] = detail.insertId;
+
             /* } */
         }
 
-        return boxMap;
+        return { boxMap, boxMapId };
 
     } catch (error) {
         throw new Error(error);
