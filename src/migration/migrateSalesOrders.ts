@@ -175,7 +175,7 @@ export async function migrateSalesOrders({
           workOrder.IVA_TRAC,
           workOrder.TOT_RET_TRAC,
           workOrder.TOT_PAG_TRAC,
-          workOrder.PROPINA_TRAC,
+          workOrder.PROPINA_TRAC ?? 0,
           workOrder.OTRA_PER,
           workOrder.COD_COMPROBANTE,
           workOrder.COD_COMPROBANTE_REL,
@@ -198,7 +198,7 @@ export async function migrateSalesOrders({
           workOrder.FECHA_ANULACION,
           workOrder.TIP_DOC,
           workOrder.SRI_PAY_CODE,
-          workOrder.CLIENT_IP,
+          workOrder.CLIENT_IP ?? '0.0.0.0',
           workOrder.FK_AUDIT_REL,
           workOrder.NUM_TRANS,
           workOrder.NUM_REL_DOC,
@@ -297,7 +297,7 @@ export async function migrateSalesOrders({
       console.log(` -> Batch migrado: ${batch.length} ordenes de venta`);
     }
 
-    return { salesOrderIdMap, salesOrderAuditIdMap};
+    return { salesOrderIdMap, salesOrderAuditIdMap };
   } catch (error) {
     console.error("Error al migrar ordenes de venta:", error);
     throw error;
@@ -316,7 +316,7 @@ function transformProductDetail(
     const mappedBodega = storeMap[item?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;
     const idBodega = mappedBodega || idFirstBranch;
-   
+
     return {
       idProducto,
       idBodega,

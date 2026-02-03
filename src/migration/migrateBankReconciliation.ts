@@ -27,14 +27,14 @@ export async function migrateBankReconciliation(
 
         let currentAuditSeq = nextAudit;
         const BATCH_SIZE = 1000; // Reducido un poco para estabilidad
-
+        let secuencia = 1;
         for (let i = 0; i < dataConciliacion.length; i += BATCH_SIZE) {
             const batch = dataConciliacion.slice(i, i + BATCH_SIZE);
-            
+
             // --- PASO A: Insertar Auditoría en Bloque ---
             const auditValues = batch.map(() => [
-                currentAuditSeq++, 
-                'CONCILIACION_BANCARIA', 
+                currentAuditSeq++,
+                'CONCILIACION_BANCARIA',
                 newCompanyId
             ]);
 
@@ -60,7 +60,9 @@ export async function migrateBankReconciliation(
                     c.RESPONSABLE ?? null,
                     idBanco,
                     newCompanyId,
-                    firstAuditId + index // Asignamos el ID de auditoría correspondiente
+                    firstAuditId + index,
+                    secuencia++
+                    // Asignamos el ID de auditoría correspondiente
                 ];
             });
 
@@ -68,7 +70,7 @@ export async function migrateBankReconciliation(
             const [resConcil]: any = await conn.query(
                 `INSERT INTO bank_reconciliation(
                     FECHA_CORTE, SALDO_BANCARIO, SALDO_CONTABLE, DIFERENCIA_CONC, DESCRIP_CONC,
-                    ESTADO, ACTUALIZACION, RESPONSABLE, FK_COD_BANC_CONC, FK_COD_EMP, FK_AUDITCONC
+                    ESTADO, ACTUALIZACION, RESPONSABLE, FK_COD_BANC_CONC, FK_COD_EMP, FK_AUDITCONC, SECU_CONC
                 ) VALUES ?`,
                 [reconciliationValues]
             );

@@ -16,7 +16,7 @@ export async function migrateAdvancesCustomers(
         return mapAdvancesCustomers;
     }
     const BATCH_SIZE = 1000;
-    
+
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 
