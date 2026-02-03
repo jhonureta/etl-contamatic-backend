@@ -170,6 +170,18 @@ export async function migrateCreditNotesPurchases({
 
     const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
 
+    function safeJson(input: any) {
+      try {
+        if (typeof input === "string") {
+          JSON.parse(input);        // verificar validez
+          return input;
+        }
+        return JSON.stringify(input ?? {});
+      } catch {
+        return "{}"; // fallback JSON válido
+      }
+    }
+
     const BATCH_SIZE = 1000;
 
     for (let i = 0; i < creditNotesPurchases.length; i += BATCH_SIZE) {
@@ -287,7 +299,7 @@ export async function migrateCreditNotesPurchases({
           t.NUM_REL_DOC,
           t.DIV_PAY_YEAR,
           null,
-          t.RESP_SRI,
+          safeJson(t.RESP_SRI),
           t.INFO_ADIC,
           t.DET_EXP_REEMBOLSO,
           JSON.stringify(paymentMethod),

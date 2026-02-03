@@ -52,7 +52,10 @@ export async function migrateCreditNote(
     storeMap: Record<number, number>
 ): Promise<{ mapCreditNote: Record<number, number>; mapAuditCreditNote: Record<number, number> }> {
     console.log("Migrando notas de credito...");
-
+    
+    const mapCreditNote: Record<number, number> = {};
+    const mapAuditCreditNote: Record<number, number> = {};
+    
     const [rows] = await legacyConn.query(`SELECT
 tn.TIP_TRAC as fact,
     tf.COD_TRAC AS COD_TRANS,
@@ -144,7 +147,7 @@ DESC;`);
     const ventas = rows as any[];
 
     if (!ventas.length) {
-        throw new Error(" -> No hay notas de credito para migrar.");
+       return { mapCreditNote, mapAuditCreditNote };
     }
 
     //Ultima secuencia de auditoria
@@ -174,8 +177,6 @@ DESC;`);
 
 
     const BATCH_SIZE = 1000;
-    const mapCreditNote: Record<number, number> = {};
-    const mapAuditCreditNote: Record<number, number> = {};
     const mapSalesNoteBound: Record<number, number> = {};
 
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
@@ -455,7 +456,9 @@ export async function migrateMovementeAdvancesNote(
     mapAuditCreditNote: Record<number, number | null>
 ): Promise<{ mapNoteMovements: Record<number, number> }> {
     console.log("Migrando notas de credito en ventas...");
-
+    
+    let mapNoteMovements: Record<number, number> = {};
+    
     const [rows] = await legacyConn.query(`SELECT
     COD_TRAC,
     NUM_TRACNOT,
@@ -570,10 +573,10 @@ DESC;`);
 
     const ventas = rows as any[];
     if (!ventas.length) {
-        throw new Error(" -> No hay notas de credito para migrar.");
+        return { mapNoteMovements };
     }
     const BATCH_SIZE = 1000;
-    let mapNoteMovements: Record<number, number> = {};
+    
     const oldDetailAcountCodeMap = [];
 
     const [[{ nextSecu }]]: any = await conn.query(

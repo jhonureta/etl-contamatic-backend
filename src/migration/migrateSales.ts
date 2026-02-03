@@ -339,6 +339,7 @@ FROM
                 }
 
 
+
                 const retencionVentaNueva = adaptarEstructuraMultiple(t.DOCUMENT_REL_DETAIL);
 
                 return [
@@ -405,7 +406,7 @@ FROM
                     t.NUM_REL_DOC,
                     t.DIV_PAY_YEAR,
                     JSON.stringify(retencionVentaNueva),
-                    t.RESP_SRI,
+                    safeJson(t.RESP_SRI),
                     t.INFO_ADIC,
                     t.DET_EXP_REEMBOLSO,
                     safeJson(t.JSON_METODO),
