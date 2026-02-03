@@ -442,7 +442,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const {boxMap, boxMapId} = await migrateCajas(
+    const { boxMap, boxMapId } = await migrateCajas(
       legacyConn,
       conn,
       newCompanyId,
@@ -451,16 +451,16 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-/*     const { mapCloseCash } = await migrateCashClose(
-      legacyConn,
-      conn,
-      newCompanyId,
-      mapAccounts,
-      userMap,
-      boxMapId
-    )
-
-     */
+    /*     const { mapCloseCash } = await migrateCashClose(
+          legacyConn,
+          conn,
+          newCompanyId,
+          mapAccounts,
+          userMap,
+          boxMapId
+        )
+    
+         */
 
     const mapCategories = await migrateCategories(
       legacyConn,

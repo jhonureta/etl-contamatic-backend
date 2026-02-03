@@ -100,7 +100,7 @@ export async function migrateChartAccounts(
     if (updateData.length > 0) {
         try {
             const tempValues = updateData.map(d => [d.idComapny, d.id, d.codigo_plan, d.nombre_plan, d.nombre_plan, d.estado_plan, d.grupo_plan, d.nivel, d.parentId, d.tipFam]);
-          /*   console.log(tempValues); */
+
             const [updateRes] = await conn.query(
                 `INSERT INTO account_plan (FK_COD_EMP,ID_PLAN,CODIGO_PLAN,NOM_PLAN, DESC_PLAN,ESTADO_PLAN, GRUPO_PLAN,NIVEL_PLAN, FK_PAD_PLAN, TIPO_FAM_PLAN) 
              VALUES ? 

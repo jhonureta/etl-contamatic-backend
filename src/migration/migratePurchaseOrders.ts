@@ -178,6 +178,18 @@ export async function migratePurchaseOrders({
     const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
     const BATCH_SIZE: number = 1000;
 
+    function safeJson(input: any) {
+      try {
+        if (typeof input === "string") {
+          JSON.parse(input);        // verificar validez
+          return input;
+        }
+        return JSON.stringify(input ?? {});
+      } catch {
+        return "{}"; // fallback JSON válido
+      }
+    }
+
     for (let i = 0; i < purchaseOrders.length; i += BATCH_SIZE) {
       const batchOrders = purchaseOrders.slice(i, i + BATCH_SIZE);
 
@@ -227,7 +239,7 @@ export async function migratePurchaseOrders({
           order.FEC_TRAC,
           order.FEC_REL_TRAC,
           order.FEC_MERC_TRAC,
-          order.MET_PAG_TRAC,
+          safeJson(order.MET_PAG_TRAC),
           order.OBS_TRAC,
           userId,
           sellerId,
@@ -596,7 +608,7 @@ async function migratePurchaseOrderObligations({
         orderObligationIdMap[o.old_id] = nextOrderObligationId++;
       });
 
-       console.log(` -> Batch migrado: ${batchObligation.length} obligaciones de pedidos`);
+      console.log(` -> Batch migrado: ${batchObligation.length} obligaciones de pedidos`);
     }
 
     return { orderObligationIdMap, orderObligationAuditIdMap };
@@ -782,7 +794,7 @@ async function migrateOrderMovements({
         movementOrderIdMap[COD_TRANS] = nextMovementId++;
       });
 
-       console.log(` -> Batch migrado: ${batchMovements.length} movimiento de pedidos`);
+      console.log(` -> Batch migrado: ${batchMovements.length} movimiento de pedidos`);
     }
     console.log("✅ Migración de movimientos pedidos completada correctamente");
     return { movementOrderIdMap };
