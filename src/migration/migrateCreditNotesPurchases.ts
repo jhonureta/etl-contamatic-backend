@@ -521,7 +521,7 @@ export async function migrateMovementeAdvancesNote(
     IFNULL(m.IMPOR_MOVI, TOTPAG_TRAC) AS IMPOR_MOVITOTAL,
     NULL AS FK_ASIENTO,
     NULL AS FK_AUDITMV,
-    NULL AS FK_ARQUEO,
+    m.periodo_caja AS FK_ARQUEO,
     NULL AS ID_TARJETA,
     NULL AS RECIBO_CAJA,
     NULL AS FK_CTAM_PLAN,
@@ -619,6 +619,9 @@ export async function migrateMovementeAdvancesNote(
       let idPlanCuenta = null;
       const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
       o.REF_MOVI = `NOTA CREDITO COMPRA N°:${o.NUM_TRANS}`;
+
+      o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
+
       return [
         bankMap[o.FKBANCO] ?? null,
         mapCreditNote[o.COD_TRAC] ?? null,
@@ -646,7 +649,7 @@ export async function migrateMovementeAdvancesNote(
         o.IMPOR_MOVITOTAL,
         null, // FK_ASIENTO
         currentAuditId,
-        null, // FK_ARQUEO
+        o.FK_ARQUEO, // FK_ARQUEO
         null,
         null, // RECIBO_CAJA
         idPlanCuenta,
@@ -834,7 +837,7 @@ export async function migrateRetentionsCredit(
     IFNULL(m.IMPOR_MOVI, TOTPAG_TRAC) AS IMPOR_MOVITOTAL,
     NULL AS FK_ASIENTO,
     NULL AS FK_AUDITMV,
-    NULL AS FK_ARQUEO,
+    m.periodo_caja AS FK_ARQUEO,
     NULL AS ID_TARJETA,
     NULL AS RECIBO_CAJA,
     NULL AS FK_CTAM_PLAN,
@@ -936,7 +939,7 @@ export async function migrateRetentionsCredit(
         let idPlanCuenta = null;
         const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
         const reference = `NOTA CREDITO COMPRA N°:${o.NUM_TRANS}`;
-
+        o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
         return [
           bankMap[o.FKBANCO] ?? null,
           mapCreditNote[o.COD_TRAC] ?? null,
@@ -964,7 +967,7 @@ export async function migrateRetentionsCredit(
           o.IMPOR_MOVITOTAL,
           null, // FK_ASIENTO
           currentAuditId,
-          null, // FK_ARQUEO
+          o.FK_ARQUEO, // FK_ARQUEO
           null,
           null, // RECIBO_CAJA
           idPlanCuenta,

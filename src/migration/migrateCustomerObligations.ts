@@ -733,7 +733,7 @@ export async function migrateMovementsObligations(
                                                     m.FK_ANT_MOVI,
                                                     IFNULL(m.FK_USER_EMP_MOVI, t.FK_COD_USU) AS FK_USER_EMP_MOVI,
                                                     IFNULL(m.FK_TRAC_MOVI, t.COD_TRAC) AS FK_TRAC_MOVI, mt.NUM_VOUCHER as NUM_VOUCHER, mt.NUM_LOTE as NUM_LOTE,
-                                                   m.CONCEP_MOVI as OBS_MOVI, t.TOTPAG_TRAC , NULL AS FK_ASIENTO, NULL AS FK_ARQUEO, m.RECIBO_CAJA, m.NUM_UNIDAD
+                                                   m.CONCEP_MOVI as OBS_MOVI, t.TOTPAG_TRAC , NULL AS FK_ASIENTO, m.periodo_caja AS FK_ARQUEO, m.RECIBO_CAJA, m.NUM_UNIDAD
                                                 FROM transacciones t
                                                 LEFT JOIN movimientos m 
                                                     ON m.FK_TRAC_MOVI = t.COD_TRAC

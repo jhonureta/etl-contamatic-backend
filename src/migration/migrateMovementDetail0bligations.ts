@@ -91,7 +91,7 @@ export async function migrateMovementDetail0bligations(
                                                 movimientos.TIP_MOVI,
                                                 movimientos.TIPO_MOVI,
                                                 NULL AS FK_ASIENTO,
-                                                NULL AS FK_ARQUEO,
+                                                movimientos.periodo_caja AS FK_ARQUEO,
                                                 NULL AS RECIBO_CAJA,
                                                 NULL AS NUM_UNIDAD,
                                                 NULL AS JSON_PAGOS,
@@ -158,7 +158,7 @@ export async function migrateMovementDetail0bligations(
                     modulo = 'NCVENTA';
                     origen = 'NOTA CREDITO VENTA';
                 }
-
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
                 return [
                     bankMap[o.FK_COD_BANCO_MOVI] ?? null,
                     mapSales[o.FK_TRAC_MOVI] ?? null,
@@ -186,7 +186,7 @@ export async function migrateMovementDetail0bligations(
                     o.IMPOR_MOVITOTAL,
                     null, // FK_ASIENTO
                     currentAuditId,
-                    null, // FK_ARQUEO
+                    o.FK_ARQUEO, // FK_ARQUEO
                     (o.forma === 'TARJETA') ? idCard : null,
                     null, // RECIBO_CAJA
                     idPlanCuenta,

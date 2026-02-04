@@ -521,7 +521,7 @@ IFNULL(
 ) AS IMPOR_MOVITOTAL,
 NULL AS FK_ASIENTO,
 NULL AS FK_AUDITMV,
-NULL AS FK_ARQUEO,
+m.periodo_caja AS FK_ARQUEO,
 NULL AS ID_TARJETA,
 NULL AS RECIBO_CAJA,
 NULL AS FK_CTAM_PLAN,
@@ -599,6 +599,7 @@ DESC;`);
                 let idPlanCuenta = null;
                 const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
                 o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
                 return [
                     bankMap[o.FKBANCO] ?? null,
                     mapCreditNote[o.COD_TRAC] ?? null,
@@ -626,7 +627,7 @@ DESC;`);
                     o.IMPOR_MOVITOTAL,
                     null, // FK_ASIENTO
                     currentAuditId,
-                    null, // FK_ARQUEO
+                    o.FK_ARQUEO, // FK_ARQUEO
                     null,
                     null, // RECIBO_CAJA
                     idPlanCuenta,
@@ -790,7 +791,7 @@ IFNULL(
 ) AS IMPOR_MOVITOTAL,
 NULL AS FK_ASIENTO,
 NULL AS FK_AUDITMV,
-NULL AS FK_ARQUEO,
+m.periodo_caja AS FK_ARQUEO,
 NULL AS ID_TARJETA,
 NULL AS RECIBO_CAJA,
 NULL AS FK_CTAM_PLAN,
@@ -876,7 +877,7 @@ DESC;`);
                 let idPlanCuenta = null;
                 const currentAuditId = mapAuditCreditNote[o.COD_TRAC];
                 o.REF_MOVI = `NOTA CREDITO VENTA N°:${o.NUM_TRACNOT}`;
-
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
                 return [
                     bankMap[o.FKBANCO] ?? null,
                     mapCreditNote[o.COD_TRAC] ?? null,
@@ -904,7 +905,7 @@ DESC;`);
                     o.IMPOR_MOVITOTAL,
                     null, // FK_ASIENTO
                     currentAuditId,
-                    null, // FK_ARQUEO
+                    o.FK_ARQUEO, // FK_ARQUEO
                     null,
                     null, // RECIBO_CAJA
                     idPlanCuenta,

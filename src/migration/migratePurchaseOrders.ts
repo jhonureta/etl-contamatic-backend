@@ -678,7 +678,7 @@ async function migrateOrderMovements({
       m.CONCEP_MOVI AS OBS_MOVI,
       t.TOTPAG_TRAC,
       NULL AS FK_ASIENTO,
-      NULL AS FK_ARQUEO,
+      m.periodo_caja AS FK_ARQUEO,
       m.RECIBO_CAJA,
       m.NUM_UNIDAD
       FROM

@@ -62,7 +62,7 @@ export async function migrateBankCashTransactions(
     CONCEP_MOVI AS OBS_MOVI,
     NULL AS FK_ASIENTO,
     NULL AS FK_AUDITMV,
-    NULL AS FK_ARQUEO,
+    periodo_caja AS FK_ARQUEO,
     NULL AS ID_TARJETA,
     NULL AS FK_CTAM_PLAN,
     NULL AS JSON_PAGOS

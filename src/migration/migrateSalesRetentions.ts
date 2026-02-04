@@ -67,7 +67,7 @@ IFNULL( m.CONCEP_MOVI, detalle_anticipos.OBS_DET_ANT) AS OBS_MOVI,
 IFNULL( m.IMPOR_MOVI, detalle_anticipos.IMPOR_DET_ANT) AS IMPOR_MOVITOTAL,
 
 NULL AS FK_ASIENTO,
-NULL AS FK_AUDITMV,NULL AS FK_ARQUEO,NULL AS ID_TARJETA, NULL AS RECIBO_CAJA,NULL AS FK_CTAM_PLAN,NULL AS NUMERO_UNIDAD,NULL AS JSON_PAGOS,
+NULL AS FK_AUDITMV,m.periodo_caja AS FK_ARQUEO,NULL AS ID_TARJETA, NULL AS RECIBO_CAJA,NULL AS FK_CTAM_PLAN,NULL AS NUMERO_UNIDAD,NULL AS JSON_PAGOS,
 
 SUBSTRING(secuencialFacturaRet, 9, 9) AS SECUENCIA_REL_DOC,
 transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
@@ -209,7 +209,7 @@ DESC;`);
                 // Lógica de Negocio
                 let idPlanCuenta = null;
                 const currentAuditId = mapRetAuditSales[o.COD_TRAC];
-
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
                 movAudit.push({
                     idAuditoria: currentAuditId,
                     idDocumento: mapSales[o.COD_TRAC],
@@ -243,7 +243,7 @@ DESC;`);
                     o.IMPOR_MOVITOTAL,
                     null, // FK_ASIENTO
                     currentAuditId,
-                    null, // FK_ARQUEO
+                    o.FK_ARQUEO, // FK_ARQUEO
                     null,
                     null, // RECIBO_CAJA
                     idPlanCuenta,
@@ -409,7 +409,7 @@ CONCAT(
 
 transacciones.TOTPAG_TRAC AS IMPOR_MOVITOTAL,
 NULL AS FK_ASIENTO,
-NULL AS FK_AUDITMV,NULL AS FK_ARQUEO,NULL AS ID_TARJETA, NULL AS RECIBO_CAJA,NULL AS FK_CTAM_PLAN,NULL AS NUMERO_UNIDAD,NULL AS JSON_PAGOS,
+NULL AS FK_AUDITMV,m.periodo_caja AS FK_ARQUEO,NULL AS ID_TARJETA, NULL AS RECIBO_CAJA,NULL AS FK_CTAM_PLAN,NULL AS NUMERO_UNIDAD,NULL AS JSON_PAGOS,
 SUBSTRING(secuencialFacturaRet, 9, 9) AS SECUENCIA_REL_DOC,
 transacciones.claveFacturaRet AS CLAVE_REL_TRANS,
 YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
@@ -543,7 +543,7 @@ DESC;`);
                 let idPlanCuenta = null;
                 const currentAuditId = mapRetAuditSales[o.COD_TRAC];
 
-
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
 
                 return [
                     bankMap[o.FKBANCO] ?? null,
@@ -572,7 +572,7 @@ DESC;`);
                     o.IMPOR_MOVITOTAL,
                     null, // FK_ASIENTO
                     currentAuditId,
-                    null, // FK_ARQUEO
+                    o.FK_ARQUEO, // FK_ARQUEO
                     null,
                     null, // RECIBO_CAJA
                     idPlanCuenta,

@@ -93,7 +93,7 @@ NULL AS NUM_LOTE,
 CONCEP_MOVI AS OBS_MOVI,
 ABS(IMPOR_MOVI) AS IMPOR_MOVITOTAL,
 NULL AS FK_AUDITMV,
-NULL AS FK_ARQUEO,
+movimientos.periodo_caja AS FK_ARQUEO,
 NULL AS ID_TARJETA,
 NULL AS RECIBO_CAJA,
 NULL AS FK_CTAM_PLAN,
@@ -386,80 +386,6 @@ LEFT JOIN movimientos m
 
 WHERE a.TIPO_ANT = 'CLIENTES';`);
 
-    /*
-    SELECT
-    da.ID_DET_ANT,
-    da.FEC_DET_ANT,
-    da.OBS_DET_ANT AS ABS_ANT,
-
-    CASE da.FDP_DET_ANT
-        WHEN 'CUENTA CONTABLE'     THEN 'CCTACONT'
-        WHEN 'DEVOLUCION A CAJA'   THEN 'DEVCAJA'
-        WHEN 'DEVOLUCION'          THEN 'DEVBANCO'
-        ELSE da.FDP_DET_ANT
-    END AS FORMAPAGO,
-
-    ABS(da.IMPOR_DET_ANT) AS IMPORTE_DET,
-    da.SALDO_DET_ANT AS SALDO_DET,
-    da.SECU_DET_ANT AS SECUENCIA_DET,
-    da.FK_COD_ANT AS FK_IDANT,
-    da.PER_DET_ANT AS BENEFICIARIA,
-
-    CASE
-        WHEN da.ref_cuentas > 0 THEN 'CXC'
-        WHEN da.FDP_DET_ANT = 'NOTA DE CREDITO' THEN 'nota'
-        WHEN da.FDP_DET_ANT = 'RETENCION EN VENTA' THEN 'RETENCION-VENTA'
-        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV') THEN 'ANT-ORDEN'
-        ELSE 'ANTCLI'
-    END AS ORIGEN_ANT,
-
-CASE
-WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN('OE') THEN 'ANT-ORDEN-TRABAJO' 
-WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN('OV') THEN 'ANT-ORDEN-VENTA' ELSE 'ANTCLI'
-END AS ORG_ORDEN,
-
-    CASE
-        WHEN da.ref_cuentas > 0 THEN da.ref_cuentas else NULL
-    END AS ref_cuentas,
-    CASE
-        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV')
-        THEN da.FK_ORDEN
-        ELSE NULL
-    END AS FK_ID_ORDEN,
-
-    CASE
-        WHEN SUBSTRING_INDEX(da.FK_ORDEN, '-', 1) IN ('OE', 'OV')
-        THEN da.FK_ORDEN
-        ELSE NULL
-    END AS  SECUENCIA,
-
-    CASE
-        WHEN da.FK_COD_TRAC > 0 THEN da.FK_COD_TRAC
-        ELSE NULL
-    END AS FK_COD_TRAC,
-
-    CASE
-        WHEN da.FECH_REG = '0000-00-00 00:00:00'
-        THEN da.FEC_DET_ANT
-        ELSE da.FECH_REG
-    END AS FECH_REG,
-
-    CASE
-        WHEN da.IMPOR_DET_ANT > 0 THEN 'INGRESO'
-        ELSE 'EGRESO'
-    END AS CAUSA_ANT
-
-FROM detalle_anticipos da
-INNER JOIN anticipos a 
-    ON a.ID_ANT = da.FK_COD_ANT
-INNER JOIN clientes c 
-    ON c.COD_CLI = a.FK_COD_CLI_ANT
-LEFT JOIN movimientos m 
-    ON m.FK_ANT_MOVI = da.ID_DET_ANT
-
-WHERE a.TIPO_ANT = 'CLIENTES';
-    */
-
     const anticiposClientes = rows;
     const mapAdvancesDetailCustomers: Record<string, number> = {};
     if (!anticiposClientes.length) {
@@ -519,11 +445,6 @@ WHERE a.TIPO_ANT = 'CLIENTES';
                     a.FK_ID_ORDEN = workOrderSecuencieMap[a.SECUENCIA] || null;
                 }
             }
-
-
-
-
-
             const idAdvance = mapAdvancesCustomers[a.FK_IDANT];
             /* a.FK_ID_ORDEN = null; */
             values.push([

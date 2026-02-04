@@ -85,7 +85,7 @@ type MigrateImportedObligationsParams = {
 	mapAccounts: Record<number, number>;
 }
 
-type MigratePurchaseObligationDetailParams = Omit<MigrateMovementsParams, 'purchaseLiquidationAuditIdMap' | 'mapSuppliers'> & {
+type MigratePurchaseObligationDetailParams = Omit<MigrateMovementsParams, 'purchaseLiquidationAuditIdMap' | 'mapSuppliers' | 'mapCloseCash'> & {
 	purchaseLiquidationObligationIdMap: Record<number, number>;
 }
 
@@ -616,7 +616,7 @@ async function migrateDataMovements({
 			m.CONCEP_MOVI AS OBS_MOVI,
 			t.TOTPAG_TRAC,
 			NULL AS FK_ASIENTO,
-			NULL AS FK_ARQUEO,
+			m.periodo_caja AS FK_ARQUEO,
 			m.RECIBO_CAJA,
 			m.NUM_UNIDAD
 			FROM
@@ -1542,7 +1542,8 @@ export async function migratePurchaseObligationDetail({
 	mapCenterCost,
 	mapAccounts,
 	mapConciliation,
-}: MigratePurchaseObligationDetailParams) {
+	mapCloseCash
+}) {
 	try {
 
 		console.log("🚀 Migrando movimientos de obligaciones de compra");
@@ -1629,7 +1630,7 @@ export async function migratePurchaseObligationDetail({
 			movimientos.TIP_MOVI,
 			movimientos.TIPO_MOVI,
 			NULL AS FK_ASIENTO,
-			NULL AS FK_ARQUEO,
+			movimientos.periodo_caja AS FK_ARQUEO,
 			NULL AS RECIBO_CAJA,
 			NULL AS NUM_UNIDAD,
 			NULL AS JSON_PAGOS,
@@ -1706,6 +1707,7 @@ export async function migratePurchaseObligationDetail({
 
 				const importMovi = Math.abs(obl.IMPOR_MOVI);
 				const importMoviTotal = Math.abs(obl.IMPOR_MOVITOTAL);
+				obl.FK_ARQUEO = mapCloseCash[obl.FK_ARQUEO] ?? null;
 				return [
 					bankMap[obl.FK_COD_BANCO_MOVI] ?? null,
 					purchaseLiquidationIdMap[obl.FK_TRAC_MOVI] ?? null,
@@ -1733,7 +1735,7 @@ export async function migratePurchaseObligationDetail({
 					importMoviTotal,
 					null, // FK_ASIENTO
 					auditId,
-					null, // FK_ARQUEO
+					obl.FK_ARQUEO, // FK_ARQUEO
 					obl.forma === "TARJETA" ? cardId : null,
 					null, // RECIBO_CAJA
 					idPlanCuenta,
