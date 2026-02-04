@@ -965,7 +965,6 @@ export async function migrateCompany(codEmp: number) {
       purchaseLiquidationAuditIdMap,
       mapAuditSales
     );
-    console.log("ARQUEO DE CAJA", Object.keys(mapCloseCash).length);
 
     await migrateRetentionFiles(conn);
 
@@ -973,6 +972,7 @@ export async function migrateCompany(codEmp: number) {
 
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
+    console.log("MAPEO DE ARQUEO DE CAJA", Object.keys(mapCloseCash).length);
     console.log("MAPEO DE CENTRO DE COSTOS MIGRADOS:", Object.keys(mapCenterCost).length);
     console.log("MAPEO DE USUARIOS MIGRADAS:", Object.keys(userMap).length);
     console.log("MAPEO DE CLIENTES MIGRADAS:", Object.keys(mapClients).length);
