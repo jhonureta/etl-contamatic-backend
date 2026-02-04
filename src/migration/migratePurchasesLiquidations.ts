@@ -261,6 +261,18 @@ export async function migratePurchasesAndLiquidations({
 
 	const BATCH_SIZE: number = 1000;
 
+	function safeJson(input: any) {
+		try {
+			if (typeof input === "string") {
+				JSON.parse(input);        // verificar validez
+				return input;
+			}
+			return JSON.stringify(input ?? {});
+		} catch {
+			return "{}"; // fallback JSON válido
+		}
+	}
+
 	for (let i = 0; i < purchases.length; i += BATCH_SIZE) {
 
 		const batchPurchase = purchases.slice(i, i + BATCH_SIZE);
@@ -329,7 +341,7 @@ export async function migratePurchasesAndLiquidations({
 				p.FEC_TRAC,
 				p.FEC_REL_TRAC,
 				p.FEC_MERC_TRAC,
-				p.MET_PAG_TRAC,
+				safeJson(p.MET_PAG_TRAC),
 				p.OBS_TRAC,
 				userId,
 				sellerId,
@@ -351,7 +363,7 @@ export async function migratePurchasesAndLiquidations({
 				p.IVA_TRAC,
 				p.TOT_RET_TRAC,
 				p.TOT_PAG_TRAC,
-				p.PROPINA_TRAC,
+				p.PROPINA_TRAC ?? 0,
 				p.OTRA_PER,
 				p.COD_COMPROBANTE,
 				p.COD_COMPROBANTE_REL,
@@ -374,13 +386,13 @@ export async function migratePurchasesAndLiquidations({
 				p.FECHA_ANULACION,
 				p.TIP_DOC,
 				sriPayCode,
-				p.CLIENT_IP,
+				p.CLIENT_IP ?? '0.0.0.0',
 				p.FK_AUDIT_REL,
 				p.NUM_TRANS,
 				p.NUM_REL_DOC,
 				p.DIV_PAY_YEAR,
 				JSON.stringify(structureRetention),
-				p.RESP_SRI,
+				safeJson(p.RESP_SRI),
 				p.INFO_ADIC,
 				p.DET_EXP_REEMBOLSO,
 				JSON.stringify(paymentMethod),
@@ -1755,7 +1767,7 @@ export async function migratePurchaseObligationDetail({
 			obligationBatch.forEach(({ FK_COD_GD }) => {
 				movementIdMap[FK_COD_GD] = nextMovementId++;
 			});
-			 console.log(` -> Batch migrado: ${obligationBatch.length} movimiento de compras y liquidaciones`);
+			console.log(` -> Batch migrado: ${obligationBatch.length} movimiento de compras y liquidaciones`);
 		}
 
 		const { detailObligationIdMap } = await migrateDetailsOfObligations({

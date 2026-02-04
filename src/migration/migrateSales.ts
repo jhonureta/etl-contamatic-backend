@@ -339,6 +339,7 @@ FROM
                 }
 
 
+
                 const retencionVentaNueva = adaptarEstructuraMultiple(t.DOCUMENT_REL_DETAIL);
 
                 return [
@@ -376,7 +377,7 @@ FROM
                     t.TOT_TRAC,
                     t.TOT_RET_TRAC,
                     t.TOT_PAG_TRAC,
-                    t.PROPINA_TRAC,
+                    t.PROPINA_TRAC ?? 0,
                     t.OTRA_PER,
                     t.COD_COMPROBANTE,
                     t.COD_COMPROBANTE_REL,
@@ -399,13 +400,13 @@ FROM
                     t.FECHA_ANULACION,
                     t.TIP_DOC,
                     t.SRI_PAY_CODE,
-                    t.CLIENT_IP,
+                    t.CLIENT_IP ?? '0.0.0.0',
                     t.FK_AUDIT_REL,
                     t.NUM_TRANS,
                     t.NUM_REL_DOC,
                     t.DIV_PAY_YEAR,
                     JSON.stringify(retencionVentaNueva),
-                    t.RESP_SRI,
+                    safeJson(t.RESP_SRI),
                     t.INFO_ADIC,
                     t.DET_EXP_REEMBOLSO,
                     safeJson(t.JSON_METODO),

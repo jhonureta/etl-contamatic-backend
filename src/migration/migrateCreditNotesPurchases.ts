@@ -170,6 +170,18 @@ export async function migrateCreditNotesPurchases({
 
     const auditId = await findNextAuditCode({ conn, companyId: newCompanyId });
 
+    function safeJson(input: any) {
+      try {
+        if (typeof input === "string") {
+          JSON.parse(input);        // verificar validez
+          return input;
+        }
+        return JSON.stringify(input ?? {});
+      } catch {
+        return "{}"; // fallback JSON válido
+      }
+    }
+
     const BATCH_SIZE = 1000;
 
     for (let i = 0; i < creditNotesPurchases.length; i += BATCH_SIZE) {
@@ -234,7 +246,7 @@ export async function migrateCreditNotesPurchases({
           t.FEC_TRAC,
           t.FEC_REL_TRAC,
           t.FEC_MERC_TRAC,
-          t.MET_PAG_TRAC,
+          safeJson(t.MET_PAG_TRAC),
           t.OBS_TRAC,
           creador,
           vendedor,
@@ -257,7 +269,7 @@ export async function migrateCreditNotesPurchases({
           t.TOT_TRAC,
           t.TOT_RET_TRAC,
           t.TOT_PAG_TRAC,
-          t.PROPINA_TRAC,
+          t.PROPINA_TRAC ?? 0,
           t.OTRA_PER,
           t.COD_COMPROBANTE,
           t.COD_COMPROBANTE_REL,
@@ -281,13 +293,13 @@ export async function migrateCreditNotesPurchases({
           t.FECHA_ANULACION,
           t.TIP_DOC,
           t.SRI_PAY_CODE,
-          t.CLIENT_IP,
+          t.CLIENT_IP ?? '0.0.0.0',
           idAuditRelDoc,
           t.NUM_TRANS,
           t.NUM_REL_DOC,
           t.DIV_PAY_YEAR,
           null,
-          t.RESP_SRI,
+          safeJson(t.RESP_SRI),
           t.INFO_ADIC,
           t.DET_EXP_REEMBOLSO,
           JSON.stringify(paymentMethod),

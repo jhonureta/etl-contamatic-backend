@@ -107,6 +107,18 @@ export async function migrateProformaInvoices({
 
     const BATCH_SIZE = 1000;
 
+    function safeJson(input: any) {
+      try {
+        if (typeof input === "string") {
+          JSON.parse(input);        // verificar validez
+          return input;
+        }
+        return JSON.stringify(input ?? {});
+      } catch {
+        return "{}"; // fallback JSON válido
+      }
+    }
+
     for (let i = 0; i < proformas.length; i += BATCH_SIZE) {
       const batch = proformas.slice(i, i + BATCH_SIZE);
 
@@ -133,12 +145,14 @@ export async function migrateProformaInvoices({
         const auditId = firstInsertedAuditId + index;
         proformaAuditIdMap[proforma.COD_TRANS] = auditId;
 
-        const { detailTransformed, branchId  } = transformProductDetail(
+        const { detailTransformed, branchId } = transformProductDetail(
           productDetails,
           mapProducts,
           idFirstBranch,
           storeMap
         );
+
+
 
         return [
           proforma.PUNTO_EMISION_DOC,
@@ -152,7 +166,7 @@ export async function migrateProformaInvoices({
           proforma.FEC_TRAC,
           proforma.FEC_REL_TRAC,
           proforma.FEC_MERC_TRAC,
-          proforma.MET_PAG_TRAC,
+          safeJson(proforma.MET_PAG_TRAC),
           proforma.OBS_TRAC,
           userId,
           sellerId,
@@ -174,7 +188,7 @@ export async function migrateProformaInvoices({
           proforma.IVA_TRAC,
           proforma.TOT_RET_TRAC,
           proforma.TOT_PAG_TRAC,
-          proforma.PROPINA_TRAC,
+          proforma.PROPINA_TRAC ?? 0,
           proforma.OTRA_PER,
           proforma.COD_COMPROBANTE,
           proforma.COD_COMPROBANTE_REL,
@@ -197,13 +211,13 @@ export async function migrateProformaInvoices({
           proforma.FECHA_ANULACION,
           proforma.TIP_DOC,
           proforma.SRI_PAY_CODE,
-          proforma.CLIENT_IP,
+          proforma.CLIENT_IP ?? '0.0.0.0',
           proforma.FK_AUDIT_REL,
           proforma.NUM_TRANS,
           proforma.NUM_REL_DOC,
           proforma.DIV_PAY_YEAR,
           null,
-          proforma.RESP_SRI,
+          safeJson(proforma.RESP_SRI),
           proforma.INFO_ADIC,
           proforma.DET_EXP_REEMBOLSO,
           JSON.stringify(toJSONArray(proforma.JSON_METODO)),
@@ -308,7 +322,7 @@ function transformProductDetail(
 ) {
   let branchId = idFirstBranch;
   const detailTransformed = inputDetail.map((item: any, index: number) => {
-   
+
     const idProducto = mapProducts[item?.idProducto] || '';
     const mappedBodega = storeMap[item?.idBodega];
     if (index === 0 && mappedBodega) branchId = mappedBodega;

@@ -6,16 +6,17 @@ export async function migrateAdvancesCustomers(
 ): Promise<Record<string, number>> {
 
     console.log("Migrando anticipos de clientes...");
+    const mapAdvancesCustomers: Record<string, number> = {};
     // Obtiene centroCosto únicas normalizadas
     const [rows] = await legacyConn.query(`SELECT ID_ANT, FEC_ANT as FECH_REGANT,SALDO_ANT as SALDO_ANT,FK_COD_CLI_ANT as FK_PERSONA   from detalle_anticipos inner join anticipos on anticipos.ID_ANT = detalle_anticipos.FK_COD_ANT where anticipos.TIPO_ANT ='CLIENTES' GROUP BY detalle_anticipos.FK_COD_ANT;`);
 
     const anticiposClientes = rows as any[];
 
     if (!anticiposClientes.length) {
-        throw new Error(" -> No hay anticipos de clientes para migrar.");
+        return mapAdvancesCustomers;
     }
     const BATCH_SIZE = 1000;
-    const mapAdvancesCustomers: Record<string, number> = {};
+
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);
 

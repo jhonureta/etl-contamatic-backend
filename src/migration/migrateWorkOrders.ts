@@ -103,6 +103,17 @@ export async function migrateWorkOrders({
       return { workOrderIdMap, workOrderAuditIdMap, workOrderSecuencieMap };
     }
 
+    function safeJson(input: any) {
+      try {
+        if (typeof input === "string") {
+          JSON.parse(input);        // verificar validez
+          return input;
+        }
+        return JSON.stringify(input ?? {});
+      } catch {
+        return "{}"; // fallback JSON válido
+      }
+    }
     let nextAudit = await findNextAuditCode({ conn, companyId: newCompanyId });
 
     const BATCH_SIZE = 1000;
@@ -152,10 +163,10 @@ export async function migrateWorkOrders({
           workOrder.FEC_TRAC,
           workOrder.FEC_REL_TRAC,
           workOrder.FEC_MERC_TRAC,
-          workOrder.MET_PAG_TRAC,
+          safeJson(workOrder.MET_PAG_TRAC),
           workOrder.OBS_TRAC,
           userId,
-          sellerId,
+          sellerId ?? userId,
           clientId,
           workOrder.ESTADO,
           workOrder.ESTADO_REL,
@@ -174,7 +185,7 @@ export async function migrateWorkOrders({
           workOrder.IVA_TRAC,
           workOrder.TOT_RET_TRAC,
           workOrder.TOT_PAG_TRAC,
-          workOrder.PROPINA_TRAC,
+          workOrder.PROPINA_TRAC ?? 0,
           workOrder.OTRA_PER,
           workOrder.COD_COMPROBANTE,
           workOrder.COD_COMPROBANTE_REL,
@@ -197,7 +208,7 @@ export async function migrateWorkOrders({
           workOrder.FECHA_ANULACION,
           workOrder.TIP_DOC,
           workOrder.SRI_PAY_CODE,
-          workOrder.CLIENT_IP,
+          workOrder.CLIENT_IP ?? '0.0.0.',
           workOrder.FK_AUDIT_REL,
           workOrder.NUM_TRANS,
           workOrder.NUM_REL_DOC,
