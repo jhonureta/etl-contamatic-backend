@@ -12,6 +12,7 @@ export async function migrateBankCashTransactions(
     mapProject: Record<number, number | null>,
     mapCenterCost: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ movementCashBanck: Record<number, number> }> {
     try {
 
@@ -104,6 +105,8 @@ WHERE
                 movementAuditCashBanck[`${m.MODULO}-${m.CAUSA_MOVI}-${m.SECU_MOVI}`] = currentAuditId;
                 const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
                 let idPlanCuenta = null;
+
+                m.FK_ARQUEO = mapCloseCash[m.FK_ARQUEO] ?? null;
 
                 return [
                     bankId,
@@ -348,7 +351,7 @@ DESC;`);
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
-             console.log(` -> Batch migrado: ${batch.length} caja-bancos`);
+            console.log(` -> Batch migrado: ${batch.length} caja-bancos`);
         }
         console.log("✅ Migración asiento contable gestion caja-bancos correctamente");
         return { mapEntryAccount };

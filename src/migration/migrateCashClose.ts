@@ -1,4 +1,3 @@
-import { findFirstDefaultUser } from "./purchaseHelpers";
 
 export async function migrateCashClose(
     legacyConn: any,
@@ -40,14 +39,13 @@ export async function migrateCashClose(
             TOTAL_APERTURA AS APERTURA,
             DET_APERTURA AS DETALLEAPERTURA,
             NULL AS FK_AUDITOB,
-            NULL AS FK_CAJA,
+        
             EFECTIVO_EGRESO AS COMPRASDIA,
             NULL AS FECH_REP,
             NULL AS ANULADO,
             NULL AS ANULADODIFERENTE,
             FECHAAPERTURA AS FETCH_ACT,
             NULL AS FKA_COD_EMP
-            
         FROM
             arqueo_caja
         WHERE
@@ -111,9 +109,7 @@ export async function migrateCashClose(
 
                 const detalleFisico = adaptarItems(c.DETALLEFISICO);
                 const detalleApertura = adaptarItems(c.DETALLEAPERTURA);
-
-
-
+              
                 return [
                     idUser,
                     idUser,
@@ -177,7 +173,7 @@ export async function migrateCashClose(
             }
             console.log(` -> Batch migrado: ${batch.length} anticipos de proveedores`);
         }
-        console.log(mapCloseCash);
+        /*    */
         return { mapCloseCash };
 
     } catch (error) {

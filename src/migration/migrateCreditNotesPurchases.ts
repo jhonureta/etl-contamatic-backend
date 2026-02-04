@@ -30,7 +30,8 @@ export async function migrateCreditNotesPurchases({
   mapCenterCost,
   mapAccounts,
   storeMap,
-  idFirstBranch
+  idFirstBranch,
+  mapCloseCash
 }): Promise<{ creditNotesPurchasesIdMap: Record<number, number>; creditNotesPurchasesAuditIdMap: Record<number, number> }> {
   try {
     console.log("Migrando notas de credito de compras...");
@@ -405,7 +406,8 @@ export async function migrateCreditNotesPurchases({
       mapCenterCost,
       mapAccounts,
       creditNotesPurchasesIdMap,
-      creditNotesPurchasesAuditIdMap
+      creditNotesPurchasesAuditIdMap,
+      mapCloseCash
     )
 
     return { creditNotesPurchasesIdMap, creditNotesPurchasesAuditIdMap };
@@ -429,7 +431,8 @@ export async function migrateMovementeAdvancesNote(
   mapCenterCost: Record<number, number | null>,
   mapAccounts: Record<number, number | null>,
   mapCreditNote: Record<number, number | null>,
-  mapAuditCreditNote: Record<number, number | null>
+  mapAuditCreditNote: Record<number, number | null>,
+  mapCloseCash: Record<number, number | null>,
 ): Promise<{ mapNoteMovements: Record<number, number> }> {
   console.log("Migrando movimientos notas de credito en compras...");
   const mapNoteMovements: Record<number, number> = {};
@@ -692,7 +695,8 @@ export async function migrateMovementeAdvancesNote(
     mapConciliation,
     mapCreditNote,
     mapAuditCreditNote,
-    mapNoteMovements
+    mapNoteMovements,
+    mapCloseCash
   );
 
   const mapObligations = await migratePaymentDetails(
@@ -737,7 +741,7 @@ export async function migrateRetentionsCredit(
   mapCreditNote: Record<number, number | null>,
   mapAuditCreditNote: Record<number, number | null>,
   mapNoteMovements: Record<number, number | null>,
-
+  mapCloseCash: Record<number, number | null>,
 ): Promise<{ mapNoteMovementsFull: Record<number, number> }> {
   try {
     console.log("Migrando movimientos de notas de credito compras anticipo...");

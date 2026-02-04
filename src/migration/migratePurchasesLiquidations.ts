@@ -41,6 +41,7 @@ type MigrateMovementsParams = {
 	bankMap: Record<number, number>;
 	boxMap: Record<number, number>;
 	mapConciliation: Record<number, number>;
+	mapCloseCash: Record<number, number | null>,
 };
 
 type MigrateObligationsParams = Omit<
@@ -50,10 +51,11 @@ type MigrateObligationsParams = Omit<
 	'mapCenterCost' |
 	'bankMap' |
 	'boxMap' |
-	'mapConciliation'
+	'mapConciliation' |
+	'mapCloseCash'
 >;
 
-type MigrateDataMovementsParams = Omit<MigrateMovementsParams, 'mapCenterCost' | 'mapProject' | 'mapPeriodo' | 'mapAccounts' | 'mapSuppliers'>
+type MigrateDataMovementsParams = Omit<MigrateMovementsParams, 'mapCenterCost' | 'mapProject' | 'mapPeriodo' | 'mapAccounts' | 'mapSuppliers' | 'mapCloseCash'>
 
 type MigrateAccountingEntriesParams = {
 	legacyConn: Connection;
@@ -498,8 +500,9 @@ export async function migratePurchaseAndLiquidationsMovements({
 	mapAccounts,
 	mapConciliation,
 	bankMap,
-	boxMap
-}: MigrateMovementsParams) {
+	boxMap,
+	mapCloseCash
+}) {
 
 	console.log("🚀 Iniciando migración obligaciones compra y liquidacion");
 	const { purchaseLiquidationObligationIdMap, purchaseLiquidationObligationAuditIdMap, oblAsiToAuditId } = await migrateObligationsTransactions({
@@ -510,7 +513,8 @@ export async function migratePurchaseAndLiquidationsMovements({
 		userMap,
 		mapSuppliers,
 		purchaseLiquidationAuditIdMap,
-		mapAccounts
+		mapAccounts,
+		mapCloseCash
 	})
 	console.log(`✅ Obligaciones migradas: ${Object.keys(purchaseLiquidationObligationIdMap).length}`);
 
@@ -524,7 +528,8 @@ export async function migratePurchaseAndLiquidationsMovements({
 		mapConciliation,
 		userMap,
 		bankMap,
-		boxMap
+		boxMap,
+		mapCloseCash
 	});
 	console.log("✅ Migración de movimientos compra y liquidacion completada correctamente");
 
@@ -563,8 +568,9 @@ async function migrateDataMovements({
 	mapConciliation,
 	userMap,
 	bankMap,
-	boxMap
-}: MigrateDataMovementsParams): Promise<{
+	boxMap,
+	mapCloseCash
+}): Promise<{
 	movementIdMap: Record<number, number>
 }> {
 	try {
@@ -653,7 +659,7 @@ async function migrateDataMovements({
 				const transAuditId = purchaseLiquidationAuditIdMap[m.COD_TRANS];
 				const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
 				const idPlanAccount = null;
-
+				m.FK_ARQUEO = mapCloseCash[m.FK_ARQUEO] ?? null;
 				movementValues.push([
 					bankId,
 					transactionId,
@@ -747,8 +753,9 @@ async function migrateObligationsTransactions({
 	mapSuppliers,
 	purchaseLiquidationIdMap,
 	purchaseLiquidationAuditIdMap,
-	mapAccounts
-}: MigrateObligationsParams) {
+	mapAccounts,
+	mapCloseCash
+}) {
 
 	try {
 		console.log("🚀 Migrando obligaciones compra");
@@ -767,7 +774,12 @@ async function migrateObligationsTransactions({
 				cp.FK_TRAC_CUENTA AS fk_cod_trans_old,
 				cp.OBL_ASI AS obl_asi_group,
 				cp.Tipo_cxp AS tipo_obl,
-				cp.fecha_emision_cxp AS fech_emision,
+				CASE
+	        	WHEN 
+				 cp.fecha_emision_cxp < '2015-01-01'
+	        	THEN cp.fecha_vence_cxp
+	        	ELSE cp.fecha_emision_cxp
+    			END AS fech_emision,
 				cp.fecha_vence_cxp AS fech_vencimiento,
 				cp.tipo_documento AS tip_doc,
 				cp.estado_cxp AS estado,
@@ -1083,10 +1095,15 @@ async function migrateImportedObligations({
 			}
 		}
 
+
+
 		for (let i = 0; i < movements.length; i += BATCH_SIZE) {
 			const batchMovements = movements.slice(i, i + BATCH_SIZE);
 			const accountingValues: any[] = [];
 			for (const o of batchMovements) {
+
+
+
 				const idMovement = migratedMovementsIdMap[o.auditoria];
 				const periodData = await fetchAccountingPeriod(conn,
 					{

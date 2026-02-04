@@ -49,7 +49,8 @@ export async function migrateCreditNote(
     mapProject: Record<number, number | null>,
     mapCenterCost: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
-    storeMap: Record<number, number>
+    storeMap: Record<number, number>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ mapCreditNote: Record<number, number>; mapAuditCreditNote: Record<number, number> }> {
     console.log("Migrando notas de credito...");
 
@@ -431,7 +432,8 @@ DESC;`);
         mapCenterCost,
         mapAccounts,
         mapCreditNote,
-        mapAuditCreditNote
+        mapAuditCreditNote,
+        mapCloseCash
     )
 
 
@@ -453,7 +455,8 @@ export async function migrateMovementeAdvancesNote(
     mapCenterCost: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
     mapCreditNote: Record<number, number | null>,
-    mapAuditCreditNote: Record<number, number | null>
+    mapAuditCreditNote: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>
 ): Promise<{ mapNoteMovements: Record<number, number> }> {
     console.log("Migrando notas de credito en ventas...");
 
@@ -631,8 +634,6 @@ DESC;`);
                     '[]'  // JSON_PAGOS
                 ];
 
-
-
             });
             // Insertar clientes en batch
             // --- PASO C: INSERTAR MOVIMIENTOS EN BATCH ---
@@ -679,7 +680,8 @@ DESC;`);
         mapConciliation,
         mapCreditNote,
         mapAuditCreditNote,
-        mapNoteMovements
+        mapNoteMovements,
+        mapCloseCash
     );
 
     const mapObligations = await migratePaymentDetails(
@@ -724,7 +726,7 @@ export async function migrateRetentionsCredit(
     mapCreditNote: Record<number, number | null>,
     mapAuditCreditNote: Record<number, number | null>,
     mapNoteMovements: Record<number, number | null>,
-
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ mapNoteMovementsFull: Record<number, number> }> {
 
 

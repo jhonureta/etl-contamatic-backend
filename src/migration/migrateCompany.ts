@@ -457,7 +457,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       userMap,
       boxMapId
-    )
+    );
 
     const mapCategories = await migrateCategories(
       legacyConn,
@@ -536,7 +536,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-      mapConciliation
+      mapConciliation,
+      mapCloseCash
     )
 
     const { mapMovements, mapAuditMovements } = await migrateMovementDetail0bligations(
@@ -552,7 +553,8 @@ export async function migrateCompany(codEmp: number) {
       mapPeriodo,
       mapProject,
       mapCenterCost,
-      mapAccounts
+      mapAccounts,
+      mapCloseCash
     )
 
     //== Migrar proformas ===/
@@ -644,7 +646,8 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       bankMap,
       boxMap,
-      mapConciliation
+      mapConciliation,
+      mapCloseCash
     })
 
     //==  Migracion de Compras y liquidaciones ===/
@@ -685,7 +688,8 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       bankMap,
       boxMap,
-      mapConciliation
+      mapConciliation,
+      mapCloseCash
     })
 
     //== Migrar detalle de obligaciones de compras , liquidaciones, pedidos ===/
@@ -703,6 +707,7 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapConciliation,
+      mapCloseCash
     })
 
     //== Migrar notas de credito en compras ===/
@@ -726,7 +731,8 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       idFirstBranch,
-      storeMap
+      storeMap,
+      mapCloseCash
     })
 
     //== Migrar movimientos de retenciones en ventas ===/
@@ -744,7 +750,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-      mapRetentions
+      mapRetentions,
+      mapCloseCash
     );
 
     //== Migrar procesos notas de credito ventas ===/
@@ -766,7 +773,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-      storeMap
+      storeMap,
+      mapCloseCash
     );
 
     //== Migrar anticipos clientes ===/
@@ -794,7 +802,8 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       workOrderIdMap,
       workOrderAuditIdMap,
-      workOrderSecuencieMap
+      workOrderSecuencieMap,
+      mapCloseCash
     );
 
     //== Migrar movimientos , cajas y bancos ===/    //== Migrar transacciones de caja y bancos ===/
@@ -810,6 +819,7 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
+      mapCloseCash
     )
 
     //== Migrar anticipos proveedores ===/    //== Migrar movimientos de anticipos de proveedores ===/
@@ -830,7 +840,8 @@ export async function migrateCompany(codEmp: number) {
       mapProject,
       mapCenterCost,
       mapAccounts,
-      workOrderSecuencieMap
+      workOrderSecuencieMap,
+      mapCloseCash
     );
 
     //== Migrar retencion de tarjetas ===/    //== Migrar movimientos de retenciones y tarjetas de credito  ===/
@@ -848,7 +859,8 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
       mapRetentions,
       mapWithholdingBanks,
-      oldRetentionCodeMap
+      oldRetentionCodeMap,
+      mapCloseCash
     )
     //== Migrar tomas fisicas ===/
     //== Migrar tomas fisicas de bodegas  ===/
@@ -953,7 +965,7 @@ export async function migrateCompany(codEmp: number) {
       purchaseLiquidationAuditIdMap,
       mapAuditSales
     );
-
+    console.log("ARQUEO DE CAJA", Object.keys(mapCloseCash).length);
 
     await migrateRetentionFiles(conn);
 

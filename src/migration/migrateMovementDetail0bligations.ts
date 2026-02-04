@@ -14,6 +14,7 @@ export async function migrateMovementDetail0bligations(
     mapProject: Record<number, number | null>,
     mapCenterCost: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{
     mapMovements: Record<number, number>,
     mapAuditMovements: Record<number, number>
@@ -213,7 +214,7 @@ export async function migrateMovementDetail0bligations(
                 mapMovements[o.FK_COD_GD] = currentMovId++;
             });
 
-             console.log(` -> Batch migrado: ${batch.length} movimiento de obligaciones`);
+            console.log(` -> Batch migrado: ${batch.length} movimiento de obligaciones`);
         }
         const mapDetailObligationsAplicate = await migratePaymentDetails(
             legacyConn,
@@ -327,7 +328,7 @@ export async function migratePaymentDetails(
                 mapDetailObligationsAplicate[o.fk_cod_cuenta] = currentMovId++;
             });
 
-             console.log(` -> Batch migrado: ${batch.length} detalle de obligaciones`);
+            console.log(` -> Batch migrado: ${batch.length} detalle de obligaciones`);
         }
         console.log("✅ Migración completada");
         return { mapDetailObligationsAplicate };
@@ -441,7 +442,7 @@ export async function migrateAccountingEntriesCustomerObligations(
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
 
-             console.log(` -> Batch migrado: ${batch.length} asiento de obligaciones`);
+            console.log(` -> Batch migrado: ${batch.length} asiento de obligaciones`);
         }
         console.log("✅ Migración asiento contable completada correctamente");
         return { mapEntryAccount };

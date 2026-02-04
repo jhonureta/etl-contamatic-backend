@@ -21,7 +21,7 @@ export interface ClientIdentity {
     ci: string;
 }
 
-export interface UserIdentity  {
+export interface UserIdentity {
     id: number;
     ci: string;
 }
@@ -90,7 +90,7 @@ export async function upsertTotaledEntry(
         debe: number;
         haber: number;
         total: number;
-        operacion:string;
+        operacion: string;
     },
     companyId: number
 ) {
@@ -193,12 +193,12 @@ export async function fetchAccountingPeriod(conn, dataMov) {
 }
 
 export const codigoIvaPorcentaje: Record<string, number> = {
-  '12': 2,
-  '0': 0,
-  '14': 3,
-  '15': 4,
-  '5': 5,
-  '13': 10
+    '12': 2,
+    '0': 0,
+    '14': 3,
+    '15': 4,
+    '5': 5,
+    '13': 10
 }
 
 
@@ -211,14 +211,14 @@ export function chunk<T>(array: T[], size: number): T[][] {
 }
 
 export function isValidJSONForDB(str) {
-  if (typeof str !== 'string' || str.trim() === '') return false;
-  try {
-    const parsed = JSON.parse(str);
-    // Acepta: objeto {} o array []
-    if (Array.isArray(parsed)) return true;
-    if (parsed !== null && typeof parsed === 'object') return true;
-    return false; // rechaza: number, string, boolean
-  } catch {
-    return false;
-  }
+    if (typeof str !== 'string' || str.trim() === '') return false;
+    try {
+        const parsed = JSON.parse(str);
+        // Acepta: objeto {} o array []
+        if (Array.isArray(parsed)) return true;
+        if (parsed !== null && typeof parsed === 'object') return true;
+        return false; // rechaza: number, string, boolean
+    } catch {
+        return false;
+    }
 }

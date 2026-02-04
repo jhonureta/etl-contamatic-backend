@@ -15,7 +15,8 @@ export async function migrateDataMovementsRetentionsHolds(
     mapAccounts: Record<number, number>,
     mapRetentions: Record<number, number>,
     mapWithholdingBanks: Record<string, number>,
-    oldRetentionCodeMap: Map<string, RetentionCodeValue>
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ movementIdRetentionsMap: Record<number, number> }> {
     try {
         console.log(`Migrando movimientos de tarjetas`);
@@ -128,7 +129,7 @@ WHERE
                 mapAuditRetentions[m.ID_MOVI] = currentAuditId;
                 const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
                 let idPlanCuenta = null;
-
+                m.FK_ARQUEO = mapCloseCash[m.FK_ARQUEO] ?? null;
                 return [
                     bankId,
                     transactionId,
@@ -244,7 +245,7 @@ WHERE
                 [valCards]
             );
 
-              console.log(` -> Batch migrado: ${batchMovements.length} retencion de tarjetas`);
+            console.log(` -> Batch migrado: ${batchMovements.length} retencion de tarjetas`);
         }
         console.log("✅ Migración  movimientos de tarjetas completada correctamente");
         const mapEntryAccount = await migrateAccountingEntriesRetentions(

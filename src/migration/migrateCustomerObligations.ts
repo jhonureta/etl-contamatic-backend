@@ -14,7 +14,9 @@ export async function migrateCustomerAccounting(
     mapProject: Record<number, number | null>,
     mapCenterCost: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
-    mapConciliation: Record<number, number | null>
+    mapConciliation: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
+
 ) {
 
     console.log("🧩 Iniciando migración contable de clientes");
@@ -34,7 +36,8 @@ export async function migrateCustomerAccounting(
         mapAuditSales,
         mapClients,
         userMap,
-        mapAccounts
+        mapAccounts,
+        mapCloseCash
     );
 
     console.log(
@@ -57,7 +60,8 @@ export async function migrateCustomerAccounting(
         bankMap,
         boxMap,
         userMap,
-        mapConciliation
+        mapConciliation,
+        mapCloseCash
     );
 
     /*  DETALLE DE MOVIMIENTOS DE CREDITO POR MULTIPAGOS */
@@ -74,7 +78,8 @@ export async function migrateCustomerAccounting(
         mapObligationsAudit,
         bankMap,
         mapMovements,
-        mapConciliation
+        mapConciliation,
+        mapCloseCash
     );
     console.log(`✔ Detalle de movimientos por credito multipagos migrado: ${Object.keys(mapMovementsSales).length}`);
 
@@ -123,6 +128,7 @@ export async function migrateMovementsTransactions(
     mapClients: Record<number, number | null>,
     userMap: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{
     mapObligationsCustomers: Record<number, number>,
     mapObligationsAudit: Record<number, number>,
@@ -307,7 +313,8 @@ export async function migrateMovementsTransactions(
             newCompanyId,
             oblAsiToAuditIdUser,
             oblAsientoToAuditId,
-            mapAccounts
+            mapAccounts,
+            mapCloseCash
         );
 
         console.log("✅ Migración completada correctamente");
@@ -325,6 +332,7 @@ export async function migrateMovementsObligationsMigrados(
     oblAsiToAuditIdUser: Record<number, number | null>,
     oblAsientoToAuditId: Record<number, number>,
     mapAccounts: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{
     movimientosMigrados: Record<number, number>
 }> {
@@ -687,6 +695,7 @@ export async function migrateMovementsObligations(
     boxMap: Record<number, number | null>,
     userMap: Record<number, number | null>,
     mapConciliation: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{
     mapMovements: Record<number, number>
 }> {
@@ -770,6 +779,8 @@ export async function migrateMovementsObligations(
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
                 const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
+
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
 
 
                 /* if (!idTrn) {
@@ -875,6 +886,7 @@ export async function migrateMovementsObligationsCredito(
     userMap: Record<number, number | null>,
     mapMovements: Record<number, number | null>,
     mapConciliation: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{
     mapMovementsSales: Record<number, number>
 }> {
@@ -949,6 +961,7 @@ export async function migrateMovementsObligationsCredito(
                 const idAuditTr = mapAuditSales[o.COD_TRANS];
                 const idFkConciliation = mapConciliation[o.FK_CONCILIADO] ?? null;
                 const idPlanCuenta = null;
+                o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
                 //o.ID_MOVI,
                 insertValues.push([
                     idBanco,//ok

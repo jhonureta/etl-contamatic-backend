@@ -33,7 +33,8 @@ type MigrateMovementsParams = {
   mapAccounts: Record<number, number>;
   bankMap: Record<number, number>;
   boxMap: Record<number, number>;
-  mapConciliation: Record<number, number>
+  mapConciliation: Record<number, number>,
+  mapCloseCash: Record<number, number | null>,
 }
 
 type MigrateObligationsParams = Omit<
@@ -45,7 +46,8 @@ type MigrateObligationsParams = Omit<
   'boxMap' |
   'mapConciliation' |
   'userMap' |
-  'mapAccounts'
+  'mapAccounts' |
+  'mapCloseCash'
 >;
 
 type MigrateOrderMovementsParams = Omit<MigrateMovementsParams, 'mapCenterCost' | 'mapProject' | 'mapPeriodo' | 'mapAccounts' | 'mapSuppliers'>;
@@ -439,7 +441,8 @@ export async function migratePurchaseOrderMovements({
   mapAccounts,
   mapConciliation,
   bankMap,
-  boxMap
+  boxMap,
+  mapCloseCash
 }: MigrateMovementsParams) {
 
   console.log("Iniciando migración de obligaciones de pedidos de compra");
@@ -464,7 +467,8 @@ export async function migratePurchaseOrderMovements({
     mapConciliation,
     userMap,
     bankMap,
-    boxMap
+    boxMap,
+    mapCloseCash
   });
   console.log(` -> Migracion de movimientos de pedidos completada`);
 
@@ -628,7 +632,8 @@ async function migrateOrderMovements({
   mapConciliation,
   userMap,
   bankMap,
-  boxMap
+  boxMap,
+  mapCloseCash
 }: MigrateOrderMovementsParams) {
   try {
     console.log("Migrando movimientos de pedidos de compra...");
@@ -715,7 +720,7 @@ async function migrateOrderMovements({
         const transAuditId = purchaseOrderAuditIdMap[m.COD_TRANS];
         const idFkConciliation = mapConciliation[m.FK_CONCILIADO] ?? null;
         const idPlanAccount = null;
-
+        m.FK_ARQUEO = mapCloseCash[m.FK_ARQUEO] ?? null;
         return [
           bankId,
           transactionId,

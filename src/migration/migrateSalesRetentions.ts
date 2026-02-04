@@ -15,6 +15,7 @@ export async function migrateSalesRetentions(
     mapCenterCost: Record<number, number | null>,
     mapAccounts: Record<number, number | null>,
     mapRetentions: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
     /* mapEntryAccount: Record<number, number | null> */
 ): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number>; movAudit: any[] }> {
     console.log("Migrando retenciones en ventas...");
@@ -311,7 +312,8 @@ DESC;`);
         mapSales,
         mapRetMovements,
         mapRetAuditSales,
-        mapRetentions
+        mapRetentions,
+        mapCloseCash
     );
 
 
@@ -357,6 +359,7 @@ export async function migrateRetentionsCredit(
     mapRetMovements: Record<number, number | null>,
     mapRetAuditSales: Record<number, number | null>,
     mapRetentions: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number> }> {
     console.log("Migrando retenciones en ventas por credito...");
     /*  const mapRetMovements: Record<number, number> = {}; */
@@ -576,7 +579,6 @@ DESC;`);
                     null, // NUM_UNIDAD
                     '[]'  // JSON_PAGOS
                 ];
-
             });
             // Insertar clientes en batch
             // --- PASO C: INSERTAR MOVIMIENTOS EN BATCH ---

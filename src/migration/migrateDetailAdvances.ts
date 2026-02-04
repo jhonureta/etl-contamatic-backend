@@ -25,7 +25,8 @@ export async function migrateDataMovements(
     mapAccounts: Record<number, number>,
     workOrderIdMap: Record<number, number>,
     workOrderAuditIdMap: Record<number, number>,
-    workOrderSecuencieMap: Record<number, number>
+    workOrderSecuencieMap: Record<number, number>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ movementIdAdvancesMap: Record<number, number> }> {
     try {
         const movementIdAdvancesMap: Record<number, number> = {};
@@ -170,7 +171,7 @@ WHERE
                     }
                 }
 
-
+                m.FK_ARQUEO = mapCloseCash[m.FK_ARQUEO] ?? null;
                 return [
                     bankId,
                     transactionId,
@@ -683,7 +684,7 @@ WHERE
             for (const o of batch) {
                 mapEntryAccount[o.cod_asiento] = newId++;
             }
-             console.log(` -> Batch migrado: ${batch.length} asiento anticipo clientes`);
+            console.log(` -> Batch migrado: ${batch.length} asiento anticipo clientes`);
         }
         console.log("✅ Migración asiento contable anticipo clientes completada correctamente");
         return { mapEntryAccount };

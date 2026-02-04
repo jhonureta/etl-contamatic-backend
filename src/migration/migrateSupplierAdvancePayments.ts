@@ -18,7 +18,8 @@ export async function migrateDataMovementsSuppliersAdvances(
     mapProject: Record<number, number>,
     mapCenterCost: Record<number, number>,
     mapAccounts: Record<number, number>,
-    workOrderSecuencieMap: Record<number, number>
+    workOrderSecuencieMap: Record<number, number>,
+    mapCloseCash: Record<number, number | null>,
 ): Promise<{ movementIdAdvancesMap: Record<number, number> }> {
     try {
         const movementIdAdvancesMap: Record<number, number> = {};
@@ -158,7 +159,7 @@ WHERE
                     }
                 }
 
-
+                m.FK_ARQUEO = mapCloseCash[m.FK_ARQUEO] ?? null;
                 return [
                     bankId,
                     transactionId,
