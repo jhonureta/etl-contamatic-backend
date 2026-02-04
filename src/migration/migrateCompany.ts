@@ -46,6 +46,7 @@ import { migrateSeatsCostSales } from './migrateSeatsCostSales';
 import { migrateTransactionDetails } from './migrateTransactionDetail';
 import { migrateKardex } from './migrateKardex';
 import { migrateCashClose } from './migrateCashClose';
+import { migrateRetentionFiles } from './updateWithholdingStatus';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -145,7 +146,7 @@ export async function migrateCompany(codEmp: number) {
       e.CONTADOR ?? 1,
       vacio,
       vacio,
-      e.COD_EMPSYS
+      codEmp
     ]
 
     await conn.beginTransaction();
@@ -188,9 +189,7 @@ export async function migrateCompany(codEmp: number) {
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
        ?, ?, ?, ?, ?, ?, ?, 
-       ?, ?, ?, ?, ?, ?,?,?
-    )
-    `,
+       ?, ?, ?, ?, ?, ?,?,?)`,
       resultInsert
     );
 
@@ -442,7 +441,7 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts
     );
 
-    const {boxMap, boxMapId} = await migrateCajas(
+    const { boxMap, boxMapId } = await migrateCajas(
       legacyConn,
       conn,
       newCompanyId,
@@ -451,7 +450,7 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-/*     const { mapCloseCash } = await migrateCashClose(
+    const { mapCloseCash } = await migrateCashClose(
       legacyConn,
       conn,
       newCompanyId,
@@ -459,8 +458,6 @@ export async function migrateCompany(codEmp: number) {
       userMap,
       boxMapId
     )
-
-     */
 
     const mapCategories = await migrateCategories(
       legacyConn,
@@ -957,7 +954,10 @@ export async function migrateCompany(codEmp: number) {
       mapAuditSales
     );
 
-    await conn.commit();
+
+    await migrateRetentionFiles(conn);
+
+    await conn.rollback();
 
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);

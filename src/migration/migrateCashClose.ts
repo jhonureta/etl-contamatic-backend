@@ -41,7 +41,7 @@ export async function migrateCashClose(
             DET_APERTURA AS DETALLEAPERTURA,
             NULL AS FK_AUDITOB,
             NULL AS FK_CAJA,
-            NULL AS COMPRASDIA,
+            EFECTIVO_EGRESO AS COMPRASDIA,
             NULL AS FECH_REP,
             NULL AS ANULADO,
             NULL AS ANULADODIFERENTE,
@@ -112,16 +112,16 @@ export async function migrateCashClose(
                 const detalleFisico = adaptarItems(c.DETALLEFISICO);
                 const detalleApertura = adaptarItems(c.DETALLEAPERTURA);
 
+
+
                 return [
-                    c.COD_ARQ,
-                    JSON.stringify(detalleFisico), ,
+                    idUser,
+                    idUser,
+                    idBox,
+                    c.APERTURA,
                     c.TOTAL_CAJA,
                     c.VENTADIA,
-                    c.DEPOSITOS,
-                    c.CHEQUES,
-                    c.TRANSFERENCIA,
-                    c.EFECTIVO,
-                    c.EFECTIVO_EGRESO,
+                    c.COMPRASDIA,
                     c.TOTAL,
                     c.FALTANTE,
                     c.SOBRANTE,
@@ -129,54 +129,44 @@ export async function migrateCashClose(
                     c.ESTADO,
                     c.FECHACIERRE,
                     c.FECHAAPERTURA,
-                    c.DESCRIPCION,
                     c.SECUENCIA,
-                    idUser,
-                    idUser,
-                    idBox,
-                    c.APERTURA,
-                    JSON.stringify(detalleApertura),
-                    c.FK_AUDITOB,
-                    c.FK_CAJA,
-                    c.COMPRASDIA,
+                    c.DESCRIPCION,
                     c.FECH_REP,
                     c.ANULADO,
                     c.ANULADODIFERENTE,
                     c.FETCH_ACT,
-                    newCompanyId
+                    newCompanyId,
+                    JSON.stringify(detalleFisico),
+                    JSON.stringify(detalleApertura),
+                    c.FK_AUDITOB
                 ];
             });
             const [res]: any = await conn.query(
                 `INSERT INTO cash_count(
-            DETALLEFISICO,
-            TOTAL_CAJA,
-            VENTADIA,
-            DEPOSITOS,
-            CHEQUES,
-            TRANSFERENCIA,
-            EFECTIVO,
-            EFECTIVO_EGRESO,
-            TOTAL,
-            FALTANTE,
-            SOBRANTE,
-            VALORCIERRE,
-            ESTADO,
-            FECHACIERRE,
-            FECHAAPERTURA,
-            DESCRIPCION,
-            SECUENCIA,
             FK_COD_USU,
-            FK_COD_USU_RESP,
-            FK_CAJA,
-            APERTURA,
-            DETALLEAPERTURA,
-            FK_AUDITOB,
-            COMPRASDIA,
-            FECH_REP,
-            ANULADO,
-            ANULADODIFERENTE,
-            FETCH_ACT,
-            FKA_COD_EMP
+                    FK_COD_USU_RESP,
+                    FK_CAJA,
+                    APERTURA,
+                    TOTAL_CAJA,
+                    VENTADIA,
+                    COMPRASDIA,
+                    TOTAL,
+                    FALTANTE,
+                    SOBRANTE,
+                    VALORCIERRE,
+                    ESTADO,
+                    FECHACIERRE,
+                    FECHAAPERTURA,
+                    SECUENCIA,
+                    DESCRIPCION,
+                    FECH_REP,
+                    ANULADO,
+                    ANULADODIFERENTE,
+                    FETCH_ACT,
+                    FKA_COD_EMP,
+                    DETALLEFISICO, 
+                    DETALLEAPERTURA,
+                    FK_AUDITOB
             ) VALUES  ?`,
                 [values]
             );
@@ -187,7 +177,7 @@ export async function migrateCashClose(
             }
             console.log(` -> Batch migrado: ${batch.length} anticipos de proveedores`);
         }
-
+        console.log(mapCloseCash);
         return { mapCloseCash };
 
     } catch (error) {
