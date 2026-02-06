@@ -247,7 +247,7 @@ export async function migrateCreditNotesPurchases({
           t.FEC_TRAC,
           t.FEC_REL_TRAC,
           t.FEC_MERC_TRAC,
-          safeJson(t.MET_PAG_TRAC),
+          t.MET_PAG_TRAC,
           t.OBS_TRAC,
           creador,
           vendedor,

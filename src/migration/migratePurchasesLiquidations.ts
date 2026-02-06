@@ -343,7 +343,7 @@ export async function migratePurchasesAndLiquidations({
 				p.FEC_TRAC,
 				p.FEC_REL_TRAC,
 				p.FEC_MERC_TRAC,
-				safeJson(p.MET_PAG_TRAC),
+				p.MET_PAG_TRAC,
 				p.OBS_TRAC,
 				userId,
 				sellerId,

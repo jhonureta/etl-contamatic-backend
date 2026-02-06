@@ -166,7 +166,7 @@ export async function migrateProformaInvoices({
           proforma.FEC_TRAC,
           proforma.FEC_REL_TRAC,
           proforma.FEC_MERC_TRAC,
-          safeJson(proforma.MET_PAG_TRAC),
+          proforma.MET_PAG_TRAC,
           proforma.OBS_TRAC,
           userId,
           sellerId,

@@ -241,7 +241,7 @@ export async function migratePurchaseOrders({
           order.FEC_TRAC,
           order.FEC_REL_TRAC,
           order.FEC_MERC_TRAC,
-          safeJson(order.MET_PAG_TRAC),
+          order.MET_PAG_TRAC,
           order.OBS_TRAC,
           userId,
           sellerId,
