@@ -20,11 +20,85 @@ export async function migrateSalesRetentions(
 ): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number>; movAudit: any[] }> {
     console.log("Migrando retenciones en ventas...");
 
+    const { mapRetMovements, mapRetAuditSales, movAudit } = await migrateRetentionsNotCredit(
+        legacyConn,
+        conn,
+        newCompanyId,
+        userMap,
+        bankMap,
+        boxMap,
+        mapConciliation,
+        mapSales,
+        mapRetentions,
+        mapCloseCash,
+    );
 
+
+    const mapDetailCredit = await migrateRetentionsCredit(
+        legacyConn,
+        conn,
+        newCompanyId,
+        userMap,
+        bankMap,
+        boxMap,
+        mapConciliation,
+        mapSales,
+        mapRetMovements,
+        mapRetAuditSales,
+        mapRetentions,
+        mapCloseCash
+    );
+
+
+    const mapMigrateDetail = await migratePaymentDetails(
+        legacyConn,
+        conn,
+        mapObligationsCustomers,
+        mapDetailCredit.mapRetMovements
+    );
+
+    const mapEntryAccount = await migrateAccountingEntriesCustomerObligations(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapDetailCredit.mapRetMovements,
+        mapPeriodo,
+        mapRetAuditSales
+    );
+
+    const mapEntryDetailAccount = await migrateDetailedAccountingEntriesCustomerObligations(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapProject,
+        mapCenterCost,
+        mapAccounts,
+        mapEntryAccount.mapEntryAccount
+    )
+    //mapRetAuditSales
+    return { mapRetMovements, mapRetAuditSales, movAudit };
+}
+
+
+export async function migrateRetentionsNotCredit(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    userMap: any,
+    bankMap: Record<number, number | null>,
+    boxMap: Record<number, number | null>,
+    mapConciliation: Record<number, number | null>,
+    mapSales: Record<number, number | null>,
+    mapRetentions: Record<number, number | null>,
+    mapCloseCash: Record<number, number | null>,
+): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number>; movAudit: any[] }> {
+    console.log("Migrando retenciones en ventas...");
 
     const mapRetMovements: Record<number, number> = {};
-    const mapRetAuditMovements: Record<number, number> = {};
+    const mapRetAuditSales: Record<number, number> = {};
+    let movAudit = [];
 
+    /*  const mapRetMovements: Record<number, mapRetAuditMovements number> = {}; */
     const [rows] = await legacyConn.query(`SELECT
     COD_TRAC,
     COD_TRAC AS FK_COD_TRAN,
@@ -126,9 +200,9 @@ DESC;`);
     // AND (detalle_anticipos.ID_DET_ANT IS  NULL or detalle_anticipos.ID_DET_ANT = '') and  (m.ID_MOVI    IS  NULL or m.ID_MOVI = '')
 
     const ventas = rows as any[];
-    const mapRetAuditSales: Record<number, number> = {};
-    let movAudit = [];
-
+    /* 
+        let movAudit = [];
+     */
 
     if (!ventas.length) {
 
@@ -301,50 +375,11 @@ DESC;`);
     )
 
 
-    const mapDetailCredit = await migrateRetentionsCredit(
-        legacyConn,
-        conn,
-        newCompanyId,
-        userMap,
-        bankMap,
-        boxMap,
-        mapConciliation,
-        mapSales,
-        mapRetMovements,
-        mapRetAuditSales,
-        mapRetentions,
-        mapCloseCash
-    );
 
 
-    const mapMigrateDetail = await migratePaymentDetails(
-        legacyConn,
-        conn,
-        mapObligationsCustomers,
-        mapDetailCredit.mapRetMovements
-    );
-
-    const mapEntryAccount = await migrateAccountingEntriesCustomerObligations(
-        legacyConn,
-        conn,
-        newCompanyId,
-        mapDetailCredit.mapRetMovements,
-        mapPeriodo,
-        mapRetAuditSales
-    );
-
-    const mapEntryDetailAccount = await migrateDetailedAccountingEntriesCustomerObligations(
-        legacyConn,
-        conn,
-        newCompanyId,
-        mapProject,
-        mapCenterCost,
-        mapAccounts,
-        mapEntryAccount.mapEntryAccount
-    )
-    //mapRetAuditSales
     return { mapRetMovements, mapRetAuditSales, movAudit };
 }
+
 
 
 export async function migrateRetentionsCredit(
