@@ -47,6 +47,7 @@ import { migrateTransactionDetails } from './migrateTransactionDetail';
 import { migrateKardex } from './migrateKardex';
 import { migrateCashClose } from './migrateCashClose';
 import { migrateRetentionFiles } from './updateWithholdingStatus';
+import { migrateAutomaticClosingSeat } from './migrateAutomaticClosingSeat';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -751,7 +752,9 @@ export async function migrateCompany(codEmp: number) {
       mapCenterCost,
       mapAccounts,
       mapRetentions,
-      mapCloseCash
+      mapCloseCash,
+      oldRetentionCodeMap,
+      newRetentionIdMap
     );
 
     //== Migrar procesos notas de credito ventas ===/
@@ -899,6 +902,16 @@ export async function migrateCompany(codEmp: number) {
       mapAccounts,
     );
 
+
+    await migrateAutomaticClosingSeat(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+    );
     //== Mapa general de transacciones ==//
     const transactionIdMap = {
       ...mapSales, // Ventas
@@ -997,6 +1010,7 @@ export async function migrateCompany(codEmp: number) {
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
     console.log("ANTICIPOS CLIENTES:", Object.keys(mapAdvancesCustomers).length);
     console.log("MIGRACION DE ASIENTOS MANUALES:", Object.keys(mapEntryAccount).length);
+
 
     return newCompanyId;
   } catch (error) {

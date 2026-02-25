@@ -52,12 +52,12 @@ export async function migrateSuppliersForCompany(
                                 FROM
                                     proveedores;`);
     const proveedores = rows as any[];
-
+    const mapSuppliers: Record<number, number> = {};
     if (!proveedores.length) {
-        throw new Error(" -> No hay proveedores para migrar.");
+        return mapSuppliers; throw new Error(" -> No hay proveedores para migrar.");
     }
     const BATCH_SIZE = 1000;
-    const mapSuppliers: Record<number, number> = {};
+
     for (let i = 0; i < proveedores.length; i += BATCH_SIZE) {
         const batch = proveedores.slice(i, i + BATCH_SIZE);
 

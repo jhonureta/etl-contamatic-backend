@@ -81,13 +81,14 @@ export async function migrateClientsForCompany(
                                 FROM
                                     clientes;`);
     const clientes = rows as any[];
-
-    if (!clientes.length) {
-        throw new Error(" -> No hay clientes para migrar.");
-    }
-    const BATCH_SIZE = 1000;
     const mapClients: Record<number, number> = {};
     const clientNameIdMap = new Map<string, ClientIdentity>();
+    if (!clientes.length) {
+        return { mapClients, clientNameIdMap };
+    }
+    const BATCH_SIZE = 1000;
+
+
     for (let i = 0; i < clientes.length; i += BATCH_SIZE) {
         const batch = clientes.slice(i, i + BATCH_SIZE);
 

@@ -1,4 +1,15 @@
 import { upsertTotaledEntry } from "./migrationTools";
+import { toJSONArray, toNumber } from "./purchaseHelpers";
+export interface RetentionCodeValue {
+    id: number;
+    name: string;
+}
+
+type RestructureRetentionParams = {
+    inputDetail: any[];
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>;
+    newRetentionIdMap: Record<number, number>;
+};
 
 export async function migrateSalesRetentions(
     legacyConn: any,
@@ -16,6 +27,8 @@ export async function migrateSalesRetentions(
     mapAccounts: Record<number, number | null>,
     mapRetentions: Record<number, number | null>,
     mapCloseCash: Record<number, number | null>,
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>,
+    newRetentionIdMap: Record<number, number | null>
     /* mapEntryAccount: Record<number, number | null> */
 ): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number>; movAudit: any[] }> {
     console.log("Migrando retenciones en ventas...");
@@ -31,6 +44,8 @@ export async function migrateSalesRetentions(
         mapSales,
         mapRetentions,
         mapCloseCash,
+        oldRetentionCodeMap,
+        newRetentionIdMap
     );
 
 
@@ -46,7 +61,9 @@ export async function migrateSalesRetentions(
         mapRetMovements,
         mapRetAuditSales,
         mapRetentions,
-        mapCloseCash
+        mapCloseCash,
+        oldRetentionCodeMap,
+        newRetentionIdMap
     );
 
 
@@ -91,6 +108,8 @@ export async function migrateRetentionsNotCredit(
     mapSales: Record<number, number | null>,
     mapRetentions: Record<number, number | null>,
     mapCloseCash: Record<number, number | null>,
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>,
+    newRetentionIdMap: Record<number, number | null>
 ): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number>; movAudit: any[] }> {
     console.log("Migrando retenciones en ventas...");
 
@@ -219,8 +238,6 @@ DESC;`);
     /*  const mapSales: Record<number, number> = {}; */
 
 
-
-
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
         try {
@@ -244,22 +261,33 @@ DESC;`);
                 console.log(`transformando y normalizando ${t.NUM_TRANS}`);
                 const idDocumento = mapSales[t.COD_TRAC];
                 const auditId = mapRetAuditSales[t.COD_TRAC];
-                /*  return [
-                     auditId,
-                     idDocumento
-                 ]; */
-                return { auditId, idDocumento };
+
+                const structureRetention = restructureRetentionDetail({
+                    inputDetail: toJSONArray(t.DOCUMENT_REL_DETAIL),
+                    oldRetentionCodeMap,
+                    newRetentionIdMap,
+                }); console.log("Estructura de retenciones reestructurada: ", structureRetention);
+
+                const calcularTotalRetenido = (lista) => {
+                    return lista.reduce((acumulado, item) => {
+                        // Convertimos el string a número para sumar correctamente
+                        const valor = parseFloat(item.valorRetenido) || 0;
+                        return acumulado + valor;
+                    }, 0); // <--- Este 0 es el valor de retorno si el array está vacío
+                };
+
+                const totalRetIva = calcularTotalRetenido(structureRetention[0].listadoRetencionesIva);
+                const totalRetRenta = calcularTotalRetenido(structureRetention[0].listadoRetenciones);
+                return { auditId, idDocumento, totalRetIva, totalRetRenta };
             });
             // Insertar clientes en batch
 
             await Promise.all(values.map(v =>
                 conn.query(
-                    `UPDATE transactions SET FK_AUDIT_REL = ? WHERE COD_TRANS = ?`,
-                    [v.auditId, v.idDocumento]
+                    `UPDATE transactions SET FK_AUDIT_REL = ?,VALRETIVA=?, VALRETRENTA=? WHERE COD_TRANS = ?`,
+                    [v.auditId, v.totalRetIva, v.totalRetRenta, v.idDocumento]
                 )
             ));
-
-            /*  const [res]: any = await conn.query(`UPDATE transactions SET FK_AUDIT_REL = ?  WHERE COD_TRANS = ?`, [values]); */
             console.log(` -> Batch migrado: ${batch.length} retenciones de ventas.`);
         } catch (err) {
             throw err;
@@ -327,7 +355,6 @@ DESC;`);
 
             });
             // Insertar clientes en batch
-            // --- PASO C: INSERTAR MOVIMIENTOS EN BATCH ---
             const [resMov]: any = await conn.query(
                 `INSERT INTO movements (
                     FKBANCO, FK_COD_TRAN, FK_CONCILIADO, FK_USER, FECHA_MOVI, FECHA_MANUAL,
@@ -351,12 +378,7 @@ DESC;`);
                     movAud.idMovimiento = idMov;
                 }
             });
-
-
-
             console.log(` -> Batch migrado: ${batch.length} retenciones de ventas.`);
-
-
         } catch (err) {
             throw err;
         }
@@ -371,16 +393,125 @@ DESC;`);
         mapRetMovements,
         mapSales,
         newCompanyId,
-        recalcular
+        recalcular,
+        oldRetentionCodeMap,
+        newRetentionIdMap
     )
-
-
-
-
     return { mapRetMovements, mapRetAuditSales, movAudit };
 }
 
+function isDetailOldRetention(data: any): boolean { 
+    return data && data.length > 0 && data[0].hasOwnProperty('subcero') && data[0].hasOwnProperty('sub12');
+}
 
+function transformRetentionOldToNewVersion(inputDetail: any[], oldRetentionCodeMap: Map<string, RetentionCodeValue>): any[] {
+
+    const listadoRetenciones = inputDetail.filter(
+        ({
+            renta
+        }) => Number(renta) > 0
+    ).map(item => {
+        return {
+            codigoRenta: item.renta || '',
+            idRetRenta: oldRetentionCodeMap.get(`${item.renta}:RENTA`)?.id || '',
+            nombreRenta: oldRetentionCodeMap.get(`${item.renta}:RENTA`)?.name || '',
+            porcentajeRenta: item.porcentaje || '',
+            subtotalBase0: item.subcero || '0.00',
+            subtotalDiferente: item.sub12 || '0.00',
+            valorRetenido: item.valorRetenido || '0.00'
+        }
+    });
+
+    const listadoRetencionesIva = inputDetail.filter(
+        ({
+            rentaIva
+        }) => Number(rentaIva) > 0
+    ).map(item => {
+        return {
+            codigoIva: item.rentaIva || '',
+            idRetIva: oldRetentionCodeMap.get(`${item.rentaIva}:IVA`)?.id || '',
+            nombreIva: oldRetentionCodeMap.get(`${item.rentaIva}:IVA`)?.name || '',
+            porcentajeIva: item.porcentajeIva || '',
+            subtotalDiferenteIva: item.noGrabaIva || '0.00',
+            valorRetenido: item.valorRetenidoIva || '0.00',
+            impuestos: [{
+                codigo: 2,
+                tarifa: 12,
+                total: item.sub12Iva || '0.00'
+            }]
+        }
+    });
+    return [{
+        listadoRetenciones,
+        listadoRetencionesIva
+    }]
+}
+
+function transformRetentionNewVersion(inputDetail: any[], newRetentionIdMap: Record<number, number>): any[] {
+    const {
+        listadoRetenciones = [], listadoRetencionesIva = []
+    } = inputDetail[0] || {};
+
+    const listRetentionRent = listadoRetenciones
+        .filter(({
+            renta
+        }) => renta)
+        .map((retention: any) =>
+        ({
+            codigoRenta: retention.renta,
+            idRetRenta: newRetentionIdMap[retention.idRetencionRenta] ?? '',
+            nombreRenta: retention.nombreRetencionFuente || '',
+            porcentajeRenta: retention.porcentaje || '',
+            subtotalBase0: retention.subtotalBase0 || '0.00',
+            subtotalDiferente: retention.subtotalDiferente || '0.00',
+            valorRetenido: retention.valorRetenido || '0.00'
+        })
+        );
+
+    const listRententionVat = listadoRetencionesIva
+        .filter(({
+            rentaIva
+        }) => rentaIva)
+        .map((retention: any) =>
+        ({
+            codigoIva: retention.rentaIva,
+            idRetIva: newRetentionIdMap[retention.idRetencionIva] || '',
+            nombreIva: retention.nombreRetencionIva || '',
+            porcentajeIva: retention.porcentajeIva || '',
+            subtotalDiferenteIva: retention.subtotalDiferenteIva || '0.00',
+            valorRetenido: retention.valorRetenidoIva || '0.00',
+            impuestos: retention.arraryImpuestos ?
+                retention.arraryImpuestos.filter((impuesto: any) => impuesto.impuestoActivoIva === 1).map(impuesto => ({
+                    codigo: toNumber(impuesto.codigo),
+                    tarifa: toNumber(impuesto.tarifa),
+                    total: impuesto.totalImpuestoIva || '0.00'
+                })) : []
+        })
+        );
+
+    return [{
+        listadoRetenciones: listRetentionRent,
+        listadoRetencionesIva: listRententionVat
+    }];
+}
+
+export function restructureRetentionDetail({
+    inputDetail,
+    oldRetentionCodeMap,
+    newRetentionIdMap,
+}: RestructureRetentionParams): any[] {
+   
+    if (isDetailOldRetention(inputDetail)) { 
+        return transformRetentionOldToNewVersion(
+            inputDetail,
+            oldRetentionCodeMap
+        );
+    }
+    return transformRetentionNewVersion(
+        inputDetail,
+        newRetentionIdMap
+    );
+}
 
 export async function migrateRetentionsCredit(
     legacyConn: any,
@@ -395,6 +526,8 @@ export async function migrateRetentionsCredit(
     mapRetAuditSales: Record<number, number | null>,
     mapRetentions: Record<number, number | null>,
     mapCloseCash: Record<number, number | null>,
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>,
+    newRetentionIdMap: Record<number, number | null>
 ): Promise<{ mapRetMovements: Record<number, number>; mapRetAuditSales: Record<number, number> }> {
     console.log("Migrando retenciones en ventas por credito...");
     /*  const mapRetMovements: Record<number, number> = {}; */
@@ -536,21 +669,33 @@ DESC;`);
             }
             // Preparar valores para INSERT en batch
             const values = batch.map((t, index) => {
-                console.log(`transformando y normalizando ${t.NUM_TRANS}`);
                 const idDocumento = mapSales[t.COD_TRAC];
                 const auditId = mapRetAuditSales[t.COD_TRAC];
-                /*  return [
-                     auditId,
-                     idDocumento
-                 ]; */
-                return { auditId, idDocumento };
+
+                const structureRetention = restructureRetentionDetail({
+                    inputDetail: toJSONArray(t.DOCUMENT_REL_DETAIL),
+                    oldRetentionCodeMap,
+                    newRetentionIdMap,
+                });
+                const calcularTotalRetenido = (lista) => {
+                    return lista.reduce((acumulado, item) => {
+                        // Convertimos el string a número para sumar correctamente
+                        const valor = parseFloat(item.valorRetenido) || 0;
+                        return acumulado + valor;
+                    }, 0); // <--- Este 0 es el valor de retorno si el array está vacío
+                };
+                /*  const structureRetention = adaptarEstructuraMultiple(t.DOCUMENT_REL_DETAIL); */
+                const totalRetIva = calcularTotalRetenido(structureRetention[0].listadoRetencionesIva);
+                const totalRetRenta = calcularTotalRetenido(structureRetention[0].listadoRetenciones);
+
+                return { auditId, idDocumento, totalRetIva, totalRetRenta };
             });
             // Insertar clientes en batch
 
             await Promise.all(values.map(v =>
                 conn.query(
-                    `UPDATE transactions SET FK_AUDIT_REL = ? WHERE COD_TRANS = ?`,
-                    [v.auditId, v.idDocumento]
+                    `UPDATE transactions SET FK_AUDIT_REL = ?,VALRETIVA=?, VALRETRENTA=? WHERE COD_TRANS = ?`,
+                    [v.auditId, v.totalRetIva, v.totalRetRenta, v.idDocumento]
                 )
             ));
 
@@ -651,9 +796,10 @@ DESC;`);
         mapRetMovements,
         mapSales,
         newCompanyId,
-        recalcular
+        recalcular,
+        oldRetentionCodeMap,
+        newRetentionIdMap
     )
-
 
 
 
@@ -1013,7 +1159,9 @@ export async function detRetSale(
     mapRetMovements,
     mapSales,
     newCompanyId,
-    recalcular
+    recalcular,
+    oldRetentionCodeMap: Map<string, RetentionCodeValue>,
+    newRetentionIdMap: Record<number, number | null>
 ) {
     const obtenerSaldos = (estructuraAntigua: any): { saldoRenta: number; saldoIva: number } => {
         try {
@@ -1058,88 +1206,6 @@ export async function detRetSale(
         }
     };
 
-    const formatDecimal = (value: any, decimals: number = 2): string => {
-        const num = typeof value === 'number' ? value : parseFloat(value || 0);
-        return isNaN(num) ? '0.00' : num.toFixed(decimals);
-    };
-
-    const parseInteger = (value: any): number | null => {
-        const num = parseInt(value, 10);
-        return isNaN(num) ? null : num;
-    };
-
-    const adaptarEstructuraMultiple = (estructuraAntigua: any): any[] => {
-        try {
-            // Parsear si es string JSON
-            let datos = estructuraAntigua;
-            if (typeof estructuraAntigua === 'string') {
-                try {
-                    datos = JSON.parse(estructuraAntigua);
-                } catch (parseError) {
-                    console.error('Error al parsear JSON de retencion:', parseError);
-                    return [];
-                }
-            }
-
-            // Normalizar: si viene como array, tomar el primer elemento; si es objeto, usarlo directamente
-            const datosOriginales = Array.isArray(datos) ? datos[0] : datos;
-
-            if (!datosOriginales || typeof datosOriginales !== 'object') {
-                console.warn('Estructura de retención vacía o inválida');
-                return [];
-            }
-
-            // Mapear retenciones por renta (Retención en la Fuente)
-            const nuevasRetencionesRenta = (datosOriginales.listadoRetenciones || [])
-                .filter((ret: any) => ret && ret.renta) // Filtrar nulos/undefined y renta vacío
-                .map((ret: any) => ({
-                    codigoRenta: ret.renta || null,
-                    idRetRenta: mapRetentions[ret.idRetencionRenta],
-                    nombreRenta: ret.nombreRetencionFuente || null,
-                    porcentajeRenta: formatDecimal(ret.porcentaje),
-                    subtotalBase0: formatDecimal(ret.subtotalBase0),
-                    subtotalDiferente: formatDecimal(ret.subtotalDiferente),
-                    valorRetenido: formatDecimal(ret.valorRetenido)
-                }));
-
-            // Mapear retenciones por IVA
-            const nuevasRetencionesIva = (datosOriginales.listadoRetencionesIva || [])
-                .filter((ret: any) => ret && ret.rentaIva)
-                .map((ret: any) => {
-                    // Filtrar impuestos activos con tarifa > 0
-                    const impuestosActivos = (ret.arraryImpuestos || [])
-                        .filter((imp: any) => imp && imp.impuestoActivoIva === 1 && parseFloat(imp.tarifa) > 0)
-                        .map((imp: any) => ({
-                            codigo: parseInteger(imp.codigo),
-                            tarifa: parseInteger(imp.tarifa),
-                            total: formatDecimal(imp.total)
-                        }));
-
-                    return {
-                        codigoIva: ret.rentaIva || null,
-                        idRetIva: mapRetentions[ret.idRetencionIva],
-                        nombreIva: ret.nombreRetencionIva || null,
-                        porcentajeIva: formatDecimal(ret.porcentajeIva),
-                        subtotalDiferenteIva: formatDecimal(ret.subtotalDiferenteIva),
-                        valorRetenido: formatDecimal(ret.valorRetenidoIva),
-                        impuestos: impuestosActivos
-                    };
-                });
-
-            return [
-                {
-                    listadoRetenciones: nuevasRetencionesRenta,
-                    listadoRetencionesIva: nuevasRetencionesIva
-                }
-            ];
-        } catch (error) {
-            console.error('Error en adaptarEstructuraMultiple:', error);
-            return [];
-        }
-    };
-
-
-
     const BATCH_SIZE = 1000;
     for (let i = 0; i < ventas.length; i += BATCH_SIZE) {
         const batch = ventas.slice(i, i + BATCH_SIZE);
@@ -1148,13 +1214,16 @@ export async function detRetSale(
                 console.log(`transformando y normalizando movmientos ${o.NUM_REL_DOC}`);
                 // Lógica de Negocio
                 const currentAuditId = mapRetAuditSales[o.COD_TRAC];
-                const retencionVentaNueva = adaptarEstructuraMultiple(o.DOCUMENT_REL_DETAIL);
 
+                const retencionVentaNueva = restructureRetentionDetail({
+                    inputDetail: toJSONArray(o.DOCUMENT_REL_DETAIL),
+                    oldRetentionCodeMap,
+                    newRetentionIdMap,
+                }); 
 
                 if (recalcular == true) {
                     const { saldoRenta, saldoIva } = obtenerSaldos(o.DOCUMENT_REL_DETAIL);
                     const totalRetenido = Number((saldoRenta + saldoIva).toFixed(2));
-                    console.log("Total retenido:" + totalRetenido);
                     o.IMPOR_MOVI = Number(totalRetenido);
                 }
                 const totalNeto = Number(o.TOT_PAG_TRAC) - Number(o.IMPOR_MOVI);
@@ -1183,7 +1252,7 @@ export async function detRetSale(
                 FK_TARJETA, FK_BANKRET, FK_CODTRAN, FK_AUDITMV, FK_MOV, FK_COD_EMP, NUMERO_TARJETA, 
                 CLAVE_TARJETA) VALUES ?`,
                 [values]
-            );
+            ); console.log("Inserción de tarjetas completada:", values);
 
         } catch (err) {
             throw err;

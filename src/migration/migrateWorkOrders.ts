@@ -216,7 +216,7 @@ export async function migrateWorkOrders({
           workOrder.NUM_REL_DOC,
           workOrder.DIV_PAY_YEAR,
           null,
-          workOrder.RESP_SRI,
+          JSON.stringify(toJSONArray(workOrder.RESP_SRI)),
           workOrder.INFO_ADIC,
           workOrder.DET_EXP_REEMBOLSO,
           JSON.stringify(toJSONArray(workOrder.JSON_METODO)),
@@ -225,7 +225,7 @@ export async function migrateWorkOrders({
           workOrder.OBS_ORDEN,
         ];
       });
-
+      //RESP_SR
       const [resultCreateWorkOrders]: any = await conn.query(`
         INSERT INTO transactions(
             PUNTO_EMISION_DOC,

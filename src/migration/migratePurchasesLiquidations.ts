@@ -326,6 +326,17 @@ export async function migratePurchasesAndLiquidations({
 				newRetentionIdMap,
 			});
 
+
+			const calcularTotalRetenido = (lista) => {
+				return lista.reduce((acumulado, item) => {
+					// Convertimos el string a número para sumar correctamente
+					const valor = parseFloat(item.valorRetenido) || 0;
+					return acumulado + valor;
+				}, 0); // <--- Este 0 es el valor de retorno si el array está vacío
+			};
+			const totalRetIva = calcularTotalRetenido(structureRetention[0].listadoRetencionesIva);
+			const totalRetRenta = calcularTotalRetenido(structureRetention[0].listadoRetenciones);
+
 			let branchId: number = idFirstBranch;
 			if (electronicSequences.has(p.PUNTO_EMISION_REC)) {
 				const oldBranchId = electronicSequences.get(p.PUNTO_EMISION_REC);
@@ -402,7 +413,9 @@ export async function migratePurchasesAndLiquidations({
 				JSON.stringify(paymentMethod),
 				p.ITEMS_PROF,
 				p.OBS_AUXILIAR,
-				p.OBS_ORDEN
+				p.OBS_ORDEN,
+				totalRetIva,
+				totalRetRenta
 			];
 		});
 
@@ -476,7 +489,9 @@ export async function migratePurchasesAndLiquidations({
 				JSON_METODO,
 				ITEMS_PROF,
 				OBS_AUXILIAR,
-				OBS_ORDEN
+				OBS_ORDEN,
+				VALRETIVA,
+				VALRETRENTA
 			) VALUES ?
 		`, [purchaseValues]);
 
@@ -485,6 +500,7 @@ export async function migratePurchasesAndLiquidations({
 			purchaseLiquidationIdMap[COD_TRANS] = nextPurchaseId++;
 		});
 	}
+
 
 	return { purchaseLiquidationIdMap, purchaseLiquidationAuditIdMap };
 }

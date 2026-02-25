@@ -1,6 +1,6 @@
 import { upsertTotaledEntry } from "./migrationTools";
 
-export async function migrateManualSeats(
+export async function migrateAutomaticClosingSeat(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
@@ -14,17 +14,17 @@ export async function migrateManualSeats(
 
 
 
-        console.log("🚀 Iniciando migracion de asiento contables (MANUALES)..........");
-        try {
+    console.log("🚀 Iniciando migracion de asiento contables (MANUALES)..........");
+    try {
 
-            const secuencia_query = `SELECT IFNULL(MAX(CODIGO_AUT+0)+1,1) as codigoAuditoria FROM audit WHERE FK_COD_EMP=?;`;
-            const [dataSecuencia] = await conn.query(secuencia_query, [newCompanyId]);
-            let codigoAuditoria = dataSecuencia[0]['codigoAuditoria'];
+        const secuencia_query = `SELECT IFNULL(MAX(CODIGO_AUT+0)+1,1) as codigoAuditoria FROM audit WHERE FK_COD_EMP=?;`;
+        const [dataSecuencia] = await conn.query(secuencia_query, [newCompanyId]);
+        let codigoAuditoria = dataSecuencia[0]['codigoAuditoria'];
 
 
-            //IMPORTE_GD
-            const mapEntryAccount: Record<number, number> = { };
-const [rows]: any[] = await legacyConn.query(`SELECT 
+        //IMPORTE_GD
+        const mapEntryAccount: Record<number, number> = {};
+        const [rows]: any[] = await legacyConn.query(`SELECT 
 
  cod_asiento,
     fecha_asiento AS FECHA_ASI,
@@ -34,13 +34,13 @@ const [rows]: any[] = await legacyConn.query(`SELECT
 abs(debe_asiento) AS TDEBE_ASI,
 abs(haber_asiento) AS THABER_ASI,
 numero_asiento,
-'CONTABILIDAD' as TIP_ASI,
+'APERTURA AUTOMÁTICA' as TIP_ASI,
 fk_cod_periodo AS FK_PERIODO,
 fecha_registro_asiento AS FECHA_REG,
 fecha_update_asiento AS FECHA_ACT,
 json_asi AS JSON_ASI,
 res_asiento AS RES_ASI,
-ben_asiento AS BEN_ASI,
+'CIERRE DE PERIODO CONTABLE' AS BEN_ASI,
 NULL AS FK_AUDIT,
 NULL AS FK_COD_EMP,
 contabilidad_asientos.FK_CODTRAC,
@@ -54,70 +54,76 @@ CAST(
 ) AS SEC_ASI,
 cod_origen,
 NULL AS FK_MOV,
-contabilidad_asientos.cod_origen AS FK_ANTDET
-FROM contabilidad_asientos WHERE tipo_asiento ='CONTABILIDAD' AND origen_asiento != 'APERTURA AUTOMÁTICA' ORDER BY cod_asiento DESC;` );
+contabilidad_asientos.cod_origen AS FK_ANTDET, YEAR(fecha_asiento) AS ANIO_ASI, MONTH(fecha_asiento) AS MES_ASI
+FROM contabilidad_asientos WHERE tipo_asiento ='CONTABILIDAD' AND origen_asiento = 'APERTURA AUTOMÁTICA' ORDER BY cod_asiento DESC;` );
 
-if (!rows.length) {
-    return { mapEntryAccount };
-}
+        if (!rows.length) {
+            return { mapEntryAccount };
+        }
 
-const mapAuditSeats: Record<number, number> = {};
-const BATCH_SIZE = 1000;
+        const mapAuditSeats: Record<number, number> = {};
+        const BATCH_SIZE = 1000;
 
-for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
-    const insertValues: any[] = [];
-
-
-    const auditValues: any[] = [];
-    for (let j = 0; j < batch.length; j++) {
-        auditValues.push([codigoAuditoria, 'CONTABILIDAD', newCompanyId]);
-        codigoAuditoria++;
-    }
-
-    const [auditRes]: any = await conn.query(
-        `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
-        [auditValues]
-    );
-
-    // El insertId corresponde al primer id insertado; mapearlos por orden
-    let firstAuditInsertId = auditRes.insertId;
-    for (let j = 0; j < batch.length; j++) {
-        const cod_asiento = batch[j].cod_asiento;
-        const auditId = firstAuditInsertId + j;
-        mapAuditSeats[cod_asiento] = auditId;
-    }
-
-    for (const o of batch) {
-        const periodoId = mapPeriodo[o.FK_PERIODO]
-        const idAuditTr = mapAuditSeats[o.cod_asiento];
-        const idMovimiento = null;
-
-        insertValues.push([
-            o.FECHA_ASI,
-            o.DESCRIP_ASI,
-            o.NUM_ASI,
-            o.ORG_ASI,
-            o.TDEBE_ASI,
-            o.THABER_ASI,
-            o.TIP_ASI,
-            periodoId,
-            o.FECHA_REG,
-            o.FECHA_ACT,
-            o.JSON_ASI,
-            o.RES_ASI,
-            o.BEN_ASI,
-            idAuditTr,
-            newCompanyId,
-            o.SEC_ASI,
-            null,
-            idMovimiento
-        ]);
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const insertValues: any[] = [];
 
 
-    }
+            const auditValues: any[] = [];
+            for (let j = 0; j < batch.length; j++) {
+                const anio = batch[j].ANIO_ASI;
+                const mes = batch[j].MES_ASI;
+                if (Number(mes) === 1) {
+                    auditValues.push([codigoAuditoria, `APERT_CONTABLE_${anio}`, newCompanyId]);
+                } else {
+                    auditValues.push([codigoAuditoria, `CIERRE_CONTABLE_${anio}`, newCompanyId]);
+                }
+                codigoAuditoria++;
+            }
 
-    const [res]: any = await conn.query(`INSERT INTO accounting_movements(
+            const [auditRes]: any = await conn.query(
+                `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
+                [auditValues]
+            );
+
+            // El insertId corresponde al primer id insertado; mapearlos por orden
+            let firstAuditInsertId = auditRes.insertId;
+            for (let j = 0; j < batch.length; j++) {
+                const cod_asiento = batch[j].cod_asiento;
+                const auditId = firstAuditInsertId + j;
+                mapAuditSeats[cod_asiento] = auditId;
+            }
+
+            for (const o of batch) {
+                const periodoId = mapPeriodo[o.FK_PERIODO]
+                const idAuditTr = mapAuditSeats[o.cod_asiento];
+                const idMovimiento = null;
+
+                insertValues.push([
+                    o.FECHA_ASI,
+                    o.DESCRIP_ASI,
+                    o.NUM_ASI,
+                    o.ORG_ASI,
+                    o.TDEBE_ASI,
+                    o.THABER_ASI,
+                    o.TIP_ASI,
+                    periodoId,
+                    o.FECHA_REG,
+                    o.FECHA_ACT,
+                    o.JSON_ASI,
+                    o.RES_ASI,
+                    o.BEN_ASI,
+                    idAuditTr,
+                    newCompanyId,
+                    o.SEC_ASI,
+                    null,
+                    idMovimiento
+                ]);
+
+
+            }
+
+            const [res]: any = await conn.query(`INSERT INTO accounting_movements(
                     FECHA_ASI,
                     DESCRIP_ASI,
                     NUM_ASI,
@@ -137,29 +143,29 @@ for (let i = 0; i < rows.length; i += BATCH_SIZE) {
                     FK_MOVTRAC,
                     FK_MOV) VALUES ?`, [insertValues]);
 
-    let newId = res.insertId;
-    for (const o of batch) {
-        mapEntryAccount[o.cod_asiento] = newId++;
-    }
+            let newId = res.insertId;
+            for (const o of batch) {
+                mapEntryAccount[o.cod_asiento] = newId++;
+            }
 
-     console.log(` -> Batch migrado: ${batch.length} asiento manuales`);
-}
-const mapDetailAsiento = await migrateDetailedAccountingEntriesCustomerObligations(
-    legacyConn,
-    conn,
-    newCompanyId,
-    mapProject,
-    mapCenterCost,
-    mapAccounts,
-    mapEntryAccount,
-)
+            console.log(` -> Batch migrado: ${batch.length} asiento manuales`);
+        }
+        const mapDetailAsiento = await migrateDetailedAccountingEntriesCustomerObligations(
+            legacyConn,
+            conn,
+            newCompanyId,
+            mapProject,
+            mapCenterCost,
+            mapAccounts,
+            mapEntryAccount,
+        )
 
-console.log("✅ Migración asientos manuales completada correctamente");
-return { mapEntryAccount };
+        console.log("✅ Migración asientos manuales completada correctamente");
+        return { mapEntryAccount };
     } catch (err) {
-    console.error("❌ Error en migración de asiento contable:", err);
-    throw err;
-}
+        console.error("❌ Error en migración de asiento contable:", err);
+        throw err;
+    }
 }
 
 export async function migrateDetailedAccountingEntriesCustomerObligations(
@@ -188,7 +194,7 @@ export async function migrateDetailedAccountingEntriesCustomerObligations(
 FROM
 contabilidad_asientos
 INNER JOIN contabilidad_detalle_asiento d ON d.fk_cod_asiento = contabilidad_asientos.cod_asiento
-WHERE tipo_asiento ='CONTABILIDAD'  AND origen_asiento != 'APERTURA AUTOMÁTICA' ;`);
+WHERE tipo_asiento ='CONTABILIDAD'  AND origen_asiento = 'APERTURA AUTOMÁTICA' ;`);
 
     if (!rows.length) {
         console.log("⚠️ No hay registros para migrar");
