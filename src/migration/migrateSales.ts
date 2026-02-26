@@ -172,6 +172,7 @@ FROM
                 idBodega: parseInt(storeMap[producto.idBodega]) || null,
                 codigo: producto.codigo,
                 nombre: producto.nombre,
+                observacion: String(producto?.observacion ?? ""),
                 stock: parseInt(producto.stock) || 0,
                 cantidad: parseFloat(producto.cantidad) || 0,
                 impuesto: impuestoPorcentaje,

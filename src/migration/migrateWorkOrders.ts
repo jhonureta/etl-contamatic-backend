@@ -346,6 +346,7 @@ function transformProductDetail(
       esCombo: false,
       codigo: item.codigo || "",
       nombre: item.nombre || "",
+      observacion: String(item?.observacion ?? ""),
       stock: item.stock || 0,
       costo: toNumber(item.precioProducto),
       marca: "SIN MARCA",
