@@ -11,7 +11,8 @@ export async function migrateSales(
     mapRetentions: any,
     oldRetentionCodeMap: any,
     newRetentionIdMap: any,
-    storeMap: any
+    storeMap: any,
+    idFirstBranch: number
 ): Promise<{ mapSales: Record<number, number>; mapAuditSales: Record<number, number> }> {
     console.log("Migrando ventas...");
 
@@ -315,16 +316,16 @@ FROM
                 const creador = userMap[t.FK_USER];
                 const cliente = mapClients[t.FK_PERSON];
 
-                let idSucursal = null;
+                let idSucursal = idFirstBranch;
                 if (t.TIP_TRAC == 'comprobante-ingreso') {
 
-                    idSucursal = branchMap[listComprobante[t.PUNTO_EMISION_DOC]];
+                    idSucursal = branchMap[listComprobante[t.PUNTO_EMISION_DOC]] || idFirstBranch;
                 }
                 if (t.TIP_TRAC == 'fisica') {
-                    idSucursal = branchMap[listFisica[t.PUNTO_EMISION_DOC]];
+                    idSucursal = branchMap[listFisica[t.PUNTO_EMISION_DOC]] || idFirstBranch;
                 }
                 if (t.TIP_TRAC == 'factura') {
-                    idSucursal = branchMap[listElectronica[t.PUNTO_EMISION_DOC]];
+                    idSucursal = branchMap[listElectronica[t.PUNTO_EMISION_DOC]] || idFirstBranch;
                 }
 
                 function safeJson(input: any) {
