@@ -374,12 +374,12 @@ LEFT JOIN movimientos m
 WHERE a.TIPO_ANT = 'PROVEEDORES';`);
 
     const anticiposClientes = rows;
-
+    const mapAdvancesDetailCustomers: Record<string, number> = {};
     if (!anticiposClientes.length) {
-        throw new Error(" -> No hay detalle  de anticipos de proveedores completada correctamente para migrar.");
+        return mapAdvancesDetailCustomers;
     }
     const BATCH_SIZE = 1000;
-    const mapAdvancesDetailCustomers: Record<string, number> = {};
+
 
     for (let i = 0; i < anticiposClientes.length; i += BATCH_SIZE) {
         const batch = anticiposClientes.slice(i, i + BATCH_SIZE);

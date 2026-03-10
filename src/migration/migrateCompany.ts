@@ -129,7 +129,6 @@ export async function migrateCompany(codEmp: number) {
       e.SELECCION_COSTEO,
       e.EDIT_VENDEDOR,
       e.DESCUENTO_AUTOMATICO,
-
       '[]',
       e.LEGEND_EMP,
       e.TIT_LEGEND_EMP,
@@ -239,14 +238,12 @@ export async function migrateCompany(codEmp: number) {
 
     let CONF_DATOS_SUCUR = '[]';
     try {
-      CONF_DATOS_SUCUR = JSON.parse(e.JSON_ESTAB) || '[]';
+      CONF_DATOS_SUCUR = JSON.stringify(e.JSON_ESTAB) || '[]';
     } catch (err) {
 
-      throw new Error(
-        `JSON_ESTAB inválido`,
-      );
+      CONF_DATOS_SUCUR = '[]';
 
-    }
+    }console.log('CONF_DATOS_SUCUR', CONF_DATOS_SUCUR);
 
     const cryptoService = new CryptoService()
     const claveFirma = cryptoService.encrypt(e.CONF_FIRM_PASS);

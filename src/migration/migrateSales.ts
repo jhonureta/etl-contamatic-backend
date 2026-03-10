@@ -108,8 +108,12 @@ ORDER BY
 DESC;`);
     const ventas = rows as any[];
 
+
+    const mapSales: Record<number, number> = {};
+    const mapAuditSales: Record<number, number> = {};
+
     if (!ventas.length) {
-        throw new Error(" -> No hay ventas para migrar.");
+        return { mapSales, mapAuditSales };
     }
 
     //Ultima secuencia de auditoria
@@ -139,8 +143,7 @@ FROM
 
 
     const BATCH_SIZE = 1000;
-    const mapSales: Record<number, number> = {};
-    const mapAuditSales: Record<number, number> = {};
+
 
     const transformarProductos = (productosOriginales: any) => {
         // Parsear si es string JSON

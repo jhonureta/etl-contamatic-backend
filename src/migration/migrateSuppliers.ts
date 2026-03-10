@@ -54,7 +54,7 @@ export async function migrateSuppliersForCompany(
     const proveedores = rows as any[];
     const mapSuppliers: Record<number, number> = {};
     if (!proveedores.length) {
-        return mapSuppliers; throw new Error(" -> No hay proveedores para migrar.");
+        return mapSuppliers; 
     }
     const BATCH_SIZE = 1000;
 

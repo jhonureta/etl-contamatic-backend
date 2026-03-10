@@ -153,8 +153,6 @@ export async function migrateProformaInvoices({
           storeMap
         );
 
-
-
         return [
           proforma.PUNTO_EMISION_DOC,
           proforma.SECUENCIA_DOC,
@@ -167,7 +165,7 @@ export async function migrateProformaInvoices({
           proforma.FEC_TRAC,
           proforma.FEC_REL_TRAC,
           proforma.FEC_MERC_TRAC,
-          proforma.MET_PAG_TRAC,
+          proforma.MET_PAG_TRAC ?? '',
           proforma.OBS_TRAC,
           userId,
           sellerId,

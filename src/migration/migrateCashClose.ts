@@ -57,9 +57,11 @@ export async function migrateCashClose(
 
 
 
-        if (!cierreCaja.length) {
+        if (!cierreCaja.length ) {
             return { mapCloseCash };
         }
+
+
         const BATCH_SIZE = 1000;
 
         const adaptarItems = (estructuraAntigua: any): any[] => {
@@ -123,7 +125,7 @@ export async function migrateCashClose(
                     c.SOBRANTE,
                     c.VALORCIERRE,
                     c.ESTADO,
-                    c.FECHACIERRE,
+                    c.FECHACIERRE??'00000-00-00',
                     c.FECHAAPERTURA,
                     c.SECUENCIA,
                     c.DESCRIPCION,

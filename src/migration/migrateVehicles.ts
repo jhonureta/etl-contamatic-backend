@@ -26,7 +26,7 @@ export async function migrateVehicles({
     }
     console.log(` -> Vehiculos totales a procesar: ${vehicles.length}.`);
     const vehicleValues = vehicles.map((v) => [
-      v.PLACA,
+      v.PLACA_VEH,
       v.TIPO_VEH,
       v.DESC_VEH,
       v.ESTADO_VEH,
