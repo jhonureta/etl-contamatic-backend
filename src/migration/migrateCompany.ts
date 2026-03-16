@@ -72,6 +72,12 @@ export async function migrateCompany(codEmp: number) {
     database: empresa.BASE_EMP,
   });
 
+   const humanResourcesDb = createLegacyPool({
+    user: empresa.RRHH_DB_USER,
+    password: empresa.RRHH_DB_PASSWORD,
+    database: empresa.RRHH_DB_DATABASE,
+  });
+
 
   const conn = await erpPool.getConnection();
   try {
