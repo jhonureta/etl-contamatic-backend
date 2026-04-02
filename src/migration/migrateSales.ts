@@ -315,8 +315,8 @@ FROM
                 console.log(`transformando y normalizando ${t.NUM_TRANS}`);
                 const jsonAdaptado = transformarProductos(t.DOCUMENT_DETAIL);
                 const auditId = mapAuditSales[t.COD_TRANS];
-                const vendedor = userMap[t.FK_USER_VEND];
                 const creador = userMap[t.FK_USER];
+                const vendedor = userMap[t.FK_USER_VEND] || creador;
                 const cliente = mapClients[t.FK_PERSON];
 
                 let idSucursal = idFirstBranch;
