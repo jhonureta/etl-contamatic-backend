@@ -202,8 +202,8 @@ FROM
                 JSON.stringify(historial),
                 newCompanyId,
                 storeMap[c.FK_WH_ID],
-                c.PHYS_ACCOUNT_ZERO,
-                c.PHYS_ACCOUNT_DIFFZERO,
+                c.PHYS_ACCOUNT_ZERO ?? '0',
+                c.PHYS_ACCOUNT_DIFFZERO ?? '0',
                 auditId,
                 c.PHYS_FEC_REG
             ];

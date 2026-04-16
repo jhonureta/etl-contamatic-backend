@@ -164,7 +164,7 @@ export async function migrateWorkOrders({
           workOrder.FEC_TRAC,
           workOrder.FEC_REL_TRAC,
           workOrder.FEC_MERC_TRAC,
-          workOrder.MET_PAG_TRAC,
+          workOrder.MET_PAG_TRAC ?? '',
           workOrder.OBS_TRAC,
           userId,
           sellerId ?? userId,
