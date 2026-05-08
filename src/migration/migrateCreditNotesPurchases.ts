@@ -600,93 +600,94 @@ export async function migrateMovementeAdvancesNote(
         ;
   `);
 
-  if (movements.length === 0) {
-    return { mapNoteMovements };
-  }
   const BATCH_SIZE = 1000;
   const oldDetailAcountCodeMap = [];
 
-  const movementSequenceQuery = await conn.query(`SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS SECU_MOVI FROM movements WHERE MODULO = 'NCCOMPRA' AND  FK_COD_EMP = ?`,
-    [newCompanyId]
-  );
-  const [movementData] = movementSequenceQuery as Array<any>;
-  let secuenciaMovimiento = movementData[0]?.SECU_MOVI ?? 1;
+  if (movements.length === 0) {
+    console.log("No hay movimientos directos de NC compras, continuando con asientos contables...");
+  } else {
 
-  for (let i = 0; i < movements.length; i += BATCH_SIZE) {
-    const batch = movements.slice(i, i + BATCH_SIZE);
-    const values = batch.map((o: any, index: number) => {
-      console.log(`transformando y normalizando movimientos nota de credito ${o.NUM_TRANS}`);
-      let idPlanCuenta = null;
-      const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
-      o.REF_MOVI = `NOTA CREDITO COMPRA N°:${o.NUM_TRANS}`;
-
-      o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
-
-      return [
-        bankMap[o.FKBANCO] ?? null,
-        mapCreditNote[o.COD_TRAC] ?? null,
-        mapConciliation[o.FK_CONCILIADO] ?? null,
-        userMap[o.FK_USER] ?? null,
-        o.FECHA_MOVI,
-        o.FECHA_MANUAL,
-        o.TIP_MOVI,
-        o.ORIGEN_MOVI,
-        o.TIPO_MOVI,
-        o.REF_MOVI,
-        o.CONCEP_MOVI,
-        o.NUM_VOUCHER,
-        o.NUM_LOTE,
-        o.CAUSA_MOVI,
-        o.MODULO,
-        secuenciaMovimiento++,
-        o.IMPOR_MOVI,
-        o.ESTADO_MOVI,
-        o.PER_BENE_MOVI,
-        o.CONCILIADO ?? null,
-        newCompanyId,
-        boxMap[o.IDCAJA] ?? null,
-        o.OBS_MOVI,
-        o.IMPOR_MOVITOTAL,
-        null, // FK_ASIENTO
-        currentAuditId,
-        o.FK_ARQUEO, // FK_ARQUEO
-        null,
-        null, // RECIBO_CAJA
-        idPlanCuenta,
-        null, // NUM_UNIDAD
-        '[]'  // JSON_PAGOS
-      ];
-
-    });
-
-    const [resMov]: any = await conn.query(
-      `INSERT INTO movements (
-                  FKBANCO, FK_COD_TRAN, FK_CONCILIADO, FK_USER, FECHA_MOVI, FECHA_MANUAL,
-                  TIP_MOVI, ORIGEN_MOVI, TIPO_MOVI, REF_MOVI, CONCEP_MOVI, NUM_VOUCHER,
-                  NUM_LOTE, CAUSA_MOVI, MODULO, SECU_MOVI, IMPOR_MOVI, ESTADO_MOVI,
-                  PER_BENE_MOVI, CONCILIADO, FK_COD_EMP, IDDET_BOX, OBS_MOVI,
-                  IMPOR_MOVITOTAL, FK_ASIENTO, FK_AUDITMV, FK_ARQUEO, ID_TARJETA,
-                  RECIBO_CAJA, FK_CTAM_PLAN, NUMERO_UNIDAD, JSON_PAGOS
-              ) VALUES ?`,
-      [values]
+    const movementSequenceQuery = await conn.query(`SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS SECU_MOVI FROM movements WHERE MODULO = 'NCCOMPRA' AND  FK_COD_EMP = ?`,
+      [newCompanyId]
     );
+    const [movementData] = movementSequenceQuery as Array<any>;
+    let secuenciaMovimiento = movementData[0]?.SECU_MOVI ?? 1;
 
+    for (let i = 0; i < movements.length; i += BATCH_SIZE) {
+      const batch = movements.slice(i, i + BATCH_SIZE);
+      const values = batch.map((o: any, index: number) => {
+        console.log(`transformando y normalizando movimientos nota de credito ${o.NUM_TRANS}`);
+        let idPlanCuenta = null;
+        const currentAuditId = mapAuditCreditNote[o.FK_COD_TRAN];
+        o.REF_MOVI = `NOTA CREDITO COMPRA N°:${o.NUM_TRANS}`;
 
-    let currentMovId = resMov.insertId;
-    batch.forEach(o => {
-      mapNoteMovements[o.COD_TRAC] = currentMovId++;
-      oldDetailAcountCodeMap.push({
-        idFactura: o.COD_TRAC_FACT,
-        importe: o.IMPOR_MOVI,
-        fecha: o.FECHA_MANUAL,
-        idTrn: o.COD_TRAC,
-        audit: mapNoteMovements[o.COD_TRAC]
+        o.FK_ARQUEO = mapCloseCash[o.FK_ARQUEO] ?? null;
+
+        return [
+          bankMap[o.FKBANCO] ?? null,
+          mapCreditNote[o.COD_TRAC] ?? null,
+          mapConciliation[o.FK_CONCILIADO] ?? null,
+          userMap[o.FK_USER] ?? null,
+          o.FECHA_MOVI,
+          o.FECHA_MANUAL,
+          o.TIP_MOVI,
+          o.ORIGEN_MOVI,
+          o.TIPO_MOVI,
+          o.REF_MOVI,
+          o.CONCEP_MOVI,
+          o.NUM_VOUCHER,
+          o.NUM_LOTE,
+          o.CAUSA_MOVI,
+          o.MODULO,
+          secuenciaMovimiento++,
+          o.IMPOR_MOVI,
+          o.ESTADO_MOVI,
+          o.PER_BENE_MOVI,
+          o.CONCILIADO ?? null,
+          newCompanyId,
+          boxMap[o.IDCAJA] ?? null,
+          o.OBS_MOVI,
+          o.IMPOR_MOVITOTAL,
+          null, // FK_ASIENTO
+          currentAuditId,
+          o.FK_ARQUEO, // FK_ARQUEO
+          null,
+          null, // RECIBO_CAJA
+          idPlanCuenta,
+          null, // NUM_UNIDAD
+          '[]'  // JSON_PAGOS
+        ];
+
       });
-    });
-    console.log(` -> Batch migrado: ${batch.length} notas de credito`);
 
-  }
+      const [resMov]: any = await conn.query(
+        `INSERT INTO movements (
+                    FKBANCO, FK_COD_TRAN, FK_CONCILIADO, FK_USER, FECHA_MOVI, FECHA_MANUAL,
+                    TIP_MOVI, ORIGEN_MOVI, TIPO_MOVI, REF_MOVI, CONCEP_MOVI, NUM_VOUCHER,
+                    NUM_LOTE, CAUSA_MOVI, MODULO, SECU_MOVI, IMPOR_MOVI, ESTADO_MOVI,
+                    PER_BENE_MOVI, CONCILIADO, FK_COD_EMP, IDDET_BOX, OBS_MOVI,
+                    IMPOR_MOVITOTAL, FK_ASIENTO, FK_AUDITMV, FK_ARQUEO, ID_TARJETA,
+                    RECIBO_CAJA, FK_CTAM_PLAN, NUMERO_UNIDAD, JSON_PAGOS
+                ) VALUES ?`,
+        [values]
+      );
 
+
+      let currentMovId = resMov.insertId;
+      batch.forEach(o => {
+        mapNoteMovements[o.COD_TRAC] = currentMovId++;
+        oldDetailAcountCodeMap.push({
+          idFactura: o.COD_TRAC_FACT,
+          importe: o.IMPOR_MOVI,
+          fecha: o.FECHA_MANUAL,
+          idTrn: o.COD_TRAC,
+          audit: mapNoteMovements[o.COD_TRAC]
+        });
+      });
+      console.log(` -> Batch migrado: ${batch.length} notas de credito`);
+
+    }
+  } 
 
   const { mapNoteMovementsFull } = await migrateRetentionsCredit(
     legacyConn,
