@@ -48,6 +48,7 @@ import { migrateKardex } from './migrateKardex';
 import { migrateCashClose } from './migrateCashClose';
 import { migrateRetentionFiles } from './updateWithholdingStatus';
 import { migrateAutomaticClosingSeat } from './migrateAutomaticClosingSeat';
+import { migratePayroll } from './migratePayrollSeats';
 export async function migrateCompany(codEmp: number) {
   const [rows] = await systemworkPool.query(
     `SELECT * FROM empresas WHERE COD_EMPSYS = ?`,
@@ -72,7 +73,7 @@ export async function migrateCompany(codEmp: number) {
     database: empresa.BASE_EMP,
   });
 
-   const humanResourcesDb = createLegacyPool({
+  const humanResourcesDb = createLegacyPool({
     user: empresa.RRHH_DB_USER,
     password: empresa.RRHH_DB_PASSWORD,
     database: empresa.RRHH_DB_DATABASE,
@@ -249,7 +250,7 @@ export async function migrateCompany(codEmp: number) {
 
       CONF_DATOS_SUCUR = '[]';
 
-    }console.log('CONF_DATOS_SUCUR', CONF_DATOS_SUCUR);
+    } console.log('CONF_DATOS_SUCUR', CONF_DATOS_SUCUR);
 
     const cryptoService = new CryptoService()
     const claveFirma = cryptoService.encrypt(e.CONF_FIRM_PASS);
@@ -517,6 +518,25 @@ export async function migrateCompany(codEmp: number) {
       newCompanyId,
       bankMap
     );
+
+
+    await migratePayroll(
+      legacyConn,
+      conn,
+      newCompanyId,
+      mapPeriodo,
+      mapProject,
+      mapCenterCost,
+      mapAccounts,
+      mapConciliation,
+      userMap,
+      bankMap,
+      boxMap,
+      mapCloseCash,
+      humanResourcesDb,
+      codEmp
+    );
+    return;
 
     const mapAdvancesCustomers = await migrateAdvancesCustomers(
       legacyConn,

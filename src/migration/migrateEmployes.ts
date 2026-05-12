@@ -2,7 +2,7 @@ import { migrateDepartments, migratePositions, migrateSalaries } from "./migrate
 
 /* import { erpPool } from '../config/db';
  */
-export async function migrateCustomerAccounting(
+export async function   migratePayrollConfiguration(
     legacyConn: any,
     conn: any,
     newCompanyId: number,
@@ -50,9 +50,7 @@ export async function migrateCustomerAccounting(
         idEmpresaRhh
     );
 
-
-
-    return { mapDepartments, mapPositions };
+    return { mapDepartments, mapPositions , mapSalaries, mapEmployes, mappingContracts};
 }
 
 
