@@ -139,8 +139,8 @@ export async function migrateProformaInvoices({
       const proformaValues = batch.map((proforma, index: number) => {
         console.log(`transformando y normalizando ${proforma.NUM_TRANS}`);
         const productDetails = toJSONArray(proforma.DOCUMENT_DETAIL);
-        const sellerId = userMap[proforma.FK_USER_VEND];
         const userId = userMap[proforma.FK_USER];
+        const sellerId = userMap[proforma.FK_USER_VEND] || userId;
         const clientId = mapClients[proforma.FK_PERSON];
         //mapeo de auditoria por transaccion
         const auditId = firstInsertedAuditId + index;

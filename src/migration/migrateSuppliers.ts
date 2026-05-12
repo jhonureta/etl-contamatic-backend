@@ -109,7 +109,7 @@ export async function migrateSuppliersForCompany(
                 u.CUST_EMA3 || null,
                 u.CUST_EST || 1,
                 u.CUST_COUNTRY_EXTR || null,
-                u.CUST_EXTR === '' ? 0 : 1,
+                u.CUST_EXTR === 1 || u.CUST_EXTR === '1' ? 1 : 0,
                 u.CUST_FECH_REG || new Date()
             ];
         });

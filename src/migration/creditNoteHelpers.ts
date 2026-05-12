@@ -27,6 +27,8 @@ function transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapPr
     let codigoImpuesto = 0;
     let nombreImpuesto = "";
     let total = toNumber(product?.total ?? 0);
+    const precioProducto = cantidad > 0 ? total / cantidad : 0;
+    const costoProducto = precioProducto;
     
     if (isOldDiscount) {
       const codigo = product?.codigo;
@@ -64,8 +66,8 @@ function transformDiscountCreditNoteDetail(inputDetail, oldProductCodeMap, mapPr
       impuesto,
       codigoImpuesto,
       nombreImpuesto,
-      precioProducto: 0,
-      costoProducto: 0,
+      precioProducto,
+      costoProducto,
       porcentajeDescuento: toNumber(product?.porcentajeDescuento ?? 0),
       valorDescuento: toNumber(product?.valorDescuento ?? 0),
       total,

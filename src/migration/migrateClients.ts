@@ -172,7 +172,7 @@ export async function migrateClientsForCompany(
                 u.CUST_VEND === 'Seleccione...' ? null : u.CUST_VEND,
                 u.CUST_INGR || null,
                 u.CUST_COUNTRY_EXTR || null,
-                u.CUST_EXTR === null ? 0 : 1,
+                u.CUST_EXTR === 1 || u.CUST_EXTR === '1' ? 1 : 0,
                 u.CUST_FECH_REG || new Date(),
                 u.CUST_NAME_EXT || null,
                 u.CUST_ADDR_EXT || null,
