@@ -360,8 +360,8 @@ END AS ORG_ORDEN,
     END AS FECH_REG,
 
     CASE
-        WHEN da.IMPOR_DET_ANT > 0 THEN 'EGRESO'
-        ELSE 'INGRESO'
+        WHEN da.IMPOR_DET_ANT > 0 THEN 'INGRESO'
+        ELSE 'EGRESO'
     END AS CAUSA_ANT
 
 FROM detalle_anticipos da
