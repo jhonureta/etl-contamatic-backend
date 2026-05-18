@@ -148,8 +148,8 @@ export async function migratePurchasesAndLiquidations({
 		END AS CLAVE_REL_TRANS,
 		CASE tipo_compra WHEN 'Mercaderia' THEN 'mercaderia' WHEN 'Gastos y Servicios' THEN 'gastos_servicios'
 		END AS TIP_DET_DOC,
-		YEAR(FEC_TRAC) AS FEC_PERIODO_TRAC,
-		MONTH(FEC_TRAC) AS FEC_MES_TRAC,
+		YEAR(fechaFacturaRet) AS FEC_PERIODO_TRAC,
+		MONTH(fechaFacturaRet) AS FEC_MES_TRAC,
 		fechaFacturaRet AS FEC_TRAC,
 		FEC_TRAC AS FEC_REL_TRAC,
 		FEC_MERC_TRAC,
