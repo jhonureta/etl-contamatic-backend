@@ -78,10 +78,11 @@ export async function batchInsertProducts(
 
             const medId = mapMeasures[p.PROD_UNIT];
             let marcaId = null;
-            if (p.MARSUB_PRO == null || p.MARSUB_PRO == '') {
+            const marcaNombre = p.PROD_BRAND != null ? String(p.PROD_BRAND).trim() : '';
+            if (marcaNombre === '') {
                 marcaId = mapBrand['SIN MARCA'];
             } else {
-                marcaId = mapBrand[p.MARSUB_PRO];
+                marcaId = mapBrand[marcaNombre] ?? mapBrand['SIN MARCA'];
             }
 
             const fk_venta = mapAccounts[p.FK_CTA_VENTA] ?? null;

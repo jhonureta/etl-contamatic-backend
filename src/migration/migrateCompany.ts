@@ -406,7 +406,7 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-    const mapPeriodo = await migrateAccountingPeriod(
+    const { mapPeriodo, mapPeriodoPorFecha } = await migrateAccountingPeriod(
       legacyConn,
       conn,
       newCompanyId
@@ -500,7 +500,7 @@ export async function migrateCompany(codEmp: number) {
     const { mapDetWare, prodWareDetailIdMap } = await migrateWarehouseDetails(
       legacyConn,
       conn,
-      branchMap,
+      storeMap,
       mapProducts
     );
 
@@ -732,6 +732,7 @@ export async function migrateCompany(codEmp: number) {
       mapConciliation,
       purchaseLiquidationObligationIdMap,
       mapPeriodo,
+      mapPeriodoPorFecha,
       mapProject,
       mapCenterCost,
       mapAccounts,

@@ -26,6 +26,7 @@ export async function migrateCreditNotesPurchases({
   mapConciliation,
   purchaseLiquidationObligationIdMap,
   mapPeriodo,
+  mapPeriodoPorFecha,
   mapProject,
   mapCenterCost,
   mapAccounts,
@@ -402,6 +403,7 @@ export async function migrateCreditNotesPurchases({
       mapConciliation,
       purchaseLiquidationObligationIdMap,
       mapPeriodo,
+      mapPeriodoPorFecha,
       mapProject,
       mapCenterCost,
       mapAccounts,
@@ -427,6 +429,7 @@ export async function migrateMovementeAdvancesNote(
   mapConciliation: Record<number, number | null>,
   mapObligationsCustomers: Record<number, number | null>,
   mapPeriodo: Record<number, number | null>,
+  mapPeriodoPorFecha: Record<string, number>,
   mapProject: Record<number, number | null>,
   mapCenterCost: Record<number, number | null>,
   mapAccounts: Record<number, number | null>,
@@ -717,6 +720,7 @@ export async function migrateMovementeAdvancesNote(
     newCompanyId,
     mapNoteMovementsFull,
     mapPeriodo,
+    mapPeriodoPorFecha,
     mapAuditCreditNote
   );
 
@@ -1107,6 +1111,7 @@ export async function migrateAccountingEntriesCustomerObligations(
   newCompanyId: number,
   mapNoteMovementsFull: Record<number, number | null>,
   mapPeriodo: Record<number, number | null>,
+  mapPeriodoPorFecha: Record<string, number>,
   mapAuditCreditNote: Record<number, number | null>,
 ): Promise<{
   mapEntryAccount: Record<number, number>
@@ -1163,7 +1168,11 @@ export async function migrateAccountingEntriesCustomerObligations(
       const batch = rows.slice(i, i + BATCH_SIZE);
 
       const insertValues: any[] = batch.map(o => {
-        const periodoId = mapPeriodo[o.FK_PERIODO];
+        let periodoId = mapPeriodo[o.FK_PERIODO];
+        if (!periodoId) {
+          const d = new Date(o.FECHA_REG);
+          periodoId = mapPeriodoPorFecha[`${d.getFullYear()}-${d.getMonth() + 1}`] ?? null;
+        }
         const idAuditTr = mapAuditCreditNote[o.COD_TRAC];
         const idMovimiento = mapNoteMovementsFull[o.COD_TRAC];
         return [
