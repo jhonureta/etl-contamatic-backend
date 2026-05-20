@@ -5,6 +5,7 @@ export async function migrateBrand(
 ): Promise<Record<string, number>> {
 
     console.log("Migrando marcas...");
+    const mapBrand: Record<string, number> = {};
 
     // Obtiene marcas únicas normalizadas
     const [rows] = await legacyConn.query(`
@@ -17,11 +18,10 @@ export async function migrateBrand(
     const marcas = rows as any[];
 
     if (!marcas.length) {
-        throw new Error(" -> No hay marcas para migrar.");
+        return mapBrand;
     }
 
     const BATCH_SIZE = 1000;
-    const mapBrand: Record<string, number> = {};
     let existeSinMarca = false;
 
     for (let i = 0; i < marcas.length; i += BATCH_SIZE) {

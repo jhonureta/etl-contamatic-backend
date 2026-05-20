@@ -7,14 +7,14 @@ export async function migrateMeasures(
 ): Promise<Record<number, number>> {
     console.log("Migrando medidas...");
 
+    const mapMeasures: Record<number, number> = {};
     const [rows] = await legacyConn.query(`SELECT medidas.* FROM medidas ;`);
     const categorias = rows as any[];
 
     if (!categorias.length) {
-        throw new Error(" -> No hay medidas para migrar.");
+        return mapMeasures;
     }
     const BATCH_SIZE = 1000;
-    const mapMeasures: Record<number, number> = {};
     for (let i = 0; i < categorias.length; i += BATCH_SIZE) {
         const batch = categorias.slice(i, i + BATCH_SIZE);
 
