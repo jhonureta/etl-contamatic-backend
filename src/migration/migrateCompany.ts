@@ -62,6 +62,13 @@ export async function migrateCompany(codEmp: number) {
 
   const empresa = empresas[0];
 
+
+   const [updSystem] = await systemworkPool.query(
+    `UPDATE empresas SET MIGRADA = 1 WHERE COD_EMPSYS = ?`,
+    [codEmp],
+  );
+
+
   console.log(
     `Migrando empresa: ${empresa.NOM_EMPSYS} (BD: ${empresa.BASE_EMP})`,
   );
@@ -101,7 +108,7 @@ export async function migrateCompany(codEmp: number) {
       e.TEL_EMP,
       e.TEL2_EMP,
       e.TEL3_EMP,
-      e.CODART_EMP,
+      e.CODART_EMP.toUpperCase() ?? 'NO',
       e.CONT_EMP,
       e.CONTESP_EMP,
       e.LOGO_EMP,
@@ -143,7 +150,7 @@ export async function migrateCompany(codEmp: number) {
       e.FK_COD_COUNT,
       e.FECHA_CREACION,
       e.EST_EMP.toUpperCase() ?? 'ACTIVO',
-      e.CONTADOR ?? 1,
+      empresa.CODCRE_EMP ?? 1,
       vacio,
       vacio,
       codEmp
@@ -243,7 +250,7 @@ export async function migrateCompany(codEmp: number) {
 
       CONF_DATOS_SUCUR = '[]';
 
-    }console.log('CONF_DATOS_SUCUR', CONF_DATOS_SUCUR);
+    } console.log('CONF_DATOS_SUCUR', CONF_DATOS_SUCUR);
 
     const cryptoService = new CryptoService()
     const claveFirma = cryptoService.encrypt(e.CONF_FIRM_PASS);
