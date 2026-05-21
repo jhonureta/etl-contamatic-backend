@@ -47,9 +47,9 @@ export async function migrateCashClose(
             FECHAAPERTURA AS FETCH_ACT,
             NULL AS FKA_COD_EMP
         FROM
-            arqueo_caja
-        WHERE
-            1;
+            arqueo_caja inner join movimientos on movimientos.periodo_caja = arqueo_caja.COD_ARQ
+        WHERE 
+            1 GROUP by arqueo_caja.COD_ARQ;
         `;
         const [rows] = await legacyConn.query(queryCierreCajas);
 
