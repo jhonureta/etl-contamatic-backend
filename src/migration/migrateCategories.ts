@@ -6,15 +6,15 @@ export async function migrateCategories(
     newCompanyId: number
 ): Promise<Record<number, number>> {
     console.log("Migrando categorias...");
+    const mapCategories: Record<number, number> = {};
 
     const [rows] = await legacyConn.query(`SELECT categorias.* FROM categorias ;`);
     const categorias = rows as any[];
 
     if (!categorias.length) {
-        throw new Error(" -> No hay categorias para migrar.");
+        return mapCategories;
     }
     const BATCH_SIZE = 1000;
-    const mapCategories: Record<number, number> = {};
     for (let i = 0; i < categorias.length; i += BATCH_SIZE) {
         const batch = categorias.slice(i, i + BATCH_SIZE);
 

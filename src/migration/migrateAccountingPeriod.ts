@@ -4,7 +4,7 @@ export async function migrateAccountingPeriod(
     legacyConn: any,
     conn: any,
     newCompanyId: number
-): Promise<Record<number, number>> {
+): Promise<{ mapPeriodo: Record<number, number>; mapPeriodoPorFecha: Record<string, number> }> {
     console.log("Migrando periodo contable...");
 
     const [rows] = await legacyConn.query(`SELECT cod_periodo as  COD_PERIODO, anioperiodo AS ANIO_PERIODO,numeromes as NUMERO_MES, fecha_inicio as FECHA_INICIO, fecha_cierre as FECHA_CIERRE, estado_cierre as ESTADO_CIERRE FROM contabilidad_periodo WHERE 1;`);
@@ -15,6 +15,7 @@ export async function migrateAccountingPeriod(
     }
     const BATCH_SIZE = 1000;
     const mapPeriodo: Record<number, number> = {};
+    const mapPeriodoPorFecha: Record<string, number> = {};
     for (let i = 0; i < periodo.length; i += BATCH_SIZE) {
         const batch = periodo.slice(i, i + BATCH_SIZE);
 
@@ -38,6 +39,7 @@ export async function migrateAccountingPeriod(
             let newId = res.insertId;
             for (const s of batch) {
                 mapPeriodo[s.COD_PERIODO] = newId;
+                mapPeriodoPorFecha[`${s.ANIO_PERIODO}-${s.NUMERO_MES}`] = newId;
                 newId++;
             }
 
@@ -48,7 +50,7 @@ export async function migrateAccountingPeriod(
         }
     }
 
-    return mapPeriodo;
+    return { mapPeriodo, mapPeriodoPorFecha };
 }
 
 
