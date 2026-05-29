@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import { migrateCompany } from '../migration/migrateCompany';
-import { createLegacyConnection } from '../config/db';
 
 const router = Router();
 
 router.post('/company/:codEmp', async (req, res) => {
   const codEmp = Number(req.params.codEmp);
   if (!codEmp) {
-    return res.status(400).json({ message: 'codEmp inválido' });
+    return res.status(400).json({ message: 'codEmp invalido' });
   }
 
   try {

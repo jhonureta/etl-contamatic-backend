@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev:api": "ts-node-dev --respawn --transpile-only index.ts",
     "migrate-company": "ts-node src/migration/index.ts",
-    "generate-password": "ts-node src/scripts/hash-password.ts"
+    "generate-password": "ts-node src/scripts/hash-password.ts",
+     "build": "tsc"
   },
   "keywords": [],
   "author": "",
