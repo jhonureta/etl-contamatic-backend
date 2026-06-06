@@ -276,6 +276,12 @@ export async function migratePurchasesAndLiquidations({
 		}
 	}
 
+	function toNullableInteger(value: any): number | null {
+		if (value === null || value === undefined || String(value).trim() === '') return null;
+		const numberValue = Number(value);
+		return Number.isInteger(numberValue) ? numberValue : null;
+	}
+
 	for (let i = 0; i < purchases.length; i += BATCH_SIZE) {
 
 		const batchPurchase = purchases.slice(i, i + BATCH_SIZE);
@@ -405,7 +411,7 @@ export async function migratePurchasesAndLiquidations({
 				p.FK_AUDIT_REL,
 				p.NUM_TRANS,
 				p.NUM_REL_DOC,
-				p.DIV_PAY_YEAR,
+				toNullableInteger(p.DIV_PAY_YEAR),
 				JSON.stringify(structureRetention),
 				safeJson(p.RESP_SRI),
 				p.INFO_ADIC,

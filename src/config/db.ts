@@ -34,6 +34,12 @@ export function createLegacyPool(opts: {
   database: string;
   connectionLimit?: number;
 }) {
+  console.log('Creando pool para legacy DB:', {
+    host: opts.host || env.systemwork.host,
+    port: opts.port || env.systemwork.port,
+    user: opts.user,
+    database: opts.database,
+  });
   return mysql.createPool({
     host: opts.host || env.systemwork.host,
     port: opts.port || env.systemwork.port,
@@ -48,4 +54,21 @@ export function createLegacyPool(opts: {
     keepAliveInitialDelay: 0,
     connectTimeout: 30000,
   });
+}
+
+export function createLegacyPoolRrhh(opstions: {}) {  
+return mysql.createPool({
+  host: env.systemwork.host,
+  port: env.systemwork.port,
+  user: env.rrhh.user,
+  password: env.rrhh.password,
+  database: env.rrhh.database,
+  waitForConnections: true,
+  connectionLimit: 5,
+  queueLimit: 0,
+  multipleStatements: false,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  connectTimeout: 30000,
+});
 }

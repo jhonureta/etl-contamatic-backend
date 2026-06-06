@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/xampp1/mysql/bin/**)",
+      "Bash(./mysql.exe -u root -e \"SHOW COLUMNS FROM accounting_movements;\" contamatic_systemwork)",
+      "Bash(./mysql.exe -u root --default-auth=mysql_native_password -e \"SHOW COLUMNS FROM accounting_movements;\" contamatic_systemwork)"
+    ]
+  }
+}

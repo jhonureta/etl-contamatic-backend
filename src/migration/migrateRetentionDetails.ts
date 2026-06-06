@@ -51,8 +51,16 @@ export async function migrateRetentions(
                 porcentaje_Retencion AS porcentaje,
                 codigo_Retencion AS codigoRetencion,
                 renta_iva AS tipoRetencion,
-                fecha_inicial AS fechaInicio,
-                CASE WHEN  fecha_vigencia ='0000-00-00' THEN '2028-12-31' ELSE fecha_vigencia END AS fechaFin,
+                CASE
+                    WHEN fecha_inicial IS NULL OR CAST(fecha_inicial AS CHAR) IN ('0000-00-00', '')
+                    THEN NULL
+                    ELSE CAST(fecha_inicial AS CHAR)
+                END AS fechaInicio,
+                CASE
+                    WHEN fecha_vigencia IS NULL OR CAST(fecha_vigencia AS CHAR) IN ('0000-00-00', '')
+                    THEN '2028-12-31'
+                    ELSE CAST(fecha_vigencia AS CHAR)
+                END AS fechaFin,
                 estado_actual_sri,
                 ultima_actualizacion
             FROM retenciones;
@@ -148,7 +156,7 @@ export async function migrateRetentions(
             }
         }
     } catch (error: any) {
-        console.error('❌ Error en migrateExpensesDetails:', error.message);
+        console.error('❌ Error en migrateRetentions:', error.message);
         throw error;
     }
 

@@ -3,6 +3,15 @@ export interface oldProductCodeMap {
     precioProducto: number;
 }
 
+function toNumberOrZero(value: any): number {
+    if (value === null || value === undefined || value === '') {
+        return 0;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
 
 
 export async function batchInsertProducts(
@@ -105,19 +114,19 @@ export async function batchInsertProducts(
                 p.PROD_TYPE?.toUpperCase() || 'PRODUCTO SIMPLE',
                 p.PROD_IMG,
                 p.PROD_FEC_REG,
-                p.PROD_PRICE_COST,
-                p.PROD_PRICE_PUB,
-                p.PROD_PRICE_DISTR,
-                p.PROD_DESC_DISTR,
-                p.PROD_PRICE_MAY,
-                p.PROD_DESC_MAY,
-                p.PROD_PRICE_CARD,
-                p.PROD_DESC_CARD,
-                p.PROD_PRICE_E,
-                p.PROD_DESC_E,
-                p.PROD_PRICE_F,
-                p.PROD_DESC_F,
-                p.PROD_PRICE_MAN,
+                toNumberOrZero(p.PROD_PRICE_COST),
+                toNumberOrZero(p.PROD_PRICE_PUB),
+                toNumberOrZero(p.PROD_PRICE_DISTR),
+                toNumberOrZero(p.PROD_DESC_DISTR),
+                toNumberOrZero(p.PROD_PRICE_MAY),
+                toNumberOrZero(p.PROD_DESC_MAY),
+                toNumberOrZero(p.PROD_PRICE_CARD),
+                toNumberOrZero(p.PROD_DESC_CARD),
+                toNumberOrZero(p.PROD_PRICE_E),
+                toNumberOrZero(p.PROD_DESC_E),
+                toNumberOrZero(p.PROD_PRICE_F),
+                toNumberOrZero(p.PROD_DESC_F),
+                toNumberOrZero(p.PROD_PRICE_MAN),
                 fk_venta,
                 fk_compra,
                 fk_costo,
@@ -182,7 +191,7 @@ export async function batchInsertProducts(
                     `${s.PROD_COD}`,
                     {
                         id: newId,
-                        precioProducto: s.PROD_PRICE_PUB
+                        precioProducto: toNumberOrZero(s.PROD_PRICE_PUB)
                     }
                 )
 

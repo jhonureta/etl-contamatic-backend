@@ -83,17 +83,37 @@ export async function migratePositions(
     for (let i = 0; i < positions.length; i += BATCH_SIZE) {
         const batch = positions.slice(i, i + BATCH_SIZE);
 
-        const values = batch.map(c => {
+        const values = batch.map(c => [
+            c.cargo_nombre,
+            c.cargo_descripcion,
+            8,
+            470,
+            2.9375,
+            4.40625,
+            5.875,
+            0,
+            0,
+            0,
+            0,
+            0,
+            39.166667,
+            39.166667,
+            0,
+            548.333333,
+            44.415,
+            503.918333,
+            new Date(),
+            newCompanyId,
+        ]);
 
-
-            return [
-                c.cargo_nombre,
-                c.cargo_descripcion,
-                newCompanyId,
-            ];
-        });
-
-        const [res]: any = await conn.query(`INSERT INTO positions ( POS_NAME, POS_DESCR, POS_NUM_HOUR, POS_SALARY, POS_HOUR_RATE, POS_HOUR_RATE_50, POS_HOUR_RATE_100, POS_APPOR_BONUS, POS_HOUR_RATE_LV, POS_HOUR_RATE_SA, POS_OVERTIME, POS_LOAN, POS_THIRTEENTH, POS_FOURTEENTH, POS_EVICTION, POS_TOTAL_ING, POS_IESS, POS_TOTAL, POS_FEC_REG, FK_COD_EMP) VALUES (?, ?, '8', '470', '2.9375', '4.40625', '5.875', '0', '0', '0', '0', '0', '39.166667', '39.166667', '0', '548.333333', '44.415', '503.918333', '2025-12-12 09:22:41', ?)`,
+        const [res]: any = await conn.query(
+            `INSERT INTO positions (
+                POS_NAME, POS_DESCR, POS_NUM_HOUR, POS_SALARY, POS_HOUR_RATE,
+                POS_HOUR_RATE_50, POS_HOUR_RATE_100, POS_APPOR_BONUS,
+                POS_HOUR_RATE_LV, POS_HOUR_RATE_SA, POS_OVERTIME, POS_LOAN,
+                POS_THIRTEENTH, POS_FOURTEENTH, POS_EVICTION, POS_TOTAL_ING,
+                POS_IESS, POS_TOTAL, POS_FEC_REG, FK_COD_EMP
+            ) VALUES ?`,
             [values]
         );
 
@@ -176,7 +196,7 @@ FROM
             ];
         });
 
-        const [res]: any = await conn.query(`INSERT INTO  salaries( SALR_NAME, SALR_PERIODO, SALR_FEC_INI, SALR_FEC_FIN, SALR_MONTO, SALR_DEC_TERC, SALR_DEC_CUAR, SALR_FON_RES, SALR_VACA, SALR_DESAHU, SALR_STATUS, SALR_FEC_REG, FK_COD_EMP) VALUES (?)`,
+        const [res]: any = await conn.query(`INSERT INTO  salaries( SALR_NAME, SALR_PERIODO, SALR_FEC_INI, SALR_FEC_FIN, SALR_MONTO, SALR_DEC_TERC, SALR_DEC_CUAR, SALR_FON_RES, SALR_VACA, SALR_DESAHU, SALR_STATUS, SALR_FEC_REG, FK_COD_EMP) VALUES ?`,
             [values]
         );
 

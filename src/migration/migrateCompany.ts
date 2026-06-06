@@ -1,4 +1,4 @@
-import { systemworkPool, erpPool, createLegacyPool } from '../config/db';
+import { systemworkPool, erpPool, createLegacyPool, createLegacyPoolRrhh } from '../config/db';
 import CryptoService from './encrypt.handler';
 import { migrateAccountingPeriod } from './migrateAccountingPeriod';
 import { migrateBancos } from './migrateBancos';
@@ -80,7 +80,7 @@ export async function migrateCompany(codEmp: number) {
     database: empresa.BASE_EMP,
   });
 
-  const humanResourcesDb = createLegacyPool({
+  const humanResourcesDb = createLegacyPoolRrhh({
     user: empresa.RRHH_DB_USER,
     password: empresa.RRHH_DB_PASSWORD,
     database: empresa.RRHH_DB_DATABASE,
@@ -543,7 +543,7 @@ export async function migrateCompany(codEmp: number) {
       humanResourcesDb,
       codEmp
     );
-    return;
+
 
     const mapAdvancesCustomers = await migrateAdvancesCustomers(
       legacyConn,
@@ -1012,7 +1012,7 @@ export async function migrateCompany(codEmp: number) {
 
     await migrateRetentionFiles(conn);
 
-    await conn.commit();
+    await conn.rollback();
 
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);

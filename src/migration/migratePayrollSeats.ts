@@ -1,7 +1,7 @@
-import { migratePayrollConfiguration } from "./migrateEmployes";
+import { migratePayrollConfiguration, principalConfigNameByLegacyCode } from "./migrateEmployes";
 import { migrateLoansPayrollAdvances } from "./migrateLoans";
 import { upsertTotaledEntry } from "./migrationTools";
-import { findNextAuditCode, insertAudit } from "./purchaseHelpers";
+import { findNextAuditCode, insertAudit, toJSONArray, toNumber } from "./purchaseHelpers";
 
 type PayrollSeatIdMap = Array<{
     key: 'FK_CODROL' | 'FK_CODPREST' | 'FK_CODMOV' | 'ID_ADELANTO';
@@ -90,12 +90,13 @@ export async function migratePayroll(
     idEmpresaRhh = await getEmpresaRhhId(humanResourcesDb, codEmp);
 
 
-    const { mapDepartments, mapPositions, mapSalaries, mapEmployes, mappingContracts } = await migratePayrollConfiguration(
+    const { mapDepartments, mapPositions, mapSalaries, mapBenefits, mapEmployes, mappingContracts } = await migratePayrollConfiguration(
         legacyConn,
         conn,
         newCompanyId,
         humanResourcesDb,
-        idEmpresaRhh
+        idEmpresaRhh,
+        mapAccounts
     );
 
 
@@ -103,7 +104,10 @@ export async function migratePayroll(
         mapAuditPayroll,
         mapAuditPagoRoll,
         mapAuditAnticipoRoll,
-        mapAuditMovimientosPagoRoll, mapIdAsiento } = await migratePayrollSeats(legacyConn,
+        mapAuditMovimientosPagoRoll,
+        mapIdAsiento,
+        mapEntryAccount,
+    } = await migratePayrollSeats(legacyConn,
             conn,
             newCompanyId,
             mapPeriodo,
@@ -111,6 +115,46 @@ export async function migratePayroll(
             mapCenterCost,
             mapAccounts);
     const mapClients = mapEmployes;
+
+    const payrollIdMap = await migratePayrollRecords(
+        conn,
+        newCompanyId,
+        humanResourcesDb,
+        idEmpresaRhh,
+        mapEmployes,
+        mapBenefits,
+        mapAuditPagoRoll,
+        mapAuditPayroll,
+        mapIdAsiento
+    );
+
+    const rolAsientoUpdates: Array<[number, number]> = [];
+    for (const entry of mapIdAsiento) {
+        if (entry.key !== 'FK_CODROL') continue;
+        const newAsientoId = mapEntryAccount[entry.cod_asiento];
+        const newPayrollId = payrollIdMap[entry.id];
+        if (newAsientoId && newPayrollId) {
+            rolAsientoUpdates.push([newAsientoId, newPayrollId]);
+        }
+    }
+
+    if (rolAsientoUpdates.length) {
+        const [existingCols]: any[] = await conn.query(`SHOW COLUMNS FROM accounting_movements LIKE 'FK_CODROL'`);
+        if (!existingCols.length) {
+            await conn.query(`ALTER TABLE accounting_movements ADD COLUMN FK_CODROL INT NULL`);
+        }
+
+        const caseWhen = rolAsientoUpdates.map(() => 'WHEN ? THEN ?').join(' ');
+        const inIds = rolAsientoUpdates.map(([id]) => id);
+        const params: any[] = rolAsientoUpdates.flatMap(([id, payrollId]) => [id, payrollId]);
+        params.push(inIds);
+        await conn.query(
+            `UPDATE accounting_movements SET FK_CODROL = CASE COD_ASIENTO ${caseWhen} END WHERE COD_ASIENTO IN (?)`,
+            params
+        );
+        console.log(` -> FK_CODROL actualizado en ${rolAsientoUpdates.length} asientos de nomina`);
+    }
+
     await migratePayrollMovements(
         legacyConn,
         conn,
@@ -133,6 +177,291 @@ export async function migratePayroll(
 
     return { movementOrderIdMap: {} };
 }
+
+async function getConfigurationDetailIdColumn(conn: any): Promise<string> {
+    const [columns]: any[] = await conn.query(`SHOW COLUMNS FROM configuration_rrhh_detail`);
+    const columnNames = columns.map((column: any) => column.Field);
+    const idColumn = columnNames.find((name: string) =>
+        name !== 'FK_CONFRRHH_ID' && /(^ID_|_ID$|ID$)/i.test(name)
+    );
+
+    if (!idColumn) {
+        throw new Error('No se encontro columna ID en configuration_rrhh_detail.');
+    }
+
+    return idColumn;
+}
+
+async function getConfigurationDetailMap(conn: any, newCompanyId: number): Promise<Record<number, number>> {
+    const detailIdColumn = await getConfigurationDetailIdColumn(conn);
+    const [rows]: any[] = await conn.query(`
+        SELECT
+            ${detailIdColumn} AS DETAIL_ID,
+            FK_CONFRRHH_ID
+        FROM configuration_rrhh_detail
+        WHERE FK_CODDET_EMP = ?
+        ORDER BY ${detailIdColumn}
+    `, [newCompanyId]);
+
+    const detailMap: Record<number, number> = {};
+    for (const row of rows) {
+        if (!detailMap[row.FK_CONFRRHH_ID]) {
+            detailMap[row.FK_CONFRRHH_ID] = row.DETAIL_ID;
+        }
+    }
+
+    return detailMap;
+}
+
+function parseJsonArray(value: any): any[] {
+    return toJSONArray(value);
+}
+
+function payrollItemAmount(item: any): number {
+    return toNumber(item?.valor ?? item?.[item?.codigo] ?? 0);
+}
+
+function payrollItemMap(items: any[]): Record<string, any> {
+    const map: Record<string, any> = {};
+    for (const item of items) {
+        const code = String(item?.codigo ?? '').trim().toUpperCase();
+        if (code) map[code] = item;
+    }
+    return map;
+}
+
+function benefitTypeByCode(employeePayroll: any): Record<string, string | null> {
+    const options = parseJsonArray(employeePayroll?.contrato_beneficiossociales);
+    const map: Record<string, string | null> = {};
+
+    for (const option of options) {
+        const code = String(option?.beneficio_codigo ?? '').trim().toUpperCase();
+        const type = option?.tipoBeneficio ? String(option.tipoBeneficio).trim().toUpperCase() : null;
+
+        if (code === 'PI7') map.I7 = type;
+        if (code === 'PI8') map.I8 = type;
+        if (code === 'PI9') map.I9 = type;
+    }
+
+    return map;
+}
+
+function sumItems(items: any[], predicate: (item: any) => boolean): number {
+    return items.reduce((total, item) => predicate(item) ? total + payrollItemAmount(item) : total, 0);
+}
+
+function payrollDetailType(item: any, annualTypes: Record<string, string | null>): string | null {
+    const code = String(item?.codigo ?? '').trim().toUpperCase();
+    if (annualTypes[code]) return annualTypes[code];
+
+    const benefitType = String(item?.beneficio_tipo ?? '').trim().toUpperCase();
+    if (benefitType === 'INGRESO') return 'INGRESO';
+    if (benefitType === 'EGRESO') return 'EGRESO';
+    if (benefitType === 'PROVISIONES') return 'PROVISION';
+    return benefitType || null;
+}
+
+function resolvePayrollAuditId(
+    rol: any,
+    mapAuditPagoRoll: Record<number, number>,
+    mapAuditPayroll: Record<number, number>
+): number | null {
+    return mapAuditPagoRoll[rol.rol_id]
+        ?? mapAuditPayroll[rol.rolid_asiento]
+        ?? (mapAuditPayroll as any)[String(rol.rolid_asiento ?? '')]
+        ?? (mapAuditPayroll as any)[String(rol.rol_asiento ?? '').trim()]
+        ?? null;
+}
+
+export async function migratePayrollRecords(
+    conn: any,
+    newCompanyId: number,
+    humanResourcesDb: any,
+    idEmpresaRhh: number,
+    mapEmployes: Record<number, number>,
+    mapBenefits: Record<number, number>,
+    mapAuditPagoRoll: Record<number, number>,
+    mapAuditPayroll: Record<number, number>,
+    mapIdAsiento: PayrollSeatIdMap
+): Promise<Record<number, number>> {
+    console.log("Migrando roles de nomina...");
+    const payrollIdMap: Record<number, number> = {};
+
+    if (!humanResourcesDb || !idEmpresaRhh) {
+        console.warn("No se migran roles de nomina: no hay conexion o empresa RRHH.");
+        return payrollIdMap;
+    }
+
+   
+ /* throw new Error(`Error al migrar la configuración de la empresa=`); */
+    const [rows]: any[] = await humanResourcesDb.query(`
+        SELECT
+            rol_id,
+            rol_periodo,
+            rol_mes,
+            rol_fecha_registro,
+            rol_totalIngreso,
+            rol_totalEgreso,
+            rol_totalPagar,
+            detalle_rol,
+            estado_rol,
+            rolid_asiento,
+            rol_asiento
+        FROM tbRol
+        WHERE fk_empresa_id = ?
+        ORDER BY rol_id
+    `, [idEmpresaRhh]);
+
+    if (!rows.length) {
+        console.warn(`No se encontraron roles para idEmpresaRhh=${idEmpresaRhh}.`);
+        return payrollIdMap;
+    }
+
+    const configurationMaps = await getConfigurationDetailMap(conn, newCompanyId);
+    const principalCodes = new Set(Object.keys(principalConfigNameByLegacyCode));
+    const detailValues: any[] = [];
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const payrollRows: any[] = [];
+        const payrollSources: Array<{ rol: any; employeePayroll: any }> = [];
+
+        for (const rol of batch) {
+            const employees = parseJsonArray(rol.detalle_rol);
+
+            for (const employeePayroll of employees) {
+                const employeeId = mapEmployes[Number(employeePayroll.empleado_id)] ?? null;
+                if (!employeeId) continue;
+
+                const movements = Array.isArray(employeePayroll.movimiento) ? employeePayroll.movimiento : [];
+                const movementMap = payrollItemMap(movements);
+                const totalIngresos = payrollItemAmount(movementMap.TI);
+                const totalEgresos = payrollItemAmount(movementMap.TE);
+                const totalPagar = payrollItemAmount(movementMap.TP);
+                const payrollStatus = String(rol.estado_rol ?? '').toUpperCase() === 'TERMINADO'
+                    ? 'PROCESADO'
+                    : String(rol.estado_rol ?? '').toUpperCase() || 'PENDIENTE';
+
+                payrollRows.push([
+                    employeeId,
+                    payrollStatus,
+                    rol.rol_periodo,
+                    rol.rol_mes,
+                    160,
+                    payrollItemAmount(movementMap.I1),
+                    payrollItemAmount(movementMap.I2),
+                    payrollItemAmount(movementMap.I3),
+                    payrollItemAmount(movementMap.I4),
+                    payrollItemAmount(movementMap.I7),
+                    payrollItemAmount(movementMap.I8),
+                    payrollItemAmount(movementMap.I9),
+                    '[]',
+                    '[]',
+                    0,
+                    totalIngresos,
+                    '[]',
+                    '[]',
+                    payrollItemAmount(movementMap.E1) + payrollItemAmount(movementMap.E2),
+                    payrollItemAmount(movementMap.E4),
+                    0,
+                    0,
+                    payrollItemAmount(movementMap.E7),
+                    payrollItemAmount(movementMap.I6) || payrollItemAmount(movementMap.E9),
+                    totalEgresos,
+                    totalPagar,
+                    rol.rol_fecha_registro,
+                    newCompanyId,
+                    resolvePayrollAuditId(rol, mapAuditPagoRoll, mapAuditPayroll)
+                ]);
+                payrollSources.push({ rol, employeePayroll });
+            }
+        }
+
+        if (!payrollRows.length) continue;
+
+        const [res]: any = await conn.query(`
+            INSERT INTO payrolls (
+                FK_EMPLOYEE,
+                PAYR_STATUS,
+                PAYR_PERIOD,
+                PAYR_MONTH,
+                PAYR_HOUR_VAL_LV,
+                PAYR_SALARY,
+                PAYR_HOUR_VAL_100,
+                PAYR_HOUR_VAL_50,
+                PAYR_HOUR_VAL_25,
+                PAYR_RES_FUND,
+                PAYR_THIRTEENTH,
+                PAYR_FOURTEENTH,
+                PAYR_DET_ING_AP,
+                PAYR_DET_ING_NOAP,
+                PAYR_TOT_SUM_ING,
+                PAYR_TOT_ING,
+                PAYR_DET_EGR_AP,
+                PAYR_DET_EGR_NOAP,
+                PAYR_ADVANCE,
+                PAYR_LOAN,
+                PAYR_TOT_SUM_EGR,
+                PAYR_IESS_NODEP,
+                PAYR_IESS,
+                PAYR_APO_PATR,
+                PAYR_TOT_EGR,
+                PAYR_TOTAL,
+                PAYR_FEC_REG,
+                FK_COD_EMP,
+                FK_AUDITTR
+            ) VALUES ?
+        `, [payrollRows]);
+
+        let payrollId = res.insertId;
+        for (const source of payrollSources) {
+            if (!(source.rol.rol_id in payrollIdMap)) {
+                payrollIdMap[source.rol.rol_id] = payrollId;
+            }
+            const annualTypes = benefitTypeByCode(source.employeePayroll);
+            const movements = Array.isArray(source.employeePayroll.movimiento) ? source.employeePayroll.movimiento : [];
+
+            for (const item of movements) {
+                const code = String(item?.codigo ?? '').trim().toUpperCase();
+                const amount = payrollItemAmount(item);
+                if (!code || principalCodes.has(code) || code.startsWith('T') || amount === 0) continue;
+
+                const oldConfigurationId = Number(item?.id_configuracion);
+                const configurationId = mapBenefits[oldConfigurationId] ?? null;
+                const configurationDetailId = configurationId ? configurationMaps[configurationId] ?? null : null;
+                if (!configurationDetailId) continue;
+
+                detailValues.push([
+                    amount,
+                    payrollDetailType(item, annualTypes),
+                    payrollId,
+                    configurationDetailId,
+                    null
+                ]);
+            }
+
+            payrollId++;
+        }
+
+        console.log(` -> Batch migrado: ${payrollRows.length} roles de nomina`);
+    }
+
+    if (detailValues.length) {
+        await conn.query(`
+            INSERT INTO payroll_details (
+                PAYDET_AMOUNT,
+                PAYDET_TYPE,
+                FK_PAYROLL,
+                FK_CONF_RRHH_DET,
+                FK_ID_DET_ANT
+            ) VALUES ?
+        `, [detailValues]);
+    }
+
+    return payrollIdMap;
+}
+
 export async function migratePayrollMovements(
     legacyConn: any,
     conn: any,
@@ -438,6 +767,10 @@ WHERE
                 const auditId = nextAuditId++;
                 auditValues.push([auditId, 'NOMINA', newCompanyId]);
                 mapAuditPayroll[o.cod_asiento] = auditId;
+                (mapAuditPayroll as any)[String(o.cod_asiento)] = auditId;
+                if (o.NUM_ASI) {
+                    (mapAuditPayroll as any)[String(o.NUM_ASI).trim()] = auditId;
+                }
 
                 if (o.FK_CODROL != null) {
                     mapAuditPagoRoll[o.FK_CODROL] = auditId;

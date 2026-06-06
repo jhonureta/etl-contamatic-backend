@@ -17,4 +17,11 @@ export const env = {
     password: process.env.ERP_DB_PASSWORD || '',
     database: process.env.ERP_DB_DATABASE || 'contamatic_erp',
   },
+
+  rrhh: {
+   
+    user: process.env.RRHH_DB_USER || 'root',
+    password: process.env.RRHH_DB_PASSWORD || '',
+    database: process.env.RRHH_DB_DATABASE || '',
+  },
 };
