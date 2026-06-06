@@ -175,7 +175,111 @@ export async function migratePayroll(
         codEmp ?? null
     );
 
+    await migratePayrollObligations(
+        conn,
+        newCompanyId,
+        humanResourcesDb,
+        idEmpresaRhh,
+        mapEmployes,
+        payrollIdMap
+    );
+
     return { movementOrderIdMap: {} };
+}
+
+export async function migratePayrollObligations(
+    conn: any,
+    newCompanyId: number,
+    humanResourcesDb: any,
+    idEmpresaRhh: number | null,
+    mapEmployes: Record<number, number>,
+    payrollIdMap: Record<number, number>
+): Promise<void> {
+    console.log("Migrando cuentas por pagar de nómina (CXPN)...");
+
+    if (!humanResourcesDb || !idEmpresaRhh) {
+        console.warn("No se migran CxP de nómina: no hay conexión o empresa RRHH.");
+        return;
+    }
+
+    const [rows]: any[] = await humanResourcesDb.query(`
+        SELECT
+            tbCuentasRol.id_empleado AS FK_PERSONA,
+            tbRol.rol_fecha_registro AS FECH_EMISION,
+            tbRol.rol_fecha_registro AS FECH_VENCIMIENTO,
+            tbCuentasRol.total_cuenta AS TOTAL,
+            tbCuentasRol.saldo_cuenta AS SALDO,
+            tbCuentasRol.id_rol_perido AS FK_PAYROLL,
+            CONCAT(tbRol.rol_periodo, '-', LPAD(tbRol.rol_mes, 2, '0')) AS REF_SECUENCIA,
+            tbCuentasRol.registro_cuenta AS OBLG_FEC_REG
+        FROM tbCuentasRol
+        INNER JOIN tbRol ON tbCuentasRol.id_rol_perido = tbRol.rol_id
+        WHERE tbRol.estado_rol = 'Terminado'
+            AND tbCuentasRol.id_empresa = ?
+    `, [idEmpresaRhh]);
+
+    if (!rows.length) {
+        console.warn("No hay cuentas por pagar de nómina para migrar.");
+        return;
+    }
+
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const insertValues: any[] = [];
+
+        for (const o of batch) {
+            const personaId = mapEmployes[o.FK_PERSONA] ?? null;
+            const payrollId = payrollIdMap[o.FK_PAYROLL] ?? null;
+
+            if (!personaId || !payrollId) continue;
+
+            insertValues.push([
+                personaId,
+                'CXPN',
+                o.FECH_EMISION,
+                o.FECH_VENCIMIENTO,
+                10,
+                1,
+                o.SALDO,
+                o.TOTAL,
+                o.REF_SECUENCIA,
+                null,
+                payrollId,
+                'MIGRADO',
+                null,
+                '1',
+                null,
+                o.OBLG_FEC_REG,
+                newCompanyId
+            ]);
+        }
+
+        if (!insertValues.length) continue;
+
+        await conn.query(`
+            INSERT INTO cuentas_obl (
+                FK_PERSONA, TIPO_OBL, FECH_EMISION, FECH_VENCIMIENTO, TIP_DOC,
+                ESTADO, SALDO, TOTAL, REF_SECUENCIA, FK_COD_TRANS,
+                FK_PAYROLL, TIPO_CUENTA, FK_ID_INFCON, TIPO_ESTADO_CUENTA,
+                FK_AUDITOB, OBLG_FEC_REG, FK_COD_EMP
+            ) VALUES ?
+        `, [insertValues]);
+
+        console.log(` -> Batch migrado: ${insertValues.length} cuentas por pagar de nómina`);
+    }
+
+    await conn.query(`
+        UPDATE cuentas_obl c
+        INNER JOIN payrolls p ON c.FK_PAYROLL = p.PAYR_ID
+        SET c.FK_AUDITOB = p.FK_AUDITTR
+        WHERE c.FK_COD_EMP = ?
+            AND c.TIPO_OBL = 'CXPN'
+            AND c.TIPO_CUENTA = 'MIGRADO'
+    `, [newCompanyId]);
+
+    console.log("✅ Migración de CxP de nómina completada correctamente");
 }
 
 async function getConfigurationDetailIdColumn(conn: any): Promise<string> {
