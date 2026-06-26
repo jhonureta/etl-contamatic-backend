@@ -132,7 +132,7 @@ export async function migrateCompany(codEmp: number) {
       e.JSON_IMPUESTO,
       e.INVEN_DETALLADO,
       e.SELECCION_VENDEDOR,
-      e.SELECCION_FECHA,
+      e.SELECCION_FECHA ?? '1',
       e.SELECCION_COSTEO,
       e.EDIT_VENDEDOR,
       e.DESCUENTO_AUTOMATICO,

@@ -5,16 +5,18 @@ export async function migrateWarehouseDetails(
     mapProducts: any
 ): Promise<{ mapDetWare: Record<number, number>; prodWareDetailIdMap: Record<string, number> }> {
     console.log("Migrando detalle de bodega stock...");
-
+    
+    const mapDetWare: Record<number, number> = {};
+    const prodWareDetailIdMap: Record<string, number> = {};
+    
     const [rows] = await legacyConn.query(`SELECT detallebodega.COD_DETBOD as WHDET_ID, FK_COD_PROBOD as FK_PROD_ID, bodegas.COD_BOD as FK_WH_ID, STO_PRODET as WHDET_STOCK, ESTA_PROD as PROD_STATE  FROM detallebodega inner join bodegas on bodegas.COD_BOD = detallebodega.FK_COD_DETBOD WHERE 1 ;`);
     const detale = rows as any[];
 
     if (!detale.length) {
-        throw new Error(" -> No hay detalle para migrar.");
+        return { mapDetWare, prodWareDetailIdMap};
     }
     const BATCH_SIZE = 1000;
-    const mapDetWare: Record<number, number> = {};
-    const prodWareDetailIdMap: Record<string, number> = {};
+    
     for (let i = 0; i < detale.length; i += BATCH_SIZE) {
         const batch = detale.slice(i, i + BATCH_SIZE);
 

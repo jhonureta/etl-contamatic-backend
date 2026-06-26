@@ -17,6 +17,8 @@ export async function batchInsertProducts(
 
 
     console.log("Migrando productos...");
+    const mapProducts: Record<number, number> = {};
+    const oldProductCodeMap = new Map<string, oldProductCodeMap>();
 
     const [rows] = await legacyConn.query(`SELECT
                                                 COD_PRO AS PROD_ID,
@@ -63,11 +65,10 @@ export async function batchInsertProducts(
     const productos = rows as any[];
 
     if (!productos.length) {
-        throw new Error(" -> No hay productos para migrar.");
+        return { mapProducts, oldProductCodeMap };
     }
     const BATCH_SIZE = 1000;
-    const mapProducts: Record<number, number> = {};
-    const oldProductCodeMap = new Map<string, oldProductCodeMap>();
+
 
     for (let i = 0; i < productos.length; i += BATCH_SIZE) {
         const batch = productos.slice(i, i + BATCH_SIZE);
