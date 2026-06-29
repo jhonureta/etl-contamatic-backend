@@ -1252,7 +1252,8 @@ export async function detRetSale(
                 FK_TARJETA, FK_BANKRET, FK_CODTRAN, FK_AUDITMV, FK_MOV, FK_COD_EMP, NUMERO_TARJETA, 
                 CLAVE_TARJETA) VALUES ?`,
                 [values]
-            ); console.log("Inserción de tarjetas completada:", values);
+            ); 
+            console.log("=== Inserción de tarjetas completada ===");
 
         } catch (err) {
             throw err;

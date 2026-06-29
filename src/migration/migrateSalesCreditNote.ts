@@ -319,7 +319,7 @@ DESC;`);
                     t.DIV_PAY_YEAR,
                     null,
                     t.RESP_SRI,
-                    t.INFO_ADIC,
+                    safeJson(t.INFO_ADIC),
                     t.DET_EXP_REEMBOLSO,
                     safeJson(t.JSON_METODO),
                     t.ITEMS_PROF,

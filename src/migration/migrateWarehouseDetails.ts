@@ -25,7 +25,6 @@ export async function migrateWarehouseDetails(
             const productoId = mapProducts[w.FK_PROD_ID];
             const bodegaId = branchMap[w.FK_WH_ID];
 
-            console.log(w.FK_PROD_ID, w.FK_WH_ID);
 
             return [
                 w.WHDET_STOCK,

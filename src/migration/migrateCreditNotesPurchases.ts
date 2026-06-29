@@ -302,7 +302,7 @@ export async function migrateCreditNotesPurchases({
           t.DIV_PAY_YEAR,
           null,
           safeJson(t.RESP_SRI),
-          t.INFO_ADIC,
+          safeJson(t.INFO_ADIC),
           t.DET_EXP_REEMBOLSO,
           JSON.stringify(paymentMethod),
           t.ITEMS_PROF,

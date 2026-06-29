@@ -412,10 +412,10 @@ FROM
                     t.DIV_PAY_YEAR,
                     JSON.stringify(retencionVentaNueva),
                     safeJson(t.RESP_SRI),
-                    t.INFO_ADIC,
+                    safeJson(t.INFO_ADIC),
                     t.DET_EXP_REEMBOLSO,
                     safeJson(t.JSON_METODO),
-                    t.ITEMS_PROF,
+                    safeJson(t.ITEMS_PROF),
                     t.OBS_AUXILIAR,
                     t.OBS_ORDEN
                 ];
