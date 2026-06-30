@@ -46,7 +46,7 @@ export async function migrateRetentionFiles(conn): Promise<{ processed: number }
                 processed++;
             } else {
                 // Opcional: Log para saber cuáles faltan
-                console.warn(`Archivo NO encontrado en ruta: ${ret.ACCESS_KEY_RET}.xml`);
+               // console.warn(`Archivo NO encontrado en ruta: ${ret.ACCESS_KEY_RET}.xml`);
             }
         }
 

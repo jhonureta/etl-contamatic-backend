@@ -335,18 +335,10 @@ export async function findNextAuditCode({
 }: FindNextAdutiCodeParams) {
   try {
     const auditQuery = `
-    SELECT
-        IFNULL(
-            MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1,
-            1
-        ) AS auditId
-    FROM
-        audit
-    WHERE
-        FK_COD_EMP = ?;`;
+    SELECT IFNULL(MAX(CODIGO_AUT+0)+1,1) as codigoAuditoria FROM audit WHERE FK_COD_EMP=?`;
     const auditQueryResult: ResultSet = await conn.query(auditQuery, [companyId]);
     const [auditData]: any[] = auditQueryResult as Array<any>;
-    return auditData[0].auditId;
+    return auditData[0].codigoAuditoria;
   } catch (err) {
     throw err;
   }

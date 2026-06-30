@@ -7,8 +7,9 @@ type PayrollSeatIdMap = Array<{
     key: 'FK_CODROL' | 'FK_CODPREST' | 'FK_CODMOV' | 'ID_ADELANTO';
     id: number;
     cod_asiento: number;
+    idAudit: number;
 }>;
-
+    
 async function getEmpresaRhhId(humanResourcesDb: any, codEmp: number | null): Promise<number | null> {
     if (!humanResourcesDb || codEmp == null) {
         return null;
@@ -82,8 +83,15 @@ export async function migratePayroll(
     mapCloseCash,
     humanResourcesDb?: any,
     codEmp?: number
-): Promise<{ movementOrderIdMap: Record<number, number> }> {
-    //mapAuditPayroll
+): Promise<{
+    countEmployes: number;
+    countSeats: number;
+    countPayrolls: number;
+    countObligations: number;
+    countPaymentMovements: number;
+    countPaymentDetails: number;
+    countLoans: number;
+}> {
 
     let idEmpresaRhh = null;
 
@@ -108,15 +116,15 @@ export async function migratePayroll(
         mapIdAsiento,
         mapEntryAccount,
     } = await migratePayrollSeats(legacyConn,
-            conn,
-            newCompanyId,
-            mapPeriodo,
-            mapProject,
-            mapCenterCost,
-            mapAccounts);
+        conn,
+        newCompanyId,
+        mapPeriodo,
+        mapProject,
+        mapCenterCost,
+        mapAccounts);
     const mapClients = mapEmployes;
 
-    const payrollIdMap = await migratePayrollRecords(
+    const { payrollIdMap, payrollIdMapAudit } = await migratePayrollRecords(
         conn,
         newCompanyId,
         humanResourcesDb,
@@ -128,7 +136,7 @@ export async function migratePayroll(
         mapIdAsiento
     );
 
-    const rolAsientoUpdates: Array<[number, number]> = [];
+   /*  const rolAsientoUpdates: Array<[number, number]> = [];
     for (const entry of mapIdAsiento) {
         if (entry.key !== 'FK_CODROL') continue;
         const newAsientoId = mapEntryAccount[entry.cod_asiento];
@@ -136,9 +144,9 @@ export async function migratePayroll(
         if (newAsientoId && newPayrollId) {
             rolAsientoUpdates.push([newAsientoId, newPayrollId]);
         }
-    }
+    } */
 
-    if (rolAsientoUpdates.length) {
+   /*  if (rolAsientoUpdates.length) {
         const [existingCols]: any[] = await conn.query(`SHOW COLUMNS FROM accounting_movements LIKE 'FK_CODROL'`);
         if (!existingCols.length) {
             await conn.query(`ALTER TABLE accounting_movements ADD COLUMN FK_CODROL INT NULL`);
@@ -153,9 +161,9 @@ export async function migratePayroll(
             params
         );
         console.log(` -> FK_CODROL actualizado en ${rolAsientoUpdates.length} asientos de nomina`);
-    }
+    } */
 
-    await migratePayrollMovements(
+    const { totalLoans } = await migratePayrollMovements(
         legacyConn,
         conn,
         newCompanyId,
@@ -172,19 +180,51 @@ export async function migratePayroll(
         mapIdAsiento,
         mapClients,
         humanResourcesDb,
-        codEmp ?? null
+        codEmp ?? null,
+
     );
 
-    await migratePayrollObligations(
+    const { mapObligations } = await migratePayrollObligations(
         conn,
         newCompanyId,
         humanResourcesDb,
         idEmpresaRhh,
         mapEmployes,
-        payrollIdMap
+        payrollIdMap,
+        payrollIdMapAudit
     );
 
-    return { movementOrderIdMap: {} };
+    const { mapMovements: mapPaymentMovements, mapMovementsByFkCodRH } = await migratePayrollPaymentMovements(
+        legacyConn,
+        conn,
+        newCompanyId,
+        mapConciliation,
+        userMap,
+        bankMap,
+        boxMap,
+        mapCloseCash,
+        mapEntryAccount,
+        mapIdAsiento,
+        mapAuditMovimientosPagoRoll
+    );
+
+    const { mapPaymentDetails } = await migratePayrollPaymentDetails(
+        humanResourcesDb,
+        conn,
+        idEmpresaRhh,
+        mapObligations,
+        mapMovementsByFkCodRH
+    );
+
+    return {
+        countEmployes: Object.keys(mapEmployes).length,
+        countSeats: Object.keys(mapEntryAccount).length,
+        countPayrolls: Object.keys(payrollIdMap).length,
+        countObligations: Object.keys(mapObligations).length,
+        countPaymentMovements: Object.keys(mapPaymentMovements).length,
+        countPaymentDetails: Object.keys(mapPaymentDetails).length,
+        countLoans: totalLoans,
+    };
 }
 
 export async function migratePayrollObligations(
@@ -193,17 +233,21 @@ export async function migratePayrollObligations(
     humanResourcesDb: any,
     idEmpresaRhh: number | null,
     mapEmployes: Record<number, number>,
-    payrollIdMap: Record<number, number>
-): Promise<void> {
+    payrollIdMap: Record<number, number>,
+    payrollIdMapAudit: Record<number, number>,
+): Promise<{ mapObligations: Record<number, number> }> {
     console.log("Migrando cuentas por pagar de nómina (CXPN)...");
+
+    const mapObligations: Record<number, number> = {};
 
     if (!humanResourcesDb || !idEmpresaRhh) {
         console.warn("No se migran CxP de nómina: no hay conexión o empresa RRHH.");
-        return;
+        return { mapObligations };
     }
 
     const [rows]: any[] = await humanResourcesDb.query(`
         SELECT
+            tbCuentasRol.id_cuenta AS ID_CUENTA,
             tbCuentasRol.id_empleado AS FK_PERSONA,
             tbRol.rol_fecha_registro AS FECH_EMISION,
             tbRol.rol_fecha_registro AS FECH_VENCIMIENTO,
@@ -220,7 +264,7 @@ export async function migratePayrollObligations(
 
     if (!rows.length) {
         console.warn("No hay cuentas por pagar de nómina para migrar.");
-        return;
+        return { mapObligations };
     }
 
     const BATCH_SIZE = 500;
@@ -228,11 +272,12 @@ export async function migratePayrollObligations(
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
         const insertValues: any[] = [];
+        const validRows: any[] = [];
 
         for (const o of batch) {
             const personaId = mapEmployes[o.FK_PERSONA] ?? null;
             const payrollId = payrollIdMap[o.FK_PAYROLL] ?? null;
-
+            const auditId = payrollIdMapAudit[o.FK_PAYROLL] ?? null;
             if (!personaId || !payrollId) continue;
 
             insertValues.push([
@@ -250,15 +295,16 @@ export async function migratePayrollObligations(
                 'MIGRADO',
                 null,
                 '1',
-                null,
+                auditId,
                 o.OBLG_FEC_REG,
                 newCompanyId
             ]);
+            validRows.push(o);
         }
 
         if (!insertValues.length) continue;
 
-        await conn.query(`
+        const [res]: any = await conn.query(`
             INSERT INTO cuentas_obl (
                 FK_PERSONA, TIPO_OBL, FECH_EMISION, FECH_VENCIMIENTO, TIP_DOC,
                 ESTADO, SALDO, TOTAL, REF_SECUENCIA, FK_COD_TRANS,
@@ -267,19 +313,16 @@ export async function migratePayrollObligations(
             ) VALUES ?
         `, [insertValues]);
 
+
+        let newId = res.insertId;
+        for (const o of validRows) {
+            mapObligations[o.ID_CUENTA] = newId++;
+        }
+
         console.log(` -> Batch migrado: ${insertValues.length} cuentas por pagar de nómina`);
     }
-
-    await conn.query(`
-        UPDATE cuentas_obl c
-        INNER JOIN payrolls p ON c.FK_PAYROLL = p.PAYR_ID
-        SET c.FK_AUDITOB = p.FK_AUDITTR
-        WHERE c.FK_COD_EMP = ?
-            AND c.TIPO_OBL = 'CXPN'
-            AND c.TIPO_CUENTA = 'MIGRADO'
-    `, [newCompanyId]);
-
     console.log("✅ Migración de CxP de nómina completada correctamente");
+    return { mapObligations };
 }
 
 async function getConfigurationDetailIdColumn(conn: any): Promise<string> {
@@ -387,17 +430,19 @@ export async function migratePayrollRecords(
     mapAuditPagoRoll: Record<number, number>,
     mapAuditPayroll: Record<number, number>,
     mapIdAsiento: PayrollSeatIdMap
-): Promise<Record<number, number>> {
+    //): Promise<Record<number, number>> {
+): Promise<{ payrollIdMap: Record<number, number>; payrollIdMapAudit: Record<number, number> }> {
     console.log("Migrando roles de nomina...");
     const payrollIdMap: Record<number, number> = {};
+    const payrollIdMapAudit: Record<number, number> = {};
 
     if (!humanResourcesDb || !idEmpresaRhh) {
         console.warn("No se migran roles de nomina: no hay conexion o empresa RRHH.");
-        return payrollIdMap;
+        return { payrollIdMap, payrollIdMapAudit };
     }
 
-   
- /* throw new Error(`Error al migrar la configuración de la empresa=`); */
+
+    /* throw new Error(`Error al migrar la configuración de la empresa=`); */
     const [rows]: any[] = await humanResourcesDb.query(`
         SELECT
             rol_id,
@@ -418,7 +463,7 @@ export async function migratePayrollRecords(
 
     if (!rows.length) {
         console.warn(`No se encontraron roles para idEmpresaRhh=${idEmpresaRhh}.`);
-        return payrollIdMap;
+        return { payrollIdMap, payrollIdMapAudit };
     }
 
     const configurationMaps = await getConfigurationDetailMap(conn, newCompanyId);
@@ -446,6 +491,8 @@ export async function migratePayrollRecords(
                 const payrollStatus = String(rol.estado_rol ?? '').toUpperCase() === 'TERMINADO'
                     ? 'PROCESADO'
                     : String(rol.estado_rol ?? '').toUpperCase() || 'PENDIENTE';
+                const idAudit = resolvePayrollAuditId(rol, mapAuditPagoRoll, mapAuditPayroll);
+                payrollIdMapAudit[rol.rol_id] = idAudit ?? null;
 
                 payrollRows.push([
                     employeeId,
@@ -476,7 +523,7 @@ export async function migratePayrollRecords(
                     totalPagar,
                     rol.rol_fecha_registro,
                     newCompanyId,
-                    resolvePayrollAuditId(rol, mapAuditPagoRoll, mapAuditPayroll)
+                    idAudit
                 ]);
                 payrollSources.push({ rol, employeePayroll });
             }
@@ -563,7 +610,7 @@ export async function migratePayrollRecords(
         `, [detailValues]);
     }
 
-    return payrollIdMap;
+    return { payrollIdMap, payrollIdMapAudit };
 }
 
 export async function migratePayrollMovements(
@@ -584,7 +631,7 @@ export async function migratePayrollMovements(
     mapClients: Record<number, number>,
     humanResourcesDb?: any,
     codEmp: number | null = null
-): Promise<{ movementOrderIdMap: Record<number, number> }> {
+): Promise<{ movementOrderIdMap: Record<number, number>; totalLoans: number }> {
     console.log("Migrando movimientos de nómina...");
     const movementOrderIdMap: Record<number, number> = {};
     try { //mapAuditPayroll
@@ -625,12 +672,12 @@ export async function migratePayrollMovements(
                 NULL AS TOTPAG_TRAC,
                 NULL AS JSON_PAGOS
             FROM movimientos m
-            WHERE m.ORIGEN_MOVI LIKE '%NOMINA%' OR m.ORIGEN_MOVI = 'MOD-ADELANTO'
+            WHERE m.ORIGEN_MOVI = 'CXP-NOMINA'
             ORDER BY ID_MOVI ASC
         `);
 
         if (movements.length === 0) {
-            return { movementOrderIdMap };
+            return { movementOrderIdMap, totalLoans: 0 };
         }
 
         const [cardData]: any[] = await conn.query(`SELECT ID_TARJETA FROM cards WHERE FK_COD_EMP = ?`, [newCompanyId]);
@@ -643,25 +690,7 @@ export async function migratePayrollMovements(
         let movementSequence = movementSeqRow?.SECU_MOVI ?? 1;
 
         const BATCH_SIZE = 1500;
-        const hasPayrollLoanAdvances = movements.some((m) => m.ORIGEN_MOVI?.includes('PSTO-NOMINA'));
-        const { advanceAuditMap } = await getAdvanceAuditMap(humanResourcesDb, codEmp, mapIdAsiento, mapAuditPayroll, idEmpresaRhh);
-
-        if (hasPayrollLoanAdvances) {
-            await migrateLoansPayrollAdvances(
-                legacyConn,
-                conn,
-                mapClients,
-                newCompanyId,
-                idEmpresaRhh,
-                mapIdAsiento,
-                mapConciliation,
-                userMap,
-                bankMap,
-                boxMap,
-                mapCloseCash
-            );
-        }
-
+      
         for (let i = 0; i < movements.length; i += BATCH_SIZE) {
             const batchMovements = movements.slice(i, i + BATCH_SIZE);
             const movementValues: any[] = batchMovements.map((m) => {
@@ -678,16 +707,7 @@ export async function migratePayrollMovements(
                 if (m.ORIGEN_MOVI.includes('CXP-NOMINA')) {
                     transAuditId = mapAuditPagoRoll[m.FK_COD_RH] ?? null;
                 }
-                if (m.ORIGEN_MOVI.includes('PSTO-NOMINA')) {
-                    transAuditId = mapAuditAnticipoRoll[m.FK_DET_PREST] ?? null;
-                    m.FK_ASIENTO = mapIdAsiento.find(
-                        asiento => asiento.key === 'FK_CODPREST' && asiento.id === m.FK_DET_PREST
-                    )?.cod_asiento ?? null;
-                }
-                if (m.ORIGEN_MOVI === 'MOD-ADELANTO') {
-                    m.FK_ASIENTO = advanceAuditMap[m.FK_DET_PREST] ?? null;
-                    transAuditId = mapAuditPayroll[m.FK_ASIENTO] ?? null;
-                }
+           
                 return [
                     bankId,
                     transactionId,
@@ -769,8 +789,22 @@ export async function migratePayrollMovements(
             console.log(` -> Batch migrado: ${batchMovements.length} movimientos de nómina`);
         }
 
+        const { totalMigrated: totalLoans } = await migrateLoansPayrollAdvances(
+            legacyConn,
+            humanResourcesDb,
+            conn,
+            newCompanyId,
+            mapClients,
+            idEmpresaRhh,
+            mapIdAsiento,
+            bankMap,
+            boxMap,
+            mapCloseCash,
+        );
+        console.log(` -> Total migrado: ${totalLoans} préstamos y anticipos de nómina`);
+
         console.log("✅ Migración de movimientos de nómina completada correctamente");
-        return { movementOrderIdMap };
+        return { movementOrderIdMap, totalLoans };
     } catch (error) {
         console.error("❌ Error al migrar movimientos de nómina:", error);
         throw error;
@@ -863,56 +897,64 @@ WHERE
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
             const batch = rows.slice(i, i + BATCH_SIZE);
             const insertValues: any[] = [];
-            const auditValues: any[] = [];
 
-            for (const o of batch) {
+            // Insert audits first to capture auto-increment IDs (ID_AUDIT)
+            const auditValues = batch.map(() => [nextAuditId++, 'NOMINA', newCompanyId]);
+            const [resAudit]: any = await conn.query(
+                `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
+                [auditValues]
+            );
+            const firstAuditId = resAudit.insertId;
+
+            for (let j = 0; j < batch.length; j++) {
+                const o = batch[j];
                 const periodoId = mapPeriodo[o.FK_PERIODO];
-                // Generar y asignar auditoría para cada asiento
-                const auditId = nextAuditId++;
-                auditValues.push([auditId, 'NOMINA', newCompanyId]);
-                mapAuditPayroll[o.cod_asiento] = auditId;
-                (mapAuditPayroll as any)[String(o.cod_asiento)] = auditId;
+                const idAuditTr = firstAuditId + j;
+
+                mapAuditPayroll[o.cod_asiento] = idAuditTr;
+                (mapAuditPayroll as any)[String(o.cod_asiento)] = idAuditTr;
                 if (o.NUM_ASI) {
-                    (mapAuditPayroll as any)[String(o.NUM_ASI).trim()] = auditId;
+                    (mapAuditPayroll as any)[String(o.NUM_ASI).trim()] = idAuditTr;
                 }
 
                 if (o.FK_CODROL != null) {
-                    mapAuditPagoRoll[o.FK_CODROL] = auditId;
+                    mapAuditPagoRoll[o.FK_CODROL] = idAuditTr;
                     mapIdAsiento.push({
                         key: 'FK_CODROL',
                         id: o.FK_CODROL,
-                        cod_asiento: o.cod_asiento
+                        cod_asiento: o.cod_asiento,
+                        idAudit: idAuditTr
                     });
                 }
                 if (o.FK_CODPREST != null && o.ORG_ASI === 'MOD-ADELANTO') {
-                    mapAuditAnticipoRoll[o.FK_CODPREST] = auditId;
+                    mapAuditAnticipoRoll[o.FK_CODPREST] = idAuditTr;
                     mapIdAsiento.push({
                         key: 'ID_ADELANTO',
                         id: o.FK_CODPREST,
-                        cod_asiento: o.cod_asiento
+                        cod_asiento: o.cod_asiento,
+                        idAudit: idAuditTr
                     });
                 } else {
                     if (o.FK_CODPREST != null) {
-                        mapAuditAnticipoRoll[o.FK_CODPREST] = auditId;
+                        mapAuditAnticipoRoll[o.FK_CODPREST] = idAuditTr;
                         mapIdAsiento.push({
                             key: 'FK_CODPREST',
                             id: o.FK_CODPREST,
-                            cod_asiento: o.cod_asiento
+                            cod_asiento: o.cod_asiento,
+                            idAudit: idAuditTr
                         });
                     }
                 }
                 if (o.FK_CODMOV != null) {
-                    mapAuditMovimientosPagoRoll[o.FK_CODMOV] = auditId; //finiquito y liquidacion
+                    mapAuditMovimientosPagoRoll[o.FK_CODMOV] = idAuditTr; //finiquito y liquidacion
                     mapIdAsiento.push({
                         key: 'FK_CODMOV',
                         id: o.FK_CODMOV,
-                        cod_asiento: o.cod_asiento
+                        cod_asiento: o.cod_asiento,
+                        idAudit: idAuditTr
                     });
                 }
 
-
-
-                const idAuditTr = auditId;
                 const idMovimiento = null;
 
                 insertValues.push([
@@ -935,11 +977,6 @@ WHERE
                     null,
                     idMovimiento
                 ]);
-            }
-
-            // Insertar auditorías
-            if (auditValues.length) {
-                await conn.query(`INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`, [auditValues]);
             }
 
             // Insertar asientos contables
@@ -1124,4 +1161,286 @@ WHERE
 
     console.log("🎉 Migración  detalles contables completada anticipo nomina");
     return { mapAccountDetail };
+}
+
+export async function migratePayrollPaymentMovements(
+    legacyConn: any,
+    conn: any,
+    newCompanyId: number,
+    mapConciliation: Record<number, number>,
+    userMap: Record<number, number>,
+    bankMap: Record<number, number>,
+    boxMap: Record<number, number>,
+    mapCloseCash: Record<number, number>,
+    mapEntryAccount: Record<number, number>,
+    mapIdAsiento: PayrollSeatIdMap,
+    mapAuditMovimientosPagoRoll: Record<number, number>,
+): Promise<{ mapMovements: Record<number, number>; mapAuditMovements: Record<number, number>; mapMovementsByFkCodRH: Record<number, number> }> {
+    console.log("Migrando movimientos de pago de nómina (CXP-NOMINA)...");
+
+    const mapMovements: Record<number, number> = {};
+    const mapAuditMovements: Record<number, number> = {};
+    // FK_COD_RH (legacy) = tbMovimientos.id_movimiento (RRHH) → nuevo movements PK
+    const mapMovementsByFkCodRH: Record<number, number> = {};
+
+    // FK_CODMOV (legacy) → nuevo COD_ASIENTO en accounting_movements
+    const fkCodMovToNewAsientoId: Record<number, number> = {};
+    for (const entry of mapIdAsiento) {
+        if (entry.key === 'FK_CODMOV') {
+            const newAsientoId = mapEntryAccount[entry.cod_asiento];
+            if (newAsientoId) fkCodMovToNewAsientoId[entry.id] = newAsientoId;
+        }
+    }
+
+    try {
+        const [[{ nextAudit }]]: any = await conn.query(
+            `SELECT IFNULL(MAX(CAST(CODIGO_AUT AS UNSIGNED)) + 1, 1) AS nextAudit FROM audit WHERE FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+        const [[{ nextSecu }]]: any = await conn.query(
+            `SELECT IFNULL(MAX(SECU_MOVI) + 1, 1) AS nextSecu FROM movements WHERE MODULO = 'CXPN' AND FK_COD_EMP = ?`,
+            [newCompanyId]
+        );
+        const [[{ idCard }]]: any = await conn.query(
+            `SELECT ID_TARJETA AS idCard FROM cards WHERE FK_COD_EMP = ? LIMIT 1`,
+            [newCompanyId]
+        );
+
+        let auditSeq = nextAudit;
+        let secuenciaMovimiento = nextSecu;
+
+        const [rows]: any[] = await legacyConn.query(`
+            SELECT
+                m.ID_MOVI,
+                NULL AS COD_TRANS,
+                m.FK_COD_CAJAS_MOVI,
+                m.FK_COD_BANCO_MOVI,
+                m.TIP_MOVI AS TIP_MOVI,
+                m.periodo_caja,
+                m.FECHA_MOVI AS FECHA_MOVI,
+                'CXPN' AS ORIGEN_MOVI,
+                IFNULL(m.IMPOR_MOVI, 0) AS IMPOR_MOVI,
+                IFNULL(m.TIPO_MOVI, 0) AS TIPO_MOVI,
+                m.REF_MOVI,
+                m.CONCEP_MOVI AS CONCEP_MOVIMIG,
+                CASE WHEN m.ESTADO_MOVI = 'ACTIVO' THEN 1 ELSE 0 END AS ESTADO_MOVI,
+                IFNULL(m.PER_BENE_MOVI, 'MIG') AS PER_BENE_MOVI,
+                'EGRESO' AS CAUSA_MOVI,
+                'CXPN' AS MODULO,
+                m.FECHA_MANUAL AS FECHA_MANUAL,
+                m.CONCILIADO,
+                m.FK_COD_CX,
+                m.SECU_MOVI,
+                m.FK_CONCILIADO,
+                m.FK_ANT_MOVI,
+                m.FK_USER_EMP_MOVI AS FK_USER_EMP_MOVI,
+                NULL AS FK_TRAC_MOVI,
+                NULL AS NUM_VOUCHER,
+                NULL AS NUM_LOTE,
+                m.CONCEP_MOVI AS OBS_MOVI,
+                NULL AS FK_ASIENTO,
+                m.periodo_caja AS FK_ARQUEO,
+                m.RECIBO_CAJA,
+                m.NUM_UNIDAD,
+                m.FK_COD_RH
+            FROM movimientos m
+            WHERE m.\`ORIGEN_MOVI\` = 'CXP-NOMINA'
+            ORDER BY m.ID_MOVI ASC
+        `);
+
+        if (!rows.length) {
+            console.warn("No hay movimientos de pago de nómina para migrar.");
+            return { mapMovements, mapAuditMovements, mapMovementsByFkCodRH };
+        }
+
+        const BATCH_SIZE = 1500;
+        // Pares [newMovementId, newAsientoId] para UPDATE accounting_movements.FK_MOV
+        const asientoMovPairs: Array<[number, number]> = [];
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+
+            // Pre-calcular CODIGO_AUT por empresa antes del INSERT para mantener consistencia
+            const batchAuditCodes = batch.map(() => auditSeq++);
+            const auditValues = batchAuditCodes.map((code: number) => [code, 'CXPN', newCompanyId]);
+            const [resAudit]: any = await conn.query(
+                `INSERT INTO audit (CODIGO_AUT, MOD_AUDIT, FK_COD_EMP) VALUES ?`,
+                [auditValues]
+            );
+            const firstAuditId = resAudit.insertId;
+
+            const movementValues = batch.map((m: any, index: number) => {
+                const fkAudit = mapAuditMovimientosPagoRoll[m.FK_COD_RH] ?? (firstAuditId + index);
+                mapAuditMovements[m.ID_MOVI] = fkAudit;
+
+                return [
+                    bankMap[m.FK_COD_BANCO_MOVI] ?? null,
+                    null,
+                    mapConciliation[m.FK_CONCILIADO] ?? null,
+                    userMap[m.FK_USER_EMP_MOVI] ?? null,
+                    m.FECHA_MOVI,
+                    m.FECHA_MANUAL,
+                    m.TIP_MOVI,
+                    m.ORIGEN_MOVI,
+                    m.TIPO_MOVI,
+                    m.REF_MOVI,
+                    m.CONCEP_MOVIMIG,
+                    m.NUM_VOUCHER,
+                    m.NUM_LOTE,
+                    m.CAUSA_MOVI,
+                    m.MODULO,
+                    secuenciaMovimiento++,
+                    m.IMPOR_MOVI,
+                    m.ESTADO_MOVI,
+                    m.PER_BENE_MOVI,
+                    m.CONCILIADO,
+                    newCompanyId,
+                    boxMap[m.FK_COD_CAJAS_MOVI] ?? null,
+                    m.OBS_MOVI,
+                    m.IMPOR_MOVI,
+                    null,
+                    fkAudit,
+                    mapCloseCash[m.FK_ARQUEO] ?? null,
+                    m.TIP_MOVI === 'TARJETA' ? idCard : null,
+                    m.RECIBO_CAJA,
+                    null,
+                    m.NUM_UNIDAD,
+                    null
+                ];
+            });
+
+            const [resMov]: any = await conn.query(`
+                INSERT INTO movements (
+                    FKBANCO, FK_COD_TRAN, FK_CONCILIADO, FK_USER,
+                    FECHA_MOVI, FECHA_MANUAL, TIP_MOVI, ORIGEN_MOVI,
+                    TIPO_MOVI, REF_MOVI, CONCEP_MOVI, NUM_VOUCHER,
+                    NUM_LOTE, CAUSA_MOVI, MODULO, SECU_MOVI,
+                    IMPOR_MOVI, ESTADO_MOVI, PER_BENE_MOVI, CONCILIADO,
+                    FK_COD_EMP, IDDET_BOX, OBS_MOVI, IMPOR_MOVITOTAL,
+                    FK_ASIENTO, FK_AUDITMV, FK_ARQUEO, ID_TARJETA,
+                    RECIBO_CAJA, FK_CTAM_PLAN, NUMERO_UNIDAD, JSON_PAGOS
+                ) VALUES ?
+            `, [movementValues]);
+
+            let currentMovId = resMov.insertId;
+            batch.forEach((m: any) => {
+                const newMovId = currentMovId++;
+                mapMovements[m.ID_MOVI] = newMovId;
+                if (m.FK_COD_RH != null) mapMovementsByFkCodRH[m.FK_COD_RH] = newMovId;
+                const newAsientoId = fkCodMovToNewAsientoId[m.FK_COD_RH];
+                if (newAsientoId) asientoMovPairs.push([newMovId, newAsientoId]);
+            });
+
+            console.log(` -> Batch migrado: ${batch.length} movimientos de pago de nómina (CXPN)`);
+        }
+
+        // Asociar accounting_movements.FK_MOV con el movimiento correspondiente
+        if (asientoMovPairs.length) {
+            const UPDT_SIZE = 500;
+            for (let i = 0; i < asientoMovPairs.length; i += UPDT_SIZE) {
+                const chunk = asientoMovPairs.slice(i, i + UPDT_SIZE);
+                const caseWhen = chunk.map(() => 'WHEN ? THEN ?').join(' ');
+                const inIds = chunk.map(([, asientoId]) => asientoId);
+                const params: any[] = chunk.flatMap(([movId, asientoId]) => [asientoId, movId]);
+                params.push(inIds);
+                await conn.query(
+                    `UPDATE accounting_movements SET FK_MOV = CASE COD_ASIENTO ${caseWhen} END WHERE COD_ASIENTO IN (?)`,
+                    params
+                );
+            }
+            console.log(` -> accounting_movements.FK_MOV actualizado: ${asientoMovPairs.length} asientos vinculados`);
+        }
+
+        console.log("✅ Migración de movimientos de pago de nómina completada correctamente");
+        return { mapMovements, mapAuditMovements, mapMovementsByFkCodRH };
+    } catch (error) {
+        console.error("❌ Error al migrar movimientos de pago de nómina:", error);
+        throw error;
+    }
+}
+
+export async function migratePayrollPaymentDetails(
+    humanResourcesDb: any,
+    conn: any,
+    idEmpresaRhh: number | null,
+    mapObligations: Record<number, number>,
+    mapMovementsByFkCodRH: Record<number, number>,
+): Promise<{ mapPaymentDetails: Record<number, number> }> {
+    console.log("Migrando detalles de pago de nómina (account_detail CXPN)...");
+
+    const mapPaymentDetails: Record<number, number> = {};
+
+    if (!humanResourcesDb || !idEmpresaRhh) {
+        console.warn("No se migran detalles de pago de nómina: no hay conexión o empresa RRHH.");
+        return { mapPaymentDetails };
+    }
+
+    try {
+        const [rows]: any[] = await humanResourcesDb.query(`
+            SELECT
+                tbMovimientos.id_movimiento   AS COD_DETCUENTA,
+                tbMovimientos.idfk_cuenta_rol AS FK_COD_CUENTA,
+                tbMovimientos.id_movimiento   AS FK_ID_MOVI,
+                tbMovimientos.registro_movimiento AS FECHA_REG,
+                tbMovimientos.importe_movimiento  AS IMPORTE,
+                0 AS SALDO,
+                0 AS NEW_SALDO
+            FROM tbMovimientos
+            INNER JOIN tbCuentasRol ON tbMovimientos.idfk_cuenta_rol = tbCuentasRol.id_cuenta
+            WHERE tbMovimientos.idfk_empresa = ?
+            ORDER BY tbMovimientos.id_movimiento ASC
+        `, [idEmpresaRhh]);
+
+        if (!rows.length) {
+            console.warn("No hay detalles de pago de nómina para migrar.");
+            return { mapPaymentDetails };
+        }
+
+        const BATCH_SIZE = 1500; console.log(mapObligations, mapMovementsByFkCodRH);
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const insertValues: any[] = [];
+            const validRows: any[] = [];
+
+
+            for (const o of batch) {
+                const newCuentaId = mapObligations[o.FK_COD_CUENTA] ?? null;
+                const newMoviId = mapMovementsByFkCodRH[o.FK_ID_MOVI] ?? null;
+
+                if (!newCuentaId || !newMoviId) continue;
+
+                insertValues.push([
+                    newCuentaId,
+                    newMoviId,
+                    o.FECHA_REG,
+                    o.IMPORTE,
+                    o.SALDO,
+                    o.NEW_SALDO,
+                ]);
+                validRows.push(o);
+            }
+
+            if (!insertValues.length) continue;
+
+            const [res]: any = await conn.query(`
+                INSERT INTO account_detail (
+                    FK_COD_CUENTA, FK_ID_MOVI, FECHA_REG, IMPORTE, SALDO, NEW_SALDO
+                ) VALUES ?
+            `, [insertValues]);
+
+            let newId = res.insertId;
+            for (const o of validRows) {
+                mapPaymentDetails[o.COD_DETCUENTA] = newId++;
+            }
+
+            console.log(` -> Batch migrado: ${insertValues.length} detalles de pago de nómina`);
+        }
+
+        console.log("✅ Migración de detalles de pago de nómina completada correctamente");
+        return { mapPaymentDetails };
+    } catch (error) {
+        console.error("❌ Error al migrar detalles de pago de nómina:", error);
+        throw error;
+    }
 }

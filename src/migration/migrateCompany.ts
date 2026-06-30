@@ -527,7 +527,7 @@ export async function migrateCompany(codEmp: number) {
     );
 
 
-    await migratePayroll(
+    const payrollSummary = await migratePayroll(
       legacyConn,
       conn,
       newCompanyId,
@@ -1012,7 +1012,7 @@ export async function migrateCompany(codEmp: number) {
 
     await migrateRetentionFiles(conn);
 
-    await conn.rollback();
+    await conn.commit();
 
     console.log("MAPEO DE SUCURSALES MIGRADAS:", Object.keys(branchMap).length);
     console.log("MAPEO DE PROYECTOS MIGRADOS:", Object.keys(mapProject).length);
@@ -1041,6 +1041,13 @@ export async function migrateCompany(codEmp: number) {
     console.log("OBLIGACIONES AUDITORIA:", Object.keys(mapObligationsCustomers.mapObligationsAudit).length);
     console.log("ANTICIPOS CLIENTES:", Object.keys(mapAdvancesCustomers).length);
     console.log("MIGRACION DE ASIENTOS MANUALES:", Object.keys(mapEntryAccount).length);
+    console.log("EMPLEADOS MIGRADOS:", payrollSummary.countEmployes);
+    console.log("ASIENTOS CONTABLES NOMINA:", payrollSummary.countSeats);
+    console.log("ROLES DE NOMINA MIGRADOS:", payrollSummary.countPayrolls);
+    console.log("OBLIGACIONES NOMINA (CXPN):", payrollSummary.countObligations);
+    console.log("MOVIMIENTOS PAGO NOMINA (CXPN):", payrollSummary.countPaymentMovements);
+    console.log("DETALLES PAGO NOMINA:", payrollSummary.countPaymentDetails);
+    console.log("PRESTAMOS Y ANTICIPOS NOMINA:", payrollSummary.countLoans);
 
 
     return newCompanyId;
