@@ -63,12 +63,6 @@ export async function migrateCompany(codEmp: number) {
   const empresa = empresas[0];
 
 
-   const [updSystem] = await systemworkPool.query(
-    `UPDATE empresas SET MIGRADA = 1 WHERE COD_EMPSYS = ?`,
-    [codEmp],
-  );
-
-
   console.log(
     `Migrando empresa: ${empresa.NOM_EMPSYS} (BD: ${empresa.BASE_EMP})`,
   );
@@ -82,6 +76,11 @@ export async function migrateCompany(codEmp: number) {
 
   const conn = await erpPool.getConnection();
   try {
+    await systemworkPool.query(
+      `UPDATE empresas SET MIGRADA = 1 WHERE COD_EMPSYS = ?`,
+      [codEmp],
+    );
+
     const [rowsEmpresaLegacy] = await legacyConn.query(
       `SELECT *, 1 AS FK_COD_COUNT,'ACTIVO' AS EST_EMP, 'CORPNEWBEST' as CONF_FIRM_PROV, NOMFIRELEC_EMP as CONF_FIRM, CLAVFIRELEC_EMP as CONF_FIRM_PASS,  FECEMISION_FIR AS CONF_FIRM_EMI, FECVENCE_FIR AS CONF_FIRM_EXP,TIPAMB_EMP AS CONF_TIPAMB,
             EMA_EMP AS CONF_EMAIL_DEFAULT, 1 AS CONF_DESC_VENTA, INVE_EMP as CONF_STOCK  , INVEN_DETALLADO as CONF_INVDET,SELECCION_COSTEO as CONF_COST, DESCUENTO_AUTOMATICO as CONF_DESCAUTO, eliminar_transaccion AS CONF_DELDOCS,case when  pedir_clave ='' THEN NULL ELSE pedir_clave END as CONF_CLAVE, SELECCION_VENDEDOR as CONF_SELECT_VEND,SELECCION_FECHA as CONF_SELECT_FECHA,
@@ -1021,7 +1020,19 @@ export async function migrateCompany(codEmp: number) {
   } catch (error) {
     console.error(error);
     await conn.rollback();
-    throw new Error(error.message);
+    try {
+      await systemworkPool.query(
+        `UPDATE empresas SET MIGRADA = 0 WHERE COD_EMPSYS = ?`,
+        [codEmp],
+      );
+    } catch (resetError) {
+      console.error(
+        `No se pudo revertir MIGRADA a 0 para COD_EMPSYS=${codEmp}`,
+        resetError,
+      );
+    }
+
+    throw error instanceof Error ? error : new Error(String(error));
   } finally {
     conn.release();
     await legacyConn.end();
